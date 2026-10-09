@@ -75,7 +75,12 @@ class Plugin {
 
 		$dbVersion = get_option( 'holvek_db_version', '0' );
 		if ( version_compare( $dbVersion, HOLVEK_VERSION, '<' ) ) {
-			$this->container->get( \Holvek\WordPress\Core\Database\Installer::class )->install();
+			// Installer is not registered in the container, and this runs
+			// before registerServices(). Activation constructs it the same way.
+			// A container lookup here fatals on a missing schema version,
+			// including Plugin Check's empty runtime database.
+			$installer = new \Holvek\WordPress\Core\Database\Installer();
+			$installer->install();
 		}
 
 		$this->registerServices();
