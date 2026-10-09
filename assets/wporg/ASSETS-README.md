@@ -32,3 +32,5 @@ descriptions in the `== Screenshots ==` section of readme.txt.
 - PNG or JPG accepted; PNG preferred for icons, JPG for banners
 - Do NOT commit screenshots to trunk — only to /assets/
 - Max file size: 1 MB per asset
+- The icon and banner files in this directory are the correct directory pixel sizes.
+- screenshot-1.png through screenshot-8.png, here and in assets/screenshots/, are the same design mockups. They show the previous name, AmEveryWhere, and a health-score dashboard this plugin does not ship. Do not upload them. readme.txt does not list screenshots until a logged-in Holvek admin is captured.

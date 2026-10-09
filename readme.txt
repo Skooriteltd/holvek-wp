@@ -1,291 +1,226 @@
-=== AmEveryWhere – SEO & Discovery ===
+=== Holvek ===
 Contributors: skoorite
 Tags: seo, schema, sitemap, indexing, search console
 Requires at least: 6.0
 Tested up to: 6.5
-Requires PHP: 8.0
+Requires PHP: 8.2
 Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Technical SEO, structured data, sitemaps, redirects, indexing, and search visibility tools for WordPress.
+Technical SEO, structured data, sitemaps, redirects, and indexing tools for WordPress.
 
 == Description ==
 
-AmEveryWhere is a WordPress SEO plugin for technical SEO, structured data, sitemaps, redirects, indexing, and search visibility.
+Holvek writes SEO titles, meta descriptions, schema, the sitemap, and robots.txt on the WordPress site where it is installed. A Holvek account is optional.
 
-Keep the essential SEO work for your WordPress site in one place. AmEveryWhere helps you manage the technical signals behind your pages, describe your content with accurate structured data, keep URLs under control, monitor search performance, and find problems before they become bigger issues.
+Use it to keep technical SEO on this site: titles and meta descriptions, canonical URLs, robots meta, XML Sitemaps, the Redirects Manager, and structured data.
 
-Whether you run a business website, publish news and articles, manage a WooCommerce store, or build WordPress sites for clients, AmEveryWhere gives you practical tools for maintaining a healthier search presence without piecing together multiple separate plugins.
+### Editor
 
-SEO foundations that stay under control
-
-Manage important technical SEO settings from WordPress, including:
-
-SEO titles and meta descriptions
-Canonical URLs
-Robots meta controls
-XML, News, and Video sitemaps
-Robots.txt
-Redirects and 404 monitoring
-Structured data and JSON-LD
-Social sharing metadata
-Image SEO checks
-Internal linking
-
-### One place for your site's SEO
-
-Instead of managing separate tools for sitemaps, schema, redirects, search data, image SEO, and technical checks, AmEveryWhere brings those jobs together.
-
-That means fewer disconnected settings, less duplication, and a clearer view of how your site is performing.
-
-### Make your content easier to understand
-
-Search engines and other discovery systems need clear signals about what a page represents.
-
-AmEveryWhere helps you provide those signals with:
-
-* Structured data and JSON-LD
-* Canonical URLs and robots controls
-* XML, News, and Video sitemaps
-* Breadcrumb and entity relationships
-* Author and image metadata
-* Social sharing metadata
-* Clean, consistent page information
-
-The result is a more organized technical layer around your content.
-
-### Keep important URLs moving
-
-Publishing content is only part of the job. You also need to keep search engines informed when URLs change, pages disappear, or content needs attention.
-
-AmEveryWhere helps you manage:
-
-* XML sitemaps
-* IndexNow notifications
-* 301, 302, 307, and 410 redirects
-* 404 monitoring
-* Redirect-loop detection
-* Broken links
-* Orphaned content
-* Robots.txt controls
-* Canonical URLs
-
-This gives your site a more controlled indexing and URL-management workflow.
-
-### Understand what is happening in search
-
-Connect Google Search Console and bring useful search performance data into WordPress.
-
-See information such as:
-
-* Impressions and clicks
-* Search queries
-* Landing-page performance
-* Changes in traffic over time
-* Pages losing visibility
-* Potential keyword overlap and cannibalization
-
-Instead of relying only on isolated reports, you can investigate important changes from the same place where you manage your content.
-
-### Improve pages before you publish
-
-AmEveryWhere provides practical checks inside the WordPress editing workflow.
-
-Review:
+The post editor includes checks for:
 
 * SEO titles and meta descriptions
-* Heading structure
-* Keyword placement
-* Image alternative text
-* Content readability
-* Search-result previews
-* Social sharing previews
-* FAQ structured data
+* Readability
+* A search-result preview
+* Social metadata for Facebook, X, LinkedIn, and Pinterest
+* Canonical URLs and robots meta
+* FAQ schema
+* Internal link suggestions
+* A notice when cornerstone content has not been updated for 180 days
+* PageSpeed for the post you are editing
 
-The goal is simple: catch important SEO issues while the content is still being edited.
+The writing assistant uses an OpenAI, Anthropic, or Ollama key saved on this site. A remote Ollama host receives the text you submit.
 
-### Build stronger structured data
+### Schema Markup
 
-AmEveryWhere generates and manages structured data for common content types, helping you describe your pages more clearly.
+Schema Markup can describe a page as Article, NewsArticle, WebPage, BreadcrumbList, FAQ, HowTo, LocalBusiness, Recipe, Event, Product, VideoObject, Person, or Organization. You can also add one custom JSON-LD node.
 
-Supported structured data includes:
+When WooCommerce is active, product schema can include an aggregate rating if that product has reviews. Structured data does not guarantee a rich result.
 
-* Article
-* BreadcrumbList
-* LocalBusiness
-* FAQPage
-* HowTo
-* Recipe
-* Event
-* Product
+### XML Sitemaps and the HTML Sitemap
 
-WooCommerce sites can also use product structured data with supported product information and review data.
+* The sitemap index is `/sitemap.xml`.
+* The news sitemap is `/sitemap-news.xml` and `/news-sitemap.xml`.
+* The video sitemap is `/video-sitemap.xml`.
+* `[holvek_sitemap]` prints an HTML Sitemap.
 
-Structured data does not guarantee enhanced search results, but accurate and relevant markup gives eligible pages the information search systems need to interpret their content correctly.
+### Technical SEO
 
-### Keep image and content signals clean
+The Technical SEO screen includes the Redirects Manager. A redirect can be 301, 302, 307, or 410, including a regular expression, and you can import rules from CSV. The 404 log records missing URLs.
 
-Images and internal relationships contribute to how a site is understood.
+robots.txt starts from the file WordPress already generated. Holvek appends its lines unless an administrator confirms a full replacement.
 
-AmEveryWhere helps you monitor:
+The `.htaccess` editor stays off until an administrator turns it on. It does not run when WordPress file editing is disabled. Nginx does not read `.htaccess`.
 
-* Image alternative text
-* Image naming signals
-* Missing or inconsistent image information
-* Internal links
-* Broken links
-* Content relationships
-* Content opportunities
+### Technical SEO Audit
 
-These checks make it easier to maintain a site as it grows.
+This audit runs on this site. It checks meta descriptions, image alt text, 404s, redirect chains, orphaned pages, noindex directives, the sitemap, robots.txt, the site icon, SSL, schema, duplicate titles, cornerstone staleness, and canonicals. It does not score AI mentions, Google presence, or competitors.
 
-### Built for different WordPress setups
+The site icon check is part of this audit. Holvek does not include a separate favicon tool.
 
-AmEveryWhere works with more than a basic blog.
+### Link Health and the Broken Link Checker
 
-Use it for:
+Link Health lists internal links and orphaned pages. The Broken Link Checker scans published content in small batches.
 
-**Business websites**
-Manage technical SEO, local business structured data, redirects, sitemaps, social metadata, and search performance.
+### llms.txt
 
-**Publishers and news sites**
-Use News Sitemaps, content monitoring, structured data, internal linking, and search analytics to manage a growing publication.
+Holvek publishes an llms.txt file on this site. It does not submit the site to ChatGPT, Perplexity, or Claude, and it does not check whether they mention it.
 
-**WooCommerce stores**
-Maintain product structured data, image signals, canonical URLs, sitemaps, redirects, and search visibility.
+### Image SEO
 
-**Agencies and larger sites**
-Manage SEO settings across complex installations while keeping technical controls in one place.
+Image SEO lists images that have no alternative text, can rename new uploads to lowercase hyphenated file names, and can add image schema.
 
-**Headless WordPress**
-Use the REST API to expose SEO and metadata to decoupled frontends and applications.
+### Bulk Meta Editor
 
-### Works without external accounts
+The Bulk Meta Editor edits SEO titles and meta descriptions for many posts.
 
-Core functionality works without connecting a third-party service.
+### cookie notice
 
-You can use AmEveryWhere for:
+The cookie notice records a visitor choice. It does not block third-party scripts and is not a consent-management platform. Holvek can also add an AI content disclosure.
 
-* SEO metadata
-* Structured data
-* Sitemaps
-* Redirects
-* 404 monitoring
-* Robots.txt
-* Image SEO checks
-* Internal linking tools
-* Search-result and social previews
+### Roles & Capabilities
 
-Connect external services when you need additional data and monitoring.
+Roles & Capabilities control who can manage redirects, edit SEO meta, and open SEO screens. An audit log records changes to titles, descriptions, and settings.
 
-### Search Console integration
+### Google Analytics 4, Google Search Console, and IndexNow
 
-Connect Google Search Console to view search performance data from inside WordPress.
+Google Analytics 4 and Google Search Console load after you connect them. Search Console can list queries matched by more than one page.
 
-AmEveryWhere uses the available Search Console data to help you identify important changes in impressions, clicks, queries, and page performance.
+IndexNow sends published URLs only after an administrator saves a key and turns notifications on. IndexNow does not guarantee indexing. The Google Indexing API is optional, applies to eligible JobPosting or livestream pages, and does not guarantee indexing.
 
-### IndexNow support
+The Keyword Rank Tracker uses a SerpApi key saved on this site.
 
-When supported content changes, AmEveryWhere can notify participating search engines through IndexNow.
+A Bing Webmaster tools verification code can be saved in settings. Holvek does not include a Bing traffic screen.
 
-This can reduce the delay between publishing or updating content and notifying participating search engines of the change.
+Social posting can send to Facebook, X, LinkedIn, and Pinterest. Instagram and YouTube can be stored as profile URLs. Holvek does not post to Instagram or TikTok.
 
-### Headless and API support
+### Setup, import, multisite, and headless
 
-AmEveryWhere exposes its SEO data through a namespaced REST API for developers building decoupled WordPress experiences.
+The setup wizard can store a site type and profile URLs. Titles and the sitemap already work before you finish it.
 
-Use the API to retrieve SEO metadata, structured data, site settings, and other supported discovery information for applications built with React, Next.js, Vue, or other frontend technologies.
+Holvek can import titles, descriptions, and settings from Yoast SEO, Rank Math, and All in One SEO. The import shows how many fields it will copy and does not write until you confirm.
 
-### Migration from popular SEO plugins
+On a multisite network, a network screen is available. It is not shown on a single site.
 
-Moving to AmEveryWhere does not have to mean rebuilding your SEO settings.
+The REST API can read public SEO fields for a published post. Writing SEO data requires a user who can edit that post.
 
-Migration tools can import supported SEO data from:
+### Connecting Holvek
 
-* Yoast SEO
-* Rank Math
-* All in One SEO
+A Holvek account is optional. The settings screen cannot change the Holvek API host.
 
-A preview is provided before importing data so you can review the changes first.
+An administrator can paste a site token or an authorization code. Holvek sends that request only to `https://api.holvek.com`. The base address is `https://api.holvek.com/v1` unless code overrides it with the `holvek_backend_api_url` filter.
 
-### Designed to stay out of the way
+A site token is JSON posted to `/auth/site-token` with `grant_type` set to `site_token`, the pasted `site_token`, and `site_url` set to this site's home address. An authorization code is JSON posted to `/auth/token` with `grant_type` set to `authorization_code`, `code`, and the same `site_url`. Holvek does not store the pasted token or code. It stores the returned access token only after `GET /auth/verify` says `active` is true.
 
-AmEveryWhere is built to keep its work focused on SEO and discovery rather than changing how your website looks or forcing a new frontend.
+Each of these requests waits 10 seconds. Holvek tries once more when the connection fails, or when the response is HTTP 408, 429, or 500 or higher. A rejected credential is not tried again, and nothing is saved.
 
-Your existing theme, content, and page-building workflow remain yours.
+Checking the saved credential sends `GET /auth/verify`. Rotating it sends `POST /auth/rotate` with the saved credential and `site_url`. The replacement is stored only after it verifies. If that fails, the saved credential stays.
+
+Disconnect sends `POST /auth/revoke`, then deletes the credential stored on this site. If Holvek cannot be reached, the credential is still removed here. Titles, the sitemap, redirects, and 404 logs are kept. The remote token can remain valid until Holvek is reachable.
+
+A page view does not call Holvek. A tier comes from the verification response and expires. The settings screen cannot set it.
+
+### What this release leaves out
+
+It does not score AI mentions, Google presence, or competitors. It does not include a client reporting portal or a multi-brand workspace.
+
+= External services =
+
+For every service below, nothing is sent until an administrator turns the feature on. A normal page view does not call these services.
+
+The writing assistant sends the current post title, meta description, or an excerpt to OpenAI at https://api.openai.com, or to Anthropic at https://api.anthropic.com, when an editor runs it. Ollama defaults to http://localhost:11434 on this server. A remote http or https host receives the prompt, which can include the post title and content, only after an administrator confirms that host. A settings import cannot set a remote Ollama host.
+
+The Keyword Rank Tracker sends focus keywords to SerpApi at https://serpapi.com when a key is saved and a check runs. PageSpeed sends the URL being checked to Google. Google Search Console uses read-only access for impressions, clicks, and click-through rate after an administrator connects it. Holvek does not write Search Console data to Google. Google Analytics 4 reports are requested after an administrator saves the property credentials and opens the report.
+
+IndexNow sends published URLs, after an administrator saves a key and turns notifications on, only to https://api.indexnow.org, https://www.bing.com, https://yandex.com, and https://search.seznam.cz. IndexNow does not guarantee indexing. The Google Indexing API sends a published URL only when an administrator turns it on, and only for an eligible JobPosting or livestream page. It does not guarantee indexing.
+
+Social posting can send a post URL to Facebook, X, LinkedIn, or Pinterest after an administrator connects that account. Holvek does not post to Instagram or TikTok.
+
+A Bing Webmaster tools verification code can be saved in settings. This release does not include a Bing traffic screen. The Bing Webmaster API is used only when a Bing API key is already stored.
+
+Connecting Holvek sends the requests described above only to https://api.holvek.com. The settings screen cannot change that host. A Holvek account is optional.
+
+Service privacy policies: https://openai.com/privacy , https://www.anthropic.com/privacy , https://serpapi.com/privacy , https://policies.google.com/privacy , https://www.indexnow.org/ , and https://holvek.com/privacy .
 
 == Installation ==
 
-1. Upload the `ameverywhere` folder to `/wp-content/plugins/`.
-2. Activate **AmEveryWhere** from the **Plugins** screen in WordPress.
-3. Open **AmEveryWhere** from the WordPress admin menu.
-4. Complete the setup and configure the features you need.
-5. Connect Google Search Console, Bing Webmaster Tools, or other supported services when required.
+1. Upload the `holvek` folder to `/wp-content/plugins/`.
+2. Activate **Holvek** from the **Plugins** screen in WordPress.
+3. Open **Holvek** from the WordPress admin menu.
+4. Titles, the sitemap, and robots.txt already work. Use the setup wizard if you want to choose a site type.
+5. Connect Google Search Console when you want search data in WordPress. IndexNow, PageSpeed, and the Keyword Rank Tracker stay off until you save their credentials.
 
 == Frequently Asked Questions ==
 
-= Does AmEveryWhere need an API key? =
+= Does Holvek need an API key? =
 
 No. Core SEO, structured data, sitemaps, redirects, robots.txt, and other local features work without external API credentials.
 
 External connections are only required for features that depend on third-party services.
 
-= Can I use AmEveryWhere with WooCommerce? =
+= Can the settings screen change the Holvek API host? =
 
-Yes. AmEveryWhere supports WooCommerce product structured data and related SEO controls when WooCommerce is active.
+No. The settings screen cannot change the Holvek API host. Connection requests go to https://api.holvek.com and wait 10 seconds, with one retry when Holvek does not answer. A Holvek account is optional. Disconnecting removes the credential stored on this site even when Holvek cannot be reached, and SEO data is kept. The remote token can remain valid until Holvek is reachable.
+
+= Can I use Holvek with WooCommerce? =
+
+Yes. Holvek supports WooCommerce product structured data, including an aggregate rating when that product has reviews, and related SEO controls when WooCommerce is active.
 
 = Can I migrate from Yoast SEO, Rank Math, or All in One SEO? =
 
-Yes. Supported SEO data can be imported from Yoast SEO, Rank Math, and All in One SEO. The import workflow provides a preview before changes are applied.
+Yes. Supported SEO data can be imported from Yoast SEO, Rank Math, and All in One SEO. The import shows how many fields it will copy and does not write until you confirm.
 
-= Will AmEveryWhere guarantee higher Google rankings? =
+= Will Holvek guarantee higher Google rankings? =
 
 No SEO plugin can guarantee a particular ranking position or search-result appearance.
 
-AmEveryWhere focuses on the technical signals, structured data, indexing controls, site organization, and search visibility data that help you maintain a well-structured WordPress site.
+Holvek maintains technical signals, structured data, sitemaps, redirects, and indexing controls on your site.
 
-= Can I use AmEveryWhere on a headless WordPress site? =
+= Does Holvek score AI mentions or compare competitors? =
 
-Yes. Its REST API can expose supported SEO and metadata for decoupled applications.
+No. The Technical SEO Audit runs on this site. It does not score AI mentions, Google presence, or competitors.
+
+= Can I use Holvek on a headless WordPress site? =
+
+Yes. The REST API can read public SEO fields for a published post. Writing SEO data requires a user who can edit that post.
 
 = What happens when I deactivate the plugin? =
 
-Deactivating AmEveryWhere stops its plugin functionality. Existing plugin data is preserved unless you explicitly choose to remove it during uninstall.
+Deactivating Holvek stops its plugin functionality. Existing plugin data is preserved unless you explicitly choose to remove it during uninstall.
 
-= Does AmEveryWhere work with existing themes and page builders? =
+= What happens to data saved by the previous plugin name? =
 
-Yes. AmEveryWhere is designed to work alongside existing WordPress themes, editors, and page-building tools without requiring a specific frontend.
+On upgrade, Holvek renames the previous tables, options, and meta to the `holvek_` names. The HTML sitemap shortcode is `[holvek_sitemap]`. Secrets saved with the previous ciphertext prefix can still be read. New secrets are saved as `holvek_enc::`.
+
+= Does Holvek work with existing themes and page builders? =
+
+Yes. Holvek is designed to work alongside existing WordPress themes, editors, and page-building tools without requiring a specific frontend.
 
 == Support ==
 
-For documentation and technical guidance, see the plugin documentation included with AmEveryWhere.
+For documentation and technical guidance, see the plugin documentation included with Holvek.
 
-For WordPress.org support, use the AmEveryWhere support forum:
+For WordPress.org support, use the Holvek support forum:
 
-https://wordpress.org/support/plugin/ameverywhere/
+https://wordpress.org/support/plugin/holvek/
 
-When reporting a problem, include your WordPress version, PHP version, AmEveryWhere version, and the steps required to reproduce the issue.
-
-== Screenshots ==
-
-1. SEO dashboard showing site health and search performance.
-2. Redirect manager for handling URL changes and redirect errors.
-3. Content analysis and page visibility monitoring.
-4. Sitemap and structured data configuration.
-5. Headless API and site discovery settings.
+When reporting a problem, include your WordPress version, PHP version, Holvek version, and the steps required to reproduce the issue.
 
 == Changelog ==
 
 = 1.0.0 =
 
-* Initial release.
+* Initial release. Requires PHP 8.2.
+* Upgrade renames tables, options, and meta saved under the previous plugin name. The public constants, functions, sitemap shortcode, and opt-out action from that name are not included. Secrets saved with the previous ciphertext prefix can still be read. New secrets are saved as `holvek_enc::`.
 * Technical SEO controls and metadata management.
 * XML, News, and Video sitemap support.
 * JSON-LD structured data with WooCommerce support.
 * Redirect management and 404 monitoring.
 * Image SEO and internal linking tools.
 * Google Search Console integration.
-* Bing Webmaster Tools and IndexNow integrations.
-* REST API support for headless WordPress.
-* Migration tools for supported SEO plugins.
+* A Bing Webmaster tools verification code, and IndexNow notifications. IndexNow does not guarantee indexing.
+* REST API support for public SEO fields on a published post.
+* Migration tools for supported SEO plugins. The import shows how many fields it will copy and does not write until you confirm.
+* The Technical SEO Audit checks this site. It does not score AI mentions, Google presence, or competitors.
+* An administrator can connect, check, rotate, or disconnect a Holvek site credential. Requests go to https://api.holvek.com, wait 10 seconds, and retry once. The settings screen cannot change the Holvek API host. A rejected credential is not saved. Disconnect removes the local credential and keeps SEO data.

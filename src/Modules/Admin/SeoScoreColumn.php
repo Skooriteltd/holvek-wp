@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Admin;
+namespace Holvek\WordPress\Modules\Admin;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -34,7 +34,7 @@ class SeoScoreColumn {
 			$newColumns[ $key ] = $label;
 			// Insert our column right after the title column
 			if ( $key === 'title' ) {
-				$newColumns['ameverywhere_seo'] = 'SEO';
+				$newColumns['holvek_seo'] = 'SEO';
 			}
 		}
 		return $newColumns;
@@ -44,7 +44,7 @@ class SeoScoreColumn {
 	 * Render the SEO Score indicator for each row.
 	 */
 	public function renderColumn( string $column, int $postId ): void {
-		if ( $column !== 'ameverywhere_seo' ) {
+		if ( $column !== 'holvek_seo' ) {
 			return;
 		}
 
@@ -53,15 +53,17 @@ class SeoScoreColumn {
 		$label = $score >= 80 ? 'Good' : ( $score >= 50 ? 'OK' : 'Poor' );
 
 		printf(
-			'<span title="%s — %d/100" style="display:inline-flex;align-items:center;gap:5px;">
-                <span style="display:inline-block;width:12px;height:12px;border-radius:50%%;background:%s;"></span>
+			'<span title="%s — %d/100" style="display:inline-flex;align-items:center;gap:4px;">
+                <span style="display:inline-block;width:10px;height:10px;border-radius:50%%;background:%s;" aria-hidden="true"></span>
                 <span style="font-size:12px;font-weight:500;color:%s;">%d</span>
+                <span class="screen-reader-text">%s</span>
             </span>',
 			esc_attr( $label ),
-			$score,
+			esc_html( $score ),
 			esc_attr( $color ),
 			esc_attr( $color ),
-			$score
+			esc_html( $score ),
+			esc_html( $label )
 		);
 	}
 
@@ -69,7 +71,7 @@ class SeoScoreColumn {
 	 * Make the column sortable (optional enhancement).
 	 */
 	public function makeSortable( array $columns ): array {
-		$columns['ameverywhere_seo'] = 'ameverywhere_seo';
+		$columns['holvek_seo'] = 'holvek_seo';
 		return $columns;
 	}
 
@@ -89,9 +91,9 @@ class SeoScoreColumn {
 		$title           = $post->post_title;
 		$content         = wp_strip_all_tags( $post->post_content );
 		$wordCount       = str_word_count( $content );
-		$focusKeyword    = get_post_meta( $postId, '_ameverywhere_focus_keyword', true );
-		$metaTitle       = get_post_meta( $postId, '_ameverywhere_meta_title', true );
-		$metaDescription = get_post_meta( $postId, '_ameverywhere_meta_description', true );
+		$focusKeyword    = get_post_meta( $postId, '_holvek_focus_keyword', true );
+		$metaTitle       = get_post_meta( $postId, '_holvek_meta_title', true );
+		$metaDescription = get_post_meta( $postId, '_holvek_meta_description', true );
 
 		$effectiveTitle = $metaTitle ?: $title;
 
@@ -161,6 +163,7 @@ class SeoScoreColumn {
 			return;
 		}
 
-		echo '<style>.column-ameverywhere_seo { width: 60px; text-align: center; }</style>';
+		wp_enqueue_style( 'list-tables' );
+		wp_add_inline_style( 'list-tables', '.column-holvek_seo { width: 60px; text-align: center; }' );
 	}
 }

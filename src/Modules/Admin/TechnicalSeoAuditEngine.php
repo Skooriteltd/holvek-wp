@@ -1,10 +1,12 @@
 <?php
 
-namespace AmEveryWhere\Modules\Admin;
+namespace Holvek\WordPress\Modules\Admin;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+
+use Holvek\WordPress\Core\Queue\QueueManager;
 
 /**
  * TechnicalSeoAuditEngine
@@ -18,13 +20,15 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class TechnicalSeoAuditEngine {
 
-	private const RESULTS_OPTION  = 'ameverywhere_audit_results';
-	private const PROGRESS_OPTION = 'ameverywhere_audit_progress';
-	private const CRON_HOOK       = 'ameverywhere_run_technical_audit';
+	public const CHECK_BATCH = 2;
+
+	private const RESULTS_OPTION  = 'holvek_audit_results';
+	private const PROGRESS_OPTION = 'holvek_audit_progress';
+	private const CRON_HOOK       = 'holvek_run_technical_audit';
 
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'registerRoutes' ) );
-		add_action( self::CRON_HOOK, array( $this, 'runAudit' ) );
+		add_action( self::CRON_HOOK, array( $this, 'enqueueRun' ) );
 	}
 
 	// ── REST routes ───────────────────────────────────────────────────────────
@@ -33,17 +37,17 @@ class TechnicalSeoAuditEngine {
 		$adminCap = fn() => current_user_can( 'manage_seo' ) || current_user_can( 'manage_options' );
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/audit/technical',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
-				'callback'            => fn() => rest_ensure_response( get_option( self::RESULTS_OPTION, null ) ?: array( 'message' => 'No audit has been run yet.' ) ),
+				'callback'            => fn() => rest_ensure_response( get_option( self::RESULTS_OPTION, null ) ?: array( 'message' => __( 'No audit has been run yet.', 'holvek' ) ) ),
 				'permission_callback' => $adminCap,
 			)
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/audit/technical/run',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -53,7 +57,7 @@ class TechnicalSeoAuditEngine {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/audit/technical/progress',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -73,49 +77,56 @@ class TechnicalSeoAuditEngine {
 	}
 
 	public function scheduleRun( \WP_REST_Request $request ): \WP_REST_Response {
-		wp_schedule_single_event( time() + 2, self::CRON_HOOK );
-		update_option(
-			self::PROGRESS_OPTION,
-			array(
-				'status'        => 'running',
-				'percent'       => 0,
-				'current_check' => 'Starting…',
-			)
-		);
+		$this->setProgress( 'running', 0, __( 'Starting…', 'holvek' ), 0, array() );
+		$this->enqueueRun();
+
 		return rest_ensure_response(
 			array(
 				'success' => true,
-				'message' => 'Audit scheduled.',
+				'queued'  => true,
+				'message' => __( 'Audit scheduled.', 'holvek' ),
 			)
 		);
 	}
 
-	// ── Audit runner ──────────────────────────────────────────────────────────
+	/**
+	 * An older cron event only enqueues the next slice.
+	 */
+	public function enqueueRun(): void {
+		( new QueueManager() )->push( TechnicalAuditJob::class, array(), 2 );
+	}
 
-	public function runAudit(): void {
-		$checks = array(
-			'missing_meta_descriptions' => 'Checking meta descriptions…',
-			'missing_alt_text'          => 'Checking image alt text…',
-			'check_404_errors'          => 'Checking 404 errors…',
-			'redirect_chains'           => 'Checking redirect chains…',
-			'orphaned_pages'            => 'Checking orphaned pages…',
-			'noindex_important_pages'   => 'Checking noindex directives…',
-			'sitemap_health'            => 'Checking sitemap…',
-			'robots_txt'                => 'Checking robots.txt…',
-			'favicon'                   => 'Checking favicon…',
-			'ssl_certificate'           => 'Checking SSL…',
-			'schema_presence'           => 'Checking schema markup…',
-			'duplicate_titles'          => 'Checking for duplicate titles…',
-			'stale_cornerstone'         => 'Checking cornerstone content…',
-			'missing_canonicals'        => 'Checking canonical tags…',
-		);
+	/**
+	 * Run one slice of the audit and queue the next slice when checks remain.
+	 */
+	public function runBatch(): void {
+		$progress = get_option( self::PROGRESS_OPTION, array() );
+		if ( ! is_array( $progress ) ) {
+			$progress = array();
+		}
+		if ( ( $progress['status'] ?? '' ) === 'done' ) {
+			return;
+		}
 
-		$total   = count( $checks );
-		$idx     = 0;
-		$results = array();
+		$definitions = $this->checkDefinitions();
+		$ids         = array_keys( $definitions );
+		$total       = count( $ids );
+		$index       = max( 0, (int) ( $progress['index'] ?? 0 ) );
+		$collected   = $progress['checks'] ?? array();
+		if ( ! is_array( $collected ) ) {
+			$collected = array();
+		}
 
-		foreach ( $checks as $checkId => $label ) {
-			$this->setProgress( 'running', (int) round( ( $idx / $total ) * 100 ), $label );
+		if ( $index >= $total ) {
+			$this->storeResults( $collected );
+			$this->setProgress( 'done', 100, __( 'Audit complete.', 'holvek' ), $total, array() );
+			return;
+		}
+
+		$end = min( $total, $index + self::CHECK_BATCH );
+		for ( $i = $index; $i < $end; $i++ ) {
+			$checkId = $ids[ $i ];
+			$this->setProgress( 'running', (int) round( ( $i / $total ) * 100 ), $definitions[ $checkId ], $i, $collected );
 
 			try {
 				$method = lcfirst( str_replace( '_', '', ucwords( $checkId, '_' ) ) );
@@ -124,31 +135,69 @@ class TechnicalSeoAuditEngine {
 				$items = array( array( 'error' => $e->getMessage() ) );
 			}
 
-			$status              = $this->deriveStatus( $checkId, $items );
-			$results['checks'][] = array(
+			$status      = $this->deriveStatus( $checkId, $items );
+			$collected[] = array(
 				'id'      => $checkId,
 				'name'    => ucwords( str_replace( '_', ' ', $checkId ) ),
 				'status'  => $status,
 				'message' => $this->buildMessage( $checkId, $items, $status ),
 				'items'   => array_slice( (array) $items, 0, 20 ),
 			);
-
-			++$idx;
 		}
 
-		$critical = count( array_filter( $results['checks'], fn( $c ) => $c['status'] === 'critical' ) );
-		$warnings = count( array_filter( $results['checks'], fn( $c ) => $c['status'] === 'warning' ) );
-		$passed   = count( array_filter( $results['checks'], fn( $c ) => $c['status'] === 'passed' ) );
+		if ( $end >= $total ) {
+			$this->storeResults( $collected );
+			$this->setProgress( 'done', 100, __( 'Audit complete.', 'holvek' ), $total, array() );
+			return;
+		}
 
-		$results['generated_at'] = current_time( 'mysql' );
-		$results['summary']      = array(
-			'critical' => $critical,
-			'warnings' => $warnings,
-			'passed'   => $passed,
+		$this->setProgress( 'running', (int) round( ( $end / $total ) * 100 ), $definitions[ $ids[ $end - 1 ] ], $end, $collected );
+		$this->enqueueRun();
+	}
+
+	/**
+	 * @return array<string, string>
+	 */
+	private function checkDefinitions(): array {
+		return array(
+			'missing_meta_descriptions' => __( 'Checking meta descriptions…', 'holvek' ),
+			'missing_alt_text'          => __( 'Checking image alt text…', 'holvek' ),
+			'check_404_errors'          => __( 'Checking 404 errors…', 'holvek' ),
+			'redirect_chains'           => __( 'Checking redirect chains…', 'holvek' ),
+			'orphaned_pages'            => __( 'Checking orphaned pages…', 'holvek' ),
+			'noindex_important_pages'   => __( 'Checking noindex directives…', 'holvek' ),
+			'sitemap_health'            => __( 'Checking sitemap…', 'holvek' ),
+			'robots_txt'                => __( 'Checking robots.txt…', 'holvek' ),
+			'favicon'                   => __( 'Checking favicon…', 'holvek' ),
+			'ssl_certificate'           => __( 'Checking SSL…', 'holvek' ),
+			'schema_presence'           => __( 'Checking schema markup…', 'holvek' ),
+			'duplicate_titles'          => __( 'Checking for duplicate titles…', 'holvek' ),
+			'stale_cornerstone'         => __( 'Checking cornerstone content…', 'holvek' ),
+			'missing_canonicals'        => __( 'Checking canonical tags…', 'holvek' ),
 		);
+	}
 
-		update_option( self::RESULTS_OPTION, $results );
-		$this->setProgress( 'done', 100, 'Audit complete.' );
+	/**
+	 * @param array<int, array<string, mixed>> $checks
+	 */
+	private function storeResults( array $checks ): void {
+		$critical = count( array_filter( $checks, fn( $c ) => ( $c['status'] ?? '' ) === 'critical' ) );
+		$warnings = count( array_filter( $checks, fn( $c ) => ( $c['status'] ?? '' ) === 'warning' ) );
+		$passed   = count( array_filter( $checks, fn( $c ) => ( $c['status'] ?? '' ) === 'passed' ) );
+
+		update_option(
+			self::RESULTS_OPTION,
+			array(
+				'checks'       => $checks,
+				'generated_at' => current_time( 'mysql' ),
+				'summary'      => array(
+					'critical' => $critical,
+					'warnings' => $warnings,
+					'passed'   => $passed,
+				),
+			),
+			false
+		);
 	}
 
 	// ── Individual checks ─────────────────────────────────────────────────────
@@ -162,11 +211,11 @@ class TechnicalSeoAuditEngine {
 				'meta_query'     => array(
 					'relation' => 'OR',
 					array(
-						'key'     => '_ameverywhere_meta_description',
+						'key'     => '_holvek_meta_description',
 						'compare' => 'NOT EXISTS',
 					),
 					array(
-						'key'     => '_ameverywhere_meta_description',
+						'key'     => '_holvek_meta_description',
 						'value'   => '',
 						'compare' => '=',
 					),
@@ -217,12 +266,12 @@ class TechnicalSeoAuditEngine {
 
 	private function check404Errors(): array {
 		global $wpdb;
-		$table  = $wpdb->prefix . 'ameverywhere_404_logs';
+		$table  = $wpdb->prefix . 'holvek_404_logs';
 		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
 		if ( ! $exists ) {
 			return array();
 		}
-		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM $table" );
+		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}holvek_404_logs" );
 		return $count > 0 ? array(
 			array(
 				'count'   => $count,
@@ -233,7 +282,7 @@ class TechnicalSeoAuditEngine {
 
 	private function redirectChains(): array {
 		global $wpdb;
-		$table  = $wpdb->prefix . 'ameverywhere_redirects';
+		$table  = $wpdb->prefix . 'holvek_redirects';
 		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
 		if ( ! $exists ) {
 			return array();
@@ -242,8 +291,8 @@ class TechnicalSeoAuditEngine {
 		// Find rows where target is itself a source (chains of 2+)
 		$chains = $wpdb->get_results(
 			"SELECT a.source, a.target, b.target AS next_target
-             FROM $table a
-             INNER JOIN $table b ON a.target = b.source
+             FROM {$wpdb->prefix}holvek_redirects a
+             INNER JOIN {$wpdb->prefix}holvek_redirects b ON a.target = b.source
              WHERE a.is_regex = 0 AND b.is_regex = 0
              LIMIT 20"
 		);
@@ -259,7 +308,7 @@ class TechnicalSeoAuditEngine {
 				'posts_per_page' => 10,
 				'meta_query'     => array(
 					array(
-						'key'     => '_ameverywhere_inbound_links',
+						'key'     => '_holvek_inbound_links',
 						'value'   => '0',
 						'compare' => '=',
 						'type'    => 'NUMERIC',
@@ -275,7 +324,7 @@ class TechnicalSeoAuditEngine {
 				'posts_per_page' => 1,
 				'meta_query'     => array(
 					array(
-						'key'     => '_ameverywhere_inbound_links',
+						'key'     => '_holvek_inbound_links',
 						'value'   => '0',
 						'compare' => '=',
 						'type'    => 'NUMERIC',
@@ -302,7 +351,7 @@ class TechnicalSeoAuditEngine {
 		$frontPageId = (int) get_option( 'page_on_front' );
 
 		if ( $frontPageId > 0 ) {
-			$noindex = get_post_meta( $frontPageId, '_ameverywhere_noindex', true );
+			$noindex = get_post_meta( $frontPageId, '_holvek_noindex', true );
 			if ( $noindex === 'yes' ) {
 				$issues[] = array(
 					'post_id' => $frontPageId,
@@ -365,7 +414,7 @@ class TechnicalSeoAuditEngine {
 				'order'          => 'DESC',
 				'meta_query'     => array(
 					array(
-						'key'     => '_ameverywhere_schema_type',
+						'key'     => '_holvek_schema_type',
 						'compare' => 'NOT EXISTS',
 					),
 				),
@@ -388,7 +437,7 @@ class TechnicalSeoAuditEngine {
 		$dupes = $wpdb->get_results(
 			"SELECT meta_value AS title, COUNT(*) AS count
              FROM $wpdb->postmeta
-             WHERE meta_key = '_ameverywhere_meta_title'
+             WHERE meta_key = '_holvek_meta_title'
                AND meta_value != ''
              GROUP BY meta_value
              HAVING count > 1
@@ -399,7 +448,7 @@ class TechnicalSeoAuditEngine {
 	}
 
 	private function staleCornerstone(): array {
-		$stale = (array) get_option( 'ameverywhere_stale_cornerstone_ids', array() );
+		$stale = (array) get_option( 'holvek_stale_cornerstone_ids', array() );
 		return empty( $stale ) ? array() : array(
 			array(
 				'count'   => count( $stale ),
@@ -454,15 +503,21 @@ class TechnicalSeoAuditEngine {
 		return count( $items ) . ' issue(s) detected.';
 	}
 
-	private function setProgress( string $status, int $percent, string $currentCheck ): void {
+	/**
+	 * @param array<int, array<string, mixed>> $checks
+	 */
+	private function setProgress( string $status, int $percent, string $currentCheck, int $index = 0, array $checks = array() ): void {
 		update_option(
 			self::PROGRESS_OPTION,
 			array(
 				'status'        => $status,
 				'percent'       => $percent,
 				'current_check' => $currentCheck,
+				'index'         => $index,
+				'checks'        => $checks,
 				'updated_at'    => current_time( 'mysql' ),
-			)
+			),
+			false
 		);
 	}
 }

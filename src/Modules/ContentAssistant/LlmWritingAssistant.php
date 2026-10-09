@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\ContentAssistant;
+namespace Holvek\WordPress\Modules\ContentAssistant;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -24,9 +24,9 @@ class LlmWritingAssistant {
 		// Pass REST data to editor JS — actual sidebar plugin is React-side
 		wp_add_inline_script(
 			'wp-blocks',
-			'window.amEveryWhereWritingAssistant = ' . wp_json_encode(
+			'window.holvekWritingAssistant = ' . wp_json_encode(
 				array(
-					'apiBase' => rest_url( 'ameverywhere/v1' ),
+					'apiBase' => rest_url( 'holvek/v1' ),
 					'nonce'   => wp_create_nonce( 'wp_rest' ),
 				)
 			) . ';',
@@ -39,7 +39,7 @@ class LlmWritingAssistant {
 
 		// Keyword density analysis
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/writing/keyword-density',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -50,7 +50,7 @@ class LlmWritingAssistant {
 
 		// Improve a paragraph via LLM
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/writing/improve-paragraph',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -61,7 +61,7 @@ class LlmWritingAssistant {
 
 		// Suggest meta title and description from content
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/writing/suggest-meta',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -72,7 +72,7 @@ class LlmWritingAssistant {
 
 		// List prompt templates per content type
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/writing/prompt-templates',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -91,14 +91,14 @@ class LlmWritingAssistant {
 		$content = sanitize_textarea_field( $params['content'] ?? '' );
 
 		if ( $postId && empty( $keyword ) ) {
-			$keyword = (string) get_post_meta( $postId, '_ameverywhere_focus_keyword', true );
+			$keyword = (string) get_post_meta( $postId, '_holvek_focus_keyword', true );
 		}
 		if ( $postId && empty( $content ) ) {
 			$content = wp_strip_all_tags( get_post_field( 'post_content', $postId ) );
 		}
 
 		if ( empty( $keyword ) || empty( $content ) ) {
-			return new \WP_Error( 'missing_input', 'keyword and content are required.', array( 'status' => 400 ) );
+			return new \WP_Error( 'missing_input', __( 'keyword and content are required.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		$words      = preg_split( '/\s+/', mb_strtolower( trim( $content ) ) );
@@ -139,12 +139,12 @@ class LlmWritingAssistant {
 		$tone      = sanitize_text_field( $params['tone'] ?? 'professional' );
 
 		if ( empty( $paragraph ) ) {
-			return new \WP_Error( 'missing_paragraph', 'paragraph is required.', array( 'status' => 400 ) );
+			return new \WP_Error( 'missing_paragraph', __( 'paragraph is required.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		$apiKey = $this->getApiKey();
 		if ( empty( $apiKey ) ) {
-			return new \WP_Error( 'no_api_key', 'No LLM API key configured.', array( 'status' => 400 ) );
+			return new \WP_Error( 'no_api_key', __( 'No LLM API key configured.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		$kwInstruction = $keyword ? "Naturally incorporate the keyword \"{$keyword}\" if not already present. " : '';
@@ -178,16 +178,16 @@ class LlmWritingAssistant {
 
 		if ( $postId ) {
 			$content = $content ?: wp_strip_all_tags( get_post_field( 'post_content', $postId ) );
-			$keyword = $keyword ?: (string) get_post_meta( $postId, '_ameverywhere_focus_keyword', true );
+			$keyword = $keyword ?: (string) get_post_meta( $postId, '_holvek_focus_keyword', true );
 		}
 
 		if ( empty( $content ) ) {
-			return new \WP_Error( 'missing_content', 'content or post_id is required.', array( 'status' => 400 ) );
+			return new \WP_Error( 'missing_content', __( 'content or post_id is required.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		$apiKey = $this->getApiKey();
 		if ( empty( $apiKey ) ) {
-			return new \WP_Error( 'no_api_key', 'No LLM API key configured.', array( 'status' => 400 ) );
+			return new \WP_Error( 'no_api_key', __( 'No LLM API key configured.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		$snippet = mb_substr( wp_strip_all_tags( $content ), 0, 1500 );
@@ -245,15 +245,15 @@ class LlmWritingAssistant {
 
 	private function callLlm( string $prompt, string $apiKey, int $maxTokens = 500 ): string|\WP_Error {
 		$userId   = get_current_user_id();
-		$metering = class_exists( \AmEveryWhere\Modules\Ai\UsageMeteringManager::class )
-			? \AmEveryWhere\Modules\Ai\UsageMeteringManager::getInstance()
+		$metering = class_exists( \Holvek\WordPress\Modules\Ai\UsageMeteringManager::class )
+			? \Holvek\WordPress\Modules\Ai\UsageMeteringManager::getInstance()
 			: null;
 
 		if ( $userId && $metering && ! $metering->checkLimit( $userId, 'openai' ) ) {
-			return new \WP_Error( 'rate_limit_exceeded', 'AI token usage limit exceeded for this billing cycle.', array( 'status' => 429 ) );
+			return new \WP_Error( 'rate_limit_exceeded', __( 'AI token usage limit exceeded for this billing cycle.', 'holvek' ), array( 'status' => 429 ) );
 		}
 
-		$model    = get_option( 'ameverywhere_ai_model', get_option( 'ameverywhere_openai_model', 'gpt-4o-mini' ) );
+		$model    = get_option( 'holvek_ai_model', get_option( 'holvek_openai_model', 'gpt-4o-mini' ) );
 		$response = wp_safe_remote_post(
 			'https://api.openai.com/v1/chat/completions',
 			array(
@@ -301,10 +301,10 @@ class LlmWritingAssistant {
 	}
 
 	private function getApiKey(): string {
-		$encryptedKey = get_option( 'ameverywhere_openai_key', '' );
+		$encryptedKey = get_option( 'holvek_openai_key', '' );
 		if ( empty( $encryptedKey ) ) {
-			$encryptedKey = get_option( 'ameverywhere_openai_api_key', '' );
+			$encryptedKey = get_option( 'holvek_openai_api_key', '' );
 		}
-		return \AmEveryWhere\Core\Security\KeyVault::decrypt( $encryptedKey );
+		return \Holvek\WordPress\Core\Security\KeyVault::decrypt( $encryptedKey );
 	}
 }

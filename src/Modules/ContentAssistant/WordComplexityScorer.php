@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\ContentAssistant;
+namespace Holvek\WordPress\Modules\ContentAssistant;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -23,7 +23,7 @@ class WordComplexityScorer {
 
 	public function registerRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/content/complexity',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -166,7 +166,6 @@ class WordComplexityScorer {
 		'characteristic' => 'feature',
 		'consideration'  => 'thought',
 		'communicate'    => 'tell',
-		'approximately'  => 'about',
 		'fundamental'    => 'basic',
 		'acknowledge'    => 'accept',
 	);

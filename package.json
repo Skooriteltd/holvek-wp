@@ -1,11 +1,13 @@
 {
-  "name": "ameverywhere-frontend",
+  "name": "holvek-frontend",
   "version": "1.0.0",
-  "description": "Frontend assets for AmEveryWhere plugin",
+  "description": "Frontend assets for Holvek plugin",
   "scripts": {
     "build": "wp-scripts build src/assets/js/index.js src/assets/js/editor.js src/assets/js/cookie-banner.js",
     "start": "wp-scripts start src/assets/js/index.js src/assets/js/editor.js src/assets/js/cookie-banner.js",
-    "make-pot": "wp-scripts make-pot"
+    "make-pot": "wp-scripts make-pot",
+    "test:integration": "bash scripts/run-wordpress-integration-tests.sh",
+    "test:release": "bash scripts/release-gate.sh"
   },
   "dependencies": {
     "@wordpress/components": "^28.5.0",

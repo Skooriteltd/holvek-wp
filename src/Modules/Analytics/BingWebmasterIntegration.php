@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Analytics;
+namespace Holvek\WordPress\Modules\Analytics;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -9,12 +9,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * BingWebmasterIntegration
  *
- * Connects to the Bing Webmaster API via an API Key to fetch 
+ * Connects to the Bing Webmaster API via an API Key to fetch
  * traffic metrics (impressions, clicks) and detect dying pages.
  */
 class BingWebmasterIntegration {
 
-	private const API_KEY_OPTION = 'ameverywhere_bing_api_key';
+	private const API_KEY_OPTION = 'holvek_bing_api_key';
 	private const CACHE_TTL      = 6 * HOUR_IN_SECONDS;
 
 	public function register(): void {
@@ -26,7 +26,7 @@ class BingWebmasterIntegration {
 		$reportCap = fn() => current_user_can( 'view_seo_reports' ) || current_user_can( 'manage_options' );
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/analytics/bing/settings',
 			array(
 				array(
@@ -43,7 +43,7 @@ class BingWebmasterIntegration {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/analytics/bing/decay',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -54,31 +54,33 @@ class BingWebmasterIntegration {
 	}
 
 	public function getSettings( \WP_REST_Request $request ): \WP_REST_Response {
-		return rest_ensure_response( array(
-			'api_key' => get_option( self::API_KEY_OPTION, '' ),
-		) );
+		return rest_ensure_response(
+			array(
+				'api_key' => get_option( self::API_KEY_OPTION, '' ),
+			)
+		);
 	}
 
 	public function saveSettings( \WP_REST_Request $request ): \WP_REST_Response {
 		$key = sanitize_text_field( $request->get_param( 'api_key' ) );
-		update_option( self::API_KEY_OPTION, $key );
+		update_option( self::API_KEY_OPTION, $key, false );
 		return rest_ensure_response( array( 'success' => true ) );
 	}
 
 	public function getDecayingPages( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$apiKey = get_option( self::API_KEY_OPTION, '' );
 		if ( empty( $apiKey ) ) {
-			return new \WP_Error( 'bing_unconfigured', 'Bing Webmaster API Key is not configured.', array( 'status' => 400 ) );
+			return new \WP_Error( 'bing_unconfigured', __( 'Bing Webmaster API Key is not configured.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
-		$cacheKey = 'ameverywhere_bing_decay_' . md5( site_url() );
+		$cacheKey = 'holvek_bing_decay_' . md5( site_url() );
 		$cached   = get_transient( $cacheKey );
 		if ( false !== $cached ) {
 			return rest_ensure_response( $cached );
 		}
 
-		$siteUrl = urlencode( trailingslashit( site_url() ) );
-		
+		$siteUrl = rawurlencode( trailingslashit( site_url() ) );
+
 		// Fetch current 30 days
 		$current = $this->fetchPageStats( $siteUrl, $apiKey, 30, 0 );
 		if ( is_wp_error( $current ) ) {
@@ -114,11 +116,14 @@ class BingWebmasterIntegration {
 			'siteUrl' => site_url(),
 		);
 
-		$response = wp_safe_remote_post( $apiUrl, array(
-			'headers' => array( 'Content-Type' => 'application/json' ),
-			'body'    => wp_json_encode( $payload ),
-			'timeout' => 15,
-		) );
+		$response = wp_safe_remote_post(
+			$apiUrl,
+			array(
+				'headers' => array( 'Content-Type' => 'application/json' ),
+				'body'    => wp_json_encode( $payload ),
+				'timeout' => 15,
+			)
+		);
 
 		if ( is_wp_error( $response ) ) {
 			return $response;
@@ -128,7 +133,15 @@ class BingWebmasterIntegration {
 		$body = wp_remote_retrieve_body( $response );
 
 		if ( $code !== 200 ) {
-			return new \WP_Error( 'bing_api_error', 'Bing API returned status ' . $code, $body );
+			return new \WP_Error(
+				'bing_api_error',
+				sprintf(
+					/* translators: %d: HTTP status code returned by the Bing Webmaster API. */
+					__( 'Bing API returned status %d', 'holvek' ),
+					(int) $code
+				),
+				$body
+			);
 		}
 
 		$data = json_decode( $body, true );
@@ -137,10 +150,10 @@ class BingWebmasterIntegration {
 
 	private function calculateDecay( array $current, array $previous ): array {
 		$metrics = array();
-		
+
 		foreach ( $current as $row ) {
 			if ( empty( $row['Query'] ) && ! empty( $row['Url'] ) ) {
-				$url = $row['Url'];
+				$url             = $row['Url'];
 				$metrics[ $url ] = array(
 					'url'            => $url,
 					'clicks_current' => (int) $row['Clicks'],
@@ -160,7 +173,7 @@ class BingWebmasterIntegration {
 		$decaying = array();
 		foreach ( $metrics as $url => $data ) {
 			if ( $data['clicks_prev'] > 10 && $data['clicks_current'] < $data['clicks_prev'] ) {
-				$drop = $data['clicks_prev'] - $data['clicks_current'];
+				$drop                  = $data['clicks_prev'] - $data['clicks_current'];
 				$data['decay_percent'] = round( ( $drop / $data['clicks_prev'] ) * 100, 2 );
 				if ( $data['decay_percent'] > 20 ) {
 					$decaying[] = $data;

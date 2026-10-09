@@ -1,6 +1,6 @@
-# AmEveryWhere — Production Backlog
+# Holvek — Production Backlog
 > **Last updated:** September 2026 | Ordered by **impact on site growth**, descending.
-> Linked spec: [specification.md](file:///Applications/XAMPP/xamppfiles/htdocs/ameverywhere/specification.md) · [tasklist.md](file:///Applications/XAMPP/xamppfiles/htdocs/ameverywhere/tasklist.md)
+> Linked spec: [specification.md](file:///Applications/XAMPP/xamppfiles/htdocs/holvek/specification.md) · [tasklist.md](file:///Applications/XAMPP/xamppfiles/htdocs/holvek/tasklist.md)
 
 ---
 
@@ -90,7 +90,7 @@ WordPress accepts uploads with any filename (e.g. `IMG_9823.jpg`, `screenshot 20
 
 Sites migrating from another platform or domain need to import hundreds of redirects at once. Current REST API only supports single-rule creation.
 
-**Growth impact:** This is the #1 blocker for agencies migrating client sites to AmEveryWhere. Without it, they keep using dedicated redirect plugins alongside AmEveryWhere, reducing stickiness.
+**Growth impact:** This is the #1 blocker for agencies migrating client sites to Holvek. Without it, they keep using dedicated redirect plugins alongside Holvek, reducing stickiness.
 
 **Acceptance criteria:**
 - [ ] CSV import endpoint: `source, target, code, is_regex` columns; validates each row before insert
@@ -106,12 +106,12 @@ Sites migrating from another platform or domain need to import hundreds of redir
 
 An automated site-wide audit is the single feature users associate with professional SEO tools (Ahrefs, Semrush, Screaming Frog). Its absence is the biggest perceived gap versus competitors.
 
-**Growth impact:** Audit results are the primary driver for users discovering and acting on AmEveryWhere recommendations. Also the core upsell hook for the Pro tier.
+**Growth impact:** Audit results are the primary driver for users discovering and acting on Holvek recommendations. Also the core upsell hook for the Pro tier.
 
 **Acceptance criteria:**
 - [ ] Audit engine checks 40+ factors across: meta tags, canonical, robots, schema, images, page speed signals, Core Web Vitals (via PageSpeed API), internal linking, sitemap coverage
 - [ ] Results grouped by severity: Critical / Warning / Passed
-- [ ] Per-URL drill-down with fix instructions linked to relevant AmEveryWhere settings
+- [ ] Per-URL drill-down with fix instructions linked to relevant Holvek settings
 - [ ] Scan runs via chunked background queue (not blocking HTTP)
 - [ ] Exportable PDF/CSV report
 - [ ] Re-run on schedule (weekly) with email diff of new issues
@@ -126,7 +126,7 @@ The current `autoSetAltText()` derives alt text from the filename (e.g. "My Imag
 **Growth impact:** Keyword-bearing alt text is a direct on-page SEO signal. Images are an untapped source of keyword density on content-heavy sites.
 
 **Acceptance criteria:**
-- [ ] When auto-generating alt text on upload, check if the parent post has a `_ameverywhere_focus_keyword` set; if so, prepend or incorporate it naturally: `"{keyword} – {cleaned filename}"`
+- [ ] When auto-generating alt text on upload, check if the parent post has a `_holvek_focus_keyword` set; if so, prepend or incorporate it naturally: `"{keyword} – {cleaned filename}"`
 - [ ] In the alt audit table, flag images whose alt text does not contain any of the parent post's focus keywords
 - [ ] Bulk-fix: auto-update flagged alt texts to include the focus keyword
 - [ ] Never overwrite manually set alt text
@@ -136,12 +136,12 @@ The current `autoSetAltText()` derives alt text from the filename (e.g. "My Imag
 ### BL-008 · CCPA Privacy Tools
 **Spec:** `COMP-001` | **Phase:** 1 | **Status:** Pending
 
-Required for any US-facing site. Without it, AmEveryWhere is non-compliant with the legal obligations stated in the specification itself.
+Required for any US-facing site. Without it, Holvek is non-compliant with the legal obligations stated in the specification itself.
 
 **Growth impact:** Compliance is a prerequisite for enterprise/agency adoption. Also gates the Pro tier launch in the US market.
 
 **Acceptance criteria:**
-- [ ] Data inventory: log what user data AmEveryWhere stores (search tracking metrics, 404 logs, API keys)
+- [ ] Data inventory: log what user data Holvek stores (search tracking metrics, 404 logs, API keys)
 - [ ] Data export endpoint: download all stored data for a given user/email as JSON
 - [ ] Data deletion workflow: one-click purge of user-linked data with confirmation
 - [ ] "Do Not Sell" signal: honour GPC (Global Privacy Control) header and suppress AI features accordingly
@@ -230,7 +230,7 @@ The free→paid conversion path has no in-product touchpoints. Users who would p
 **Acceptance criteria:**
 - [ ] Read current `.htaccess` via `file_get_contents` with fallback message if file unreadable
 - [ ] Syntax-highlighted textarea (CodeMirror or Monaco)
-- [ ] Auto-backup to `wp-content/ameverywhere-backups/htaccess-{timestamp}.txt` before every save
+- [ ] Auto-backup to `wp-content/holvek-backups/htaccess-{timestamp}.txt` before every save
 - [ ] Basic syntax validation: unmatched `<IfModule>` blocks, invalid rewrite flags
 - [ ] One-click restore from backup list
 - [ ] Capability guard: `manage_options` only
@@ -253,7 +253,7 @@ The free→paid conversion path has no in-product touchpoints. Users who would p
 Editor controls exist; front-end label output is missing.
 
 **Acceptance criteria:**
-- [ ] When `_ameverywhere_ai_generated` meta is set, inject a visible `<aside>` disclosure in rendered output (filterable position)
+- [ ] When `_holvek_ai_generated` meta is set, inject a visible `<aside>` disclosure in rendered output (filterable position)
 - [ ] Notice text configurable in settings; defaults to FTC-compliant language
 - [ ] Schema flag: add `additionalProperty` to Article schema indicating AI assistance
 - [ ] Visible indicator in post list column
@@ -375,9 +375,9 @@ Editor controls exist; front-end label output is missing.
 **Spec:** `HEAD-001` | **Phase:** 2 | **Status:** Pending
 
 **Acceptance criteria:**
-- [ ] `GET /ameverywhere/v1/seo/{post_id}` — all SEO meta for a post
-- [ ] `PUT /ameverywhere/v1/seo/{post_id}` — update meta title, description, robots, canonical
-- [ ] `GET /ameverywhere/v1/seo/global` — site-wide defaults
+- [ ] `GET /holvek/v1/seo/{post_id}` — all SEO meta for a post
+- [ ] `PUT /holvek/v1/seo/{post_id}` — update meta title, description, robots, canonical
+- [ ] `GET /holvek/v1/seo/global` — site-wide defaults
 
 ---
 

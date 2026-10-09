@@ -1,9 +1,9 @@
 <?php
 
-namespace AmEveryWhere\Tests\Unit;
+namespace Holvek\WordPress\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use AmEveryWhere\Modules\Seo\MetaTagsGenerator;
+use Holvek\WordPress\Modules\Seo\MetaTagsGenerator;
 
 class MetaTagsGeneratorTest extends TestCase
 {
@@ -36,7 +36,7 @@ class MetaTagsGeneratorTest extends TestCase
     public function testGetDocumentTitleNonSingular(): void
     {
         $title = $this->generator->getDocumentTitle();
-        $this->assertSame('AmEveryWhere Test Site - AI Powered SEO Plugin', $title);
+        $this->assertSame('Holvek Test Site - AI Powered SEO Plugin', $title);
     }
 
     public function testGetDocumentTitleSingularDefault(): void
@@ -50,7 +50,7 @@ class MetaTagsGeneratorTest extends TestCase
         ]);
 
         $title = $this->generator->getDocumentTitle();
-        $this->assertSame('Sample Post Title - AmEveryWhere Test Site', $title);
+        $this->assertSame('Sample Post Title - Holvek Test Site', $title);
     }
 
     public function testGetDocumentTitleSingularCustomMeta(): void
@@ -62,7 +62,7 @@ class MetaTagsGeneratorTest extends TestCase
             'ID' => 42,
             'post_title' => 'Original Post Title',
         ]);
-        $mock_post_meta[42]['_ameverywhere_meta_title'] = 'Custom AI SEO Optimized Title';
+        $mock_post_meta[42]['_holvek_meta_title'] = 'Custom AI SEO Optimized Title';
 
         $title = $this->generator->getDocumentTitle();
         $this->assertSame('Custom AI SEO Optimized Title', $title);
@@ -106,11 +106,11 @@ class MetaTagsGeneratorTest extends TestCase
         $this->assertSame('index, follow', $method->invoke($this->generator));
 
         // Singular noindex
-        $mock_post_meta[10]['_ameverywhere_noindex'] = 'yes';
+        $mock_post_meta[10]['_holvek_noindex'] = 'yes';
         $this->assertSame('noindex, follow', $method->invoke($this->generator));
 
         // Singular noindex and nofollow
-        $mock_post_meta[10]['_ameverywhere_nofollow'] = 'yes';
+        $mock_post_meta[10]['_holvek_nofollow'] = 'yes';
         $this->assertSame('noindex, nofollow', $method->invoke($this->generator));
     }
 
@@ -145,11 +145,11 @@ class MetaTagsGeneratorTest extends TestCase
         $this->assertSame('https://example.com/post-55/', $method->invoke($this->generator));
 
         // Singular custom canonical override
-        $mock_post_meta[55]['_ameverywhere_canonical_url'] = 'https://example.com/preferred-url/';
+        $mock_post_meta[55]['_holvek_canonical_url'] = 'https://example.com/preferred-url/';
         $this->assertSame('https://example.com/preferred-url/', $method->invoke($this->generator));
 
         // Singular noindex suppresses canonical
-        $mock_post_meta[55]['_ameverywhere_noindex'] = 'yes';
+        $mock_post_meta[55]['_holvek_noindex'] = 'yes';
         $this->assertSame('', $method->invoke($this->generator));
     }
 
@@ -165,8 +165,8 @@ class MetaTagsGeneratorTest extends TestCase
             'post_excerpt' => 'This is a sample excerpt for description.',
         ]);
 
-        update_option('ameverywhere_google_verify', 'google-test-token-123');
-        update_option('ameverywhere_bing_verify', 'bing-test-token-456');
+        update_option('holvek_google_verify', 'google-test-token-123');
+        update_option('holvek_bing_verify', 'bing-test-token-456');
 
         ob_start();
         $this->generator->outputStandardMetaTags();

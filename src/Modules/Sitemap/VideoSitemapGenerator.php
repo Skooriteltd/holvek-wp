@@ -1,12 +1,12 @@
 <?php
 
-namespace AmEveryWhere\Modules\Sitemap;
+namespace Holvek\WordPress\Modules\Sitemap;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use AmEveryWhere\Modules\Schema\VideoExtractor;
+use Holvek\WordPress\Modules\Schema\VideoExtractor;
 
 /**
  * Generates and caches the Google-compliant Video XML sitemap.
@@ -14,7 +14,7 @@ use AmEveryWhere\Modules\Schema\VideoExtractor;
  */
 class VideoSitemapGenerator {
 
-	private const CACHE_TRANSIENT  = 'ameverywhere_video_sitemap_xml_cache';
+	private const CACHE_TRANSIENT  = 'holvek_video_sitemap_xml_cache';
 	private const CACHE_EXPIRATION = 4 * HOUR_IN_SECONDS;
 
 	/**
@@ -25,7 +25,7 @@ class VideoSitemapGenerator {
 		header( 'X-Robots-Tag: noindex, follow', true );
 
 		$xml = get_transient( self::CACHE_TRANSIENT );
-		if ( $xml === false ) {
+		if ( ! is_string( $xml ) ) {
 			$xml = $this->generateXml();
 			set_transient( self::CACHE_TRANSIENT, $xml, self::CACHE_EXPIRATION );
 		}
@@ -41,50 +41,49 @@ class VideoSitemapGenerator {
 	}
 
 	/**
-	 * Compiles Google-compliant XML structure.
+	 * Compiles the video urlset. Pages without a video are omitted.
 	 */
-	private function generateXml(): string {
+	public function generateXml(): string {
 		$excludePostTypes   = SitemapSettings::get( 'sitemap_exclude_types', array() );
 		$excludePostsString = SitemapSettings::get( 'sitemap_exclude_posts', '' );
 
 		$excludePostIds = array();
-		if ( ! empty( $excludePostsString ) ) {
+		if ( is_string( $excludePostsString ) && $excludePostsString !== '' ) {
 			$excludePostIds = array_map( 'intval', array_filter( array_map( 'trim', explode( ',', $excludePostsString ) ) ) );
 		}
 
-		// Get public post types
 		$postTypes = get_post_types( array( 'public' => true ) );
+		if ( ! is_array( $postTypes ) || $postTypes === array() ) {
+			$postTypes = array( 'post', 'page' );
+		}
 		if ( is_array( $excludePostTypes ) ) {
 			$postTypes = array_diff( $postTypes, $excludePostTypes );
 		}
 
-		if ( empty( $postTypes ) ) {
-			$postTypes = array( 'post', 'page' );
+		$posts = array();
+		if ( $postTypes !== array() ) {
+			$queryArgs = array(
+				'post_type'      => array_values( $postTypes ),
+				'post_status'    => 'publish',
+				'posts_per_page' => 500, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- One bounded admin-style read. Pages without a video are skipped.
+				'orderby'        => 'modified',
+				'order'          => 'DESC',
+			);
+
+			if ( $excludePostIds !== array() ) {
+				$queryArgs['post__not_in'] = $excludePostIds;
+			}
+
+			$posts = get_posts( $queryArgs );
 		}
-
-		$queryArgs = array(
-			'post_type'      => array_values( $postTypes ),
-			'post_status'    => 'publish',
-			'posts_per_page' => 500, // Capped to maintain speed
-			'orderby'        => 'modified',
-			'order'          => 'DESC',
-		);
-
-		if ( ! empty( $excludePostIds ) ) {
-			$queryArgs['post__not_in'] = $excludePostIds;
-		}
-
-		$posts = get_posts( $queryArgs );
 
 		$xml  = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
 		$xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"' . "\n";
 		$xml .= '        xmlns:video="http://www.google.com/schemas/sitemap-video/1.1">' . "\n";
 
-		$videoCount = 0;
-
 		foreach ( $posts as $post ) {
 			// Check if there is a noindex tag
-			$noindex = get_post_meta( $post->ID, '_ameverywhere_noindex', true );
+			$noindex = get_post_meta( $post->ID, '_holvek_noindex', true );
 			if ( $noindex === 'yes' ) {
 				continue;
 			}
@@ -125,15 +124,7 @@ class VideoSitemapGenerator {
 				$xml .= '      <video:publication_date>' . esc_html( $video['uploadDate'] ) . "</video:publication_date>\n";
 				$xml .= "    </video:video>\n";
 				$xml .= "  </url>\n";
-				++$videoCount;
 			}
-		}
-
-		// Add a blank placeholder if absolutely no videos are found, to prevent empty XML parsing crash
-		if ( $videoCount === 0 ) {
-			$xml .= "  <url>\n";
-			$xml .= '    <loc>' . esc_url( home_url( '/' ) ) . "</loc>\n";
-			$xml .= "  </url>\n";
 		}
 
 		$xml .= '</urlset>';

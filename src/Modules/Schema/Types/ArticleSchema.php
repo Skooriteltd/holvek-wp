@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Schema\Types;
+namespace Holvek\WordPress\Modules\Schema\Types;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -24,7 +24,7 @@ class ArticleSchema {
 		$schemaType = 'Article';
 
 		// Check if News optimization is needed
-		$isNews = get_post_meta( $post->ID, '_ameverywhere_is_news', true );
+		$isNews = get_post_meta( $post->ID, '_holvek_is_news', true );
 		if ( $isNews === 'yes' ) {
 			$schemaType = 'NewsArticle';
 		}

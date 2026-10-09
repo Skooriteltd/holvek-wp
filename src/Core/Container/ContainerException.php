@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Core\Container;
+namespace Holvek\WordPress\Core\Container;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

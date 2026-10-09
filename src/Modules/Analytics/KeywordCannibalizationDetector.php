@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Analytics;
+namespace Holvek\WordPress\Modules\Analytics;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class KeywordCannibalizationDetector {
 
-	private const CACHE_KEY = 'ameverywhere_cannibalization_report';
+	private const CACHE_KEY = 'holvek_cannibalization_report';
 	private const CACHE_TTL = 6 * HOUR_IN_SECONDS;
 
 	public function register(): void {
@@ -26,7 +26,7 @@ class KeywordCannibalizationDetector {
 		$adminCap = fn() => current_user_can( 'manage_seo' ) || current_user_can( 'manage_options' );
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/analytics/cannibalization',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -36,7 +36,7 @@ class KeywordCannibalizationDetector {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/analytics/cannibalization/refresh',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -88,7 +88,7 @@ class KeywordCannibalizationDetector {
 		$rows = $wpdb->get_results(
 			"SELECT p.ID, p.post_title, p.post_type, p.post_modified, pm.meta_value AS keyword
              FROM {$wpdb->posts} p
-             INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_ameverywhere_focus_keyword'
+             INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_holvek_focus_keyword'
              WHERE p.post_status = 'publish'
                AND p.post_type NOT IN ('attachment', 'revision', 'nav_menu_item')
                AND pm.meta_value != ''

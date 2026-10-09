@@ -1,13 +1,14 @@
 <?php
 
-namespace AmEveryWhere\Modules\ContentAssistant;
+namespace Holvek\WordPress\Modules\ContentAssistant;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use AmEveryWhere\Core\Event\EventManager;
-use AmEveryWhere\Core\Ai\AiGateway;
+use Holvek\WordPress\Core\Event\EventManager;
+use Holvek\WordPress\Core\Ai\AiGateway;
+use Holvek\WordPress\Modules\Schema\JsonLd;
 
 class ContentAssistantModule {
 
@@ -37,90 +38,95 @@ class ContentAssistantModule {
 		$this->eventManager->addAction( 'deleted_post', array( $linkEngine, 'removePostLinks' ) );
 	}
 
-	public function registerMetaFields(): void {
-		$metaKeys = array(
-			'_ameverywhere_meta_title',
-			'_ameverywhere_meta_description',
-			'_ameverywhere_is_news',
-			'_ameverywhere_noindex',
-			'_ameverywhere_nofollow',
-			'_ameverywhere_canonical_url',
-			'_ameverywhere_is_cornerstone',
-			'_ameverywhere_og_title',
-			'_ameverywhere_og_description',
-			'_ameverywhere_og_image',
-			'_ameverywhere_twitter_title',
-			'_ameverywhere_focus_keyword',
-			'_ameverywhere_primary_schema',
-			'_ameverywhere_schema_product_name',
-			'_ameverywhere_schema_product_description',
-			'_ameverywhere_schema_product_price',
-			'_ameverywhere_schema_product_currency',
-			'_ameverywhere_schema_product_rating',
-			'_ameverywhere_schema_product_availability',
-			'_ameverywhere_schema_faq_questions',
-			'_ameverywhere_schema_howto_name',
-			'_ameverywhere_schema_howto_description',
-			'_ameverywhere_schema_howto_steps',
-			'_ameverywhere_schema_howto_supplies',
-			'_ameverywhere_schema_howto_tools',
-			'_ameverywhere_schema_localbusiness_name',
-			'_ameverywhere_schema_localbusiness_telephone',
-			'_ameverywhere_schema_localbusiness_street',
-			'_ameverywhere_schema_localbusiness_city',
-			'_ameverywhere_schema_localbusiness_postal',
-			'_ameverywhere_schema_localbusiness_country',
-			// ── Phase 1 Backlog: Unlimited Keywords ──────────────────────
-			// JSON array of additional focus keywords beyond the primary one.
-			'_ameverywhere_additional_keywords',
-			// ── Phase 1 Backlog: Schema Stack (Unlimited Multiple Schemas) ─
-			// JSON array of additional schema objects layered on top of primary.
-			'_ameverywhere_schema_stack',
-			// ── Phase 1 Backlog: Pillar Content ──────────────────────────
-			'_ameverywhere_is_pillar',
-			// ── Phase 1 Backlog: Per-Post Performance Badges ─────────────
-			'_ameverywhere_pagespeed_cache',
-			'_ameverywhere_ranking_keywords',
-			'_ameverywhere_ranking_keywords_at',
-			// ── Social / Misc ─────────────────────────────────────────────
-			'_ameverywhere_disable_social_share',
-			'_ameverywhere_custom_schema_properties',
-			'_ameverywhere_schema_custom_type',
-			// Recipe schema fields
-			'_ameverywhere_schema_recipe_name',
-			'_ameverywhere_schema_recipe_description',
-			'_ameverywhere_schema_recipe_ingredients',
-			'_ameverywhere_schema_recipe_instructions',
-			'_ameverywhere_schema_recipe_prep_time',
-			'_ameverywhere_schema_recipe_cook_time',
-			'_ameverywhere_schema_recipe_calories',
-			'_ameverywhere_schema_recipe_cuisine',
-			'_ameverywhere_schema_recipe_yield',
-			// Event schema fields
-			'_ameverywhere_schema_event_name',
-			'_ameverywhere_schema_event_description',
-			'_ameverywhere_schema_event_start_date',
-			'_ameverywhere_schema_event_end_date',
-			'_ameverywhere_schema_event_venue',
-			'_ameverywhere_schema_event_address',
-			'_ameverywhere_schema_event_organizer',
-			'_ameverywhere_schema_event_performer',
-			'_ameverywhere_schema_event_price',
-			'_ameverywhere_schema_event_currency',
-			'_ameverywhere_schema_event_status',
+	/**
+	 * Post meta exposed to the block editor.
+	 *
+	 * Sanitization runs here, on register_post_meta, so a REST write cannot
+	 * skip the React form. auth_callback checks edit_post for that post.
+	 *
+	 * @return array<int, string>
+	 */
+	public static function editorMetaKeys(): array {
+		return array(
+			'_holvek_meta_title',
+			'_holvek_meta_description',
+			'_holvek_is_news',
+			'_holvek_noindex',
+			'_holvek_nofollow',
+			'_holvek_canonical_url',
+			'_holvek_is_cornerstone',
+			'_holvek_og_title',
+			'_holvek_og_description',
+			'_holvek_og_image',
+			'_holvek_twitter_title',
+			'_holvek_focus_keyword',
+			'_holvek_primary_schema',
+			'_holvek_schema_product_name',
+			'_holvek_schema_product_description',
+			'_holvek_schema_product_price',
+			'_holvek_schema_product_currency',
+			'_holvek_schema_product_rating',
+			'_holvek_schema_product_availability',
+			'_holvek_schema_faq_questions',
+			'_holvek_schema_howto_name',
+			'_holvek_schema_howto_description',
+			'_holvek_schema_howto_steps',
+			'_holvek_schema_howto_supplies',
+			'_holvek_schema_howto_tools',
+			'_holvek_schema_localbusiness_name',
+			'_holvek_schema_localbusiness_telephone',
+			'_holvek_schema_localbusiness_street',
+			'_holvek_schema_localbusiness_city',
+			'_holvek_schema_localbusiness_postal',
+			'_holvek_schema_localbusiness_country',
+			'_holvek_additional_keywords',
+			'_holvek_schema_stack',
+			'_holvek_is_pillar',
+			'_holvek_pagespeed_cache',
+			'_holvek_ranking_keywords',
+			'_holvek_ranking_keywords_at',
+			'_holvek_disable_social_share',
+			'_holvek_custom_schema_properties',
+			'_holvek_schema_custom_type',
+			'_holvek_schema_recipe_name',
+			'_holvek_schema_recipe_description',
+			'_holvek_schema_recipe_ingredients',
+			'_holvek_schema_recipe_instructions',
+			'_holvek_schema_recipe_prep_time',
+			'_holvek_schema_recipe_cook_time',
+			'_holvek_schema_recipe_calories',
+			'_holvek_schema_recipe_cuisine',
+			'_holvek_schema_recipe_yield',
+			'_holvek_schema_event_name',
+			'_holvek_schema_event_description',
+			'_holvek_schema_event_start_date',
+			'_holvek_schema_event_end_date',
+			'_holvek_schema_event_venue',
+			'_holvek_schema_event_address',
+			'_holvek_schema_event_organizer',
+			'_holvek_schema_event_performer',
+			'_holvek_schema_event_price',
+			'_holvek_schema_event_currency',
+			'_holvek_schema_event_status',
 		);
+	}
 
+	public function registerMetaFields(): void {
 		foreach ( array( 'post', 'page' ) as $postType ) {
-			foreach ( $metaKeys as $metaKey ) {
+			foreach ( self::editorMetaKeys() as $metaKey ) {
 				register_post_meta(
 					$postType,
 					$metaKey,
 					array(
-						'show_in_rest'  => true,
-						'single'        => true,
-						'type'          => 'string',
-						'auth_callback' => function () {
-							return current_user_can( 'edit_posts' );
+						'show_in_rest'      => true,
+						'single'            => true,
+						'type'              => 'string',
+						'auth_callback'     => static function ( $allowed, $key, $objectId ): bool {
+							unset( $allowed, $key );
+							return current_user_can( 'edit_post', (int) $objectId );
+						},
+						'sanitize_callback' => static function ( $value, $key ) {
+							return self::sanitizeMetaValue( (string) $key, $value );
 						},
 					)
 				);
@@ -128,8 +134,103 @@ class ContentAssistantModule {
 		}
 	}
 
+	/**
+	 * Sanitize one editor meta value.
+	 *
+	 * Custom schema keeps the JsonLd result, including WP_Error, so an invalid
+	 * document is rejected instead of stored as an empty string.
+	 *
+	 * @param mixed $value Raw REST value.
+	 * @return string|\WP_Error
+	 */
+	public static function sanitizeMetaValue( string $metaKey, $value ) {
+		if ( '_holvek_custom_schema_properties' === $metaKey ) {
+			return JsonLd::sanitizeCustomMeta( is_string( $value ) ? $value : '' );
+		}
+		if ( '_holvek_schema_faq_questions' === $metaKey ) {
+			return self::sanitizeFaqMeta( $value );
+		}
+		if ( in_array( $metaKey, array( '_holvek_canonical_url', '_holvek_og_image' ), true ) ) {
+			return self::sanitizeHttpUrl( $value );
+		}
+		if ( in_array( $metaKey, array( '_holvek_noindex', '_holvek_nofollow', '_holvek_is_news', '_holvek_is_cornerstone', '_holvek_is_pillar', '_holvek_disable_social_share' ), true ) ) {
+			return self::sanitizeYesNo( $value );
+		}
+		if ( in_array( $metaKey, array( '_holvek_meta_description', '_holvek_og_description', '_holvek_schema_product_description', '_holvek_schema_howto_description', '_holvek_schema_recipe_description', '_holvek_schema_event_description' ), true ) ) {
+			return sanitize_textarea_field( is_string( $value ) ? $value : '' );
+		}
+
+		return sanitize_text_field( is_string( $value ) ? $value : '' );
+	}
+
+	/**
+	 * An http or https URL, or an empty string.
+	 *
+	 * @param mixed $value Raw value.
+	 */
+	public static function sanitizeHttpUrl( $value ): string {
+		if ( ! is_string( $value ) ) {
+			return '';
+		}
+		$value = trim( $value );
+		if ( '' === $value ) {
+			return '';
+		}
+		$valid = wp_http_validate_url( $value );
+		if ( ! is_string( $valid ) || '' === $valid ) {
+			return '';
+		}
+		return esc_url_raw( $valid );
+	}
+
+	/**
+	 * Robots and other on/off flags. Anything other than yes is stored as no.
+	 *
+	 * @param mixed $value Raw value.
+	 */
+	public static function sanitizeYesNo( $value ): string {
+		if ( ! is_string( $value ) ) {
+			return 'no';
+		}
+		return strtolower( trim( $value ) ) === 'yes' ? 'yes' : 'no';
+	}
+
+	/**
+	 * FAQ schema is a JSON list of question and answer strings.
+	 *
+	 * @param mixed $value Raw value.
+	 */
+	public static function sanitizeFaqMeta( $value ): string {
+		if ( ! is_string( $value ) || '' === trim( $value ) ) {
+			return '[]';
+		}
+		$decoded = json_decode( $value, true );
+		if ( ! is_array( $decoded ) ) {
+			return '[]';
+		}
+
+		$clean = array();
+		foreach ( $decoded as $row ) {
+			if ( count( $clean ) >= 50 || ! is_array( $row ) ) {
+				continue;
+			}
+			$question = sanitize_text_field( isset( $row['question'] ) ? (string) $row['question'] : '' );
+			$answer   = sanitize_textarea_field( isset( $row['answer'] ) ? (string) $row['answer'] : '' );
+			if ( '' === $question && '' === $answer ) {
+				continue;
+			}
+			$clean[] = array(
+				'question' => $question,
+				'answer'   => $answer,
+			);
+		}
+
+		$json = wp_json_encode( $clean );
+		return is_string( $json ) ? $json : '[]';
+	}
+
 	public function enqueueEditorAssets(): void {
-		$assetFile = AMEVERYWHERE_PLUGIN_DIR . 'build/editor.asset.php';
+		$assetFile = HOLVEK_PLUGIN_DIR . 'build/editor.asset.php';
 
 		if ( ! file_exists( $assetFile ) ) {
 			return;
@@ -143,25 +244,26 @@ class ContentAssistantModule {
 		);
 
 		wp_enqueue_script(
-			'ameverywhere-editor-js',
-			AMEVERYWHERE_PLUGIN_URL . 'build/editor.js',
+			'holvek-editor-js',
+			HOLVEK_PLUGIN_URL . 'build/editor.js',
 			$dependencies,
 			$assets['version'],
 			true
 		);
 
 		$editorConfig = array(
-			'apiUrl'            => esc_url_raw( rest_url( 'ameverywhere/v1' ) ),
+			'apiUrl'            => esc_url_raw( rest_url( 'holvek/v1' ) ),
 			'nonce'             => wp_create_nonce( 'wp_rest' ),
-			'defaultShareImage' => esc_url_raw( get_option( 'ameverywhere_default_share_image', '' ) ),
+			'defaultShareImage' => esc_url_raw( get_option( 'holvek_default_share_image', '' ) ),
+			'cloudConfigured'   => \Holvek\WordPress\Core\Mode\OperatingMode::isCloudConfigured() ? '1' : '0',
 		);
 
-		wp_localize_script( 'ameverywhere-editor-js', 'amEveryWhereEditorConfig', $editorConfig );
+		wp_localize_script( 'holvek-editor-js', 'holvekEditorConfig', $editorConfig );
 	}
 
 	public function registerRestRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/ai/generate',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -171,7 +273,7 @@ class ContentAssistantModule {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/content/internal-links',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -196,7 +298,7 @@ class ContentAssistantModule {
 		$focusKeyword = isset( $params['focus_keyword'] ) ? sanitize_text_field( $params['focus_keyword'] ) : '';
 
 		if ( empty( $action ) ) {
-			return new \WP_Error( 'missing_action', __( 'Action parameter is required.', 'ameverywhere' ), array( 'status' => 400 ) );
+			return new \WP_Error( 'missing_action', __( 'Action parameter is required.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		$aiGateway    = new AiGateway();
@@ -221,7 +323,7 @@ class ContentAssistantModule {
 				break;
 
 			default:
-				return new \WP_Error( 'invalid_action', __( 'Invalid AI action.', 'ameverywhere' ), array( 'status' => 400 ) );
+				return new \WP_Error( 'invalid_action', __( 'Invalid AI action.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		$result = $aiGateway->queryModel( $prompt, $systemPrompt );
@@ -255,7 +357,7 @@ class ContentAssistantModule {
 		$content = isset( $params['content'] ) ? wp_kses_post( $params['content'] ) : '';
 
 		if ( ! $postId ) {
-			return new \WP_Error( 'missing_id', __( 'Post ID is required.', 'ameverywhere' ), array( 'status' => 400 ) );
+			return new \WP_Error( 'missing_id', __( 'Post ID is required.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		$linkEngine      = new InternalLinkEngine();

@@ -1,44 +1,46 @@
 <?php
 
-namespace AmEveryWhere;
+namespace Holvek\WordPress;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use AmEveryWhere\Core\Container\Container;
-use AmEveryWhere\Core\Api\BackendApiClient;
-use AmEveryWhere\Modules\Seo\SeoModule;
-use AmEveryWhere\Modules\Seo\MetaTagsGenerator;
-use AmEveryWhere\Modules\Seo\OpenGraphGenerator;
-use AmEveryWhere\Modules\Admin\AdminModule;
-use AmEveryWhere\Modules\Admin\AdminMenu;
-use AmEveryWhere\Modules\Sitemap\SitemapModule;
-use AmEveryWhere\Modules\Sitemap\SitemapRouteManager;
-use AmEveryWhere\Modules\Sitemap\SitemapGenerator;
-use AmEveryWhere\Modules\Sitemap\NewsSitemapGenerator;
-use AmEveryWhere\Modules\Sitemap\VideoSitemapGenerator;
-use AmEveryWhere\Modules\Indexing\IndexingModule;
-use AmEveryWhere\Modules\TechnicalSeo\TechnicalSeoModule;
-use AmEveryWhere\Modules\TechnicalSeo\RedirectManager;
-use AmEveryWhere\Modules\TechnicalSeo\ErrorMonitor;
-use AmEveryWhere\Modules\Schema\SchemaModule;
-use AmEveryWhere\Modules\Schema\SchemaGenerator;
-use AmEveryWhere\Modules\ContentAssistant\ContentAssistantModule;
-use AmEveryWhere\Modules\Breadcrumbs\BreadcrumbRenderer;
-use AmEveryWhere\Modules\ImageSeo\ImageSeoModule;
-use AmEveryWhere\Modules\TechnicalSeo\RobotsTxtEditor;
-use AmEveryWhere\Modules\Migration\MigrationManager;
-use AmEveryWhere\Modules\Onboarding\SetupWizard;
-use AmEveryWhere\Modules\Social\SocialModule;
-use AmEveryWhere\Modules\Ai\LlmsTxtGenerator;
-use AmEveryWhere\Modules\Admin\BulkMetaEditor;
-use AmEveryWhere\Modules\Compliance\CookieBannerModule;
+use Holvek\WordPress\Core\Container\Container;
+use Holvek\WordPress\Core\Api\BackendApiClient;
+use Holvek\WordPress\Core\Security\KeyVault;
+use Holvek\WordPress\Modules\Seo\SeoModule;
+use Holvek\WordPress\Modules\Seo\MetaTagsGenerator;
+use Holvek\WordPress\Modules\Seo\OpenGraphGenerator;
+use Holvek\WordPress\Modules\Admin\AdminModule;
+use Holvek\WordPress\Modules\Admin\AdminMenu;
+use Holvek\WordPress\Modules\Sitemap\SitemapModule;
+use Holvek\WordPress\Modules\Sitemap\SitemapRouteManager;
+use Holvek\WordPress\Modules\Sitemap\SitemapGenerator;
+use Holvek\WordPress\Modules\Sitemap\NewsSitemapGenerator;
+use Holvek\WordPress\Modules\Sitemap\VideoSitemapGenerator;
+use Holvek\WordPress\Modules\Indexing\IndexingModule;
+use Holvek\WordPress\Modules\TechnicalSeo\TechnicalSeoModule;
+use Holvek\WordPress\Modules\TechnicalSeo\RedirectManager;
+use Holvek\WordPress\Modules\TechnicalSeo\ErrorMonitor;
+use Holvek\WordPress\Modules\Schema\SchemaModule;
+use Holvek\WordPress\Modules\Schema\SchemaGenerator;
+use Holvek\WordPress\Modules\ContentAssistant\ContentAssistantModule;
+use Holvek\WordPress\Modules\Breadcrumbs\BreadcrumbRenderer;
+use Holvek\WordPress\Modules\ImageSeo\ImageSeoModule;
+use Holvek\WordPress\Modules\TechnicalSeo\RobotsTxtEditor;
+use Holvek\WordPress\Modules\Migration\MigrationManager;
+use Holvek\WordPress\Modules\Onboarding\SetupWizard;
+use Holvek\WordPress\Modules\Social\SocialModule;
+use Holvek\WordPress\Modules\Ai\LlmsTxtGenerator;
+use Holvek\WordPress\Modules\Admin\BulkMetaEditor;
+use Holvek\WordPress\Modules\Compliance\CookieBannerModule;
 
 class Plugin {
 
 	private static ?Plugin $instance = null;
 	private Container $container;
+	private bool $booted = false;
 
 	private function __construct() {
 		$this->container = new Container();
@@ -52,30 +54,64 @@ class Plugin {
 	}
 
 	public function boot(): void {
+		// plugins_loaded calls holvek_init(), and a second call in the same
+		// process must not register the hooks again.
+		if ( $this->booted ) {
+			return;
+		}
+		$this->booted = true;
+
 		// Load translation textdomain
 		add_action(
 			'init',
 			function () {
 				load_plugin_textdomain(
-					'ameverywhere',
+					'holvek',
 					false,
-					dirname( plugin_basename( AMEVERYWHERE_PLUGIN_FILE ) ) . '/languages'
+					dirname( plugin_basename( HOLVEK_PLUGIN_FILE ) ) . '/languages'
 				);
 			}
 		);
 
+		$dbVersion = get_option( 'holvek_db_version', '0' );
+		if ( version_compare( $dbVersion, HOLVEK_VERSION, '<' ) ) {
+			$this->container->get( \Holvek\WordPress\Core\Database\Installer::class )->install();
+		}
+
 		$this->registerServices();
 
-		/** @var \AmEveryWhere\Core\Queue\QueueManager $queueManager */
+		// One autoloaded flag check. The editor is constructed only while a
+		// public backup directory still needs to be removed.
+		add_action( 'init', array( $this, 'retireHtaccessBackupsOnce' ) );
+
+		// REST_REQUEST is defined on parse_request, after this boot runs.
+		// Cacheable HTML must not build admin, queue, or analytics services.
+		if ( $this->isFrontendHtmlRequest() ) {
+			add_action( 'rest_api_init', array( $this, 'registerRestControllers' ) );
+			$this->bootFrontendHtml();
+			return;
+		}
+
+		if ( is_admin() ) {
+			KeyVault::registerAdminNotice();
+		}
+
+		/** @var \Holvek\WordPress\Core\Queue\QueueManager $queueManager */
 		$queueManager = $this->container->get( 'queue_manager' );
 		$queueManager->boot();
 
 		$this->bootModules();
+
+		// wp-admin already attaches these inside bootModules(). A REST request
+		// is not is_admin(), and those routes still have to exist there.
+		if ( ! is_admin() ) {
+			add_action( 'rest_api_init', array( $this, 'registerAdminScopedRestControllers' ) );
+		}
 	}
 
 	private function registerServices(): void {
 		// Core services (Events, Queues, Backend API Client, etc.)
-		$this->container->singleton( 'event_manager', \AmEveryWhere\Core\Event\EventManager::class );
+		$this->container->singleton( 'event_manager', \Holvek\WordPress\Core\Event\EventManager::class );
 		$this->container->singleton( 'backend_api_client', BackendApiClient::class );
 
 		// Register SEO Module Dependencies
@@ -132,7 +168,7 @@ class Plugin {
 		);
 
 		// Register Indexing Module Dependencies
-		$this->container->singleton( 'queue_manager', \AmEveryWhere\Core\Queue\QueueManager::class );
+		$this->container->singleton( 'queue_manager', \Holvek\WordPress\Core\Queue\QueueManager::class );
 		$this->container->singleton(
 			'indexing_module',
 			function () {
@@ -257,42 +293,327 @@ class Plugin {
 		);
 
 		// ── Backlog Modules ───────────────────────────────────────────────────
-		$this->container->singleton( 'orphaned_content_finder', \AmEveryWhere\Modules\TechnicalSeo\OrphanedContentFinder::class );
-		$this->container->singleton( 'image_object_schema', \AmEveryWhere\Modules\ImageSeo\ImageObjectSchema::class );
-		$this->container->singleton( 'image_filename_enforcer', \AmEveryWhere\Modules\ImageSeo\ImageFilenameEnforcer::class );
-		$this->container->singleton( 'technical_seo_audit_engine', \AmEveryWhere\Modules\Admin\TechnicalSeoAuditEngine::class );
-		$this->container->singleton( 'ccpa_privacy_tools', \AmEveryWhere\Modules\Compliance\CcpaPrivacyTools::class );
-		$this->container->singleton( 'internal_link_suggester', \AmEveryWhere\Modules\ContentAssistant\InternalLinkSuggester::class );
-		$this->container->singleton( 'usage_metering_manager', \AmEveryWhere\Modules\Ai\UsageMeteringManager::class );
-		$this->container->singleton( 'upgrade_prompt_manager', \AmEveryWhere\Modules\Admin\UpgradePromptManager::class );
-		$this->container->singleton( 'htaccess_editor', \AmEveryWhere\Modules\TechnicalSeo\HtaccessEditor::class );
-		$this->container->singleton( 'ai_disclosure_manager', \AmEveryWhere\Modules\Compliance\AiDisclosureManager::class );
-		$this->container->singleton( 'index_status_checker', \AmEveryWhere\Modules\Indexing\IndexStatusChecker::class );
-		$this->container->singleton( 'schema_output_validator', \AmEveryWhere\Modules\Schema\SchemaOutputValidator::class );
-		$this->container->singleton( 'stale_cornerstone_detector', \AmEveryWhere\Modules\ContentAssistant\StaleCornerStoneDetector::class );
-		$this->container->singleton( 'audit_scheduler', \AmEveryWhere\Modules\ContentAssistant\AuditScheduler::class );
-		$this->container->singleton( 'search_intent_classifier', \AmEveryWhere\Modules\ContentAssistant\SearchIntentClassifier::class );
-		$this->container->singleton( 'inclusive_language_checker', \AmEveryWhere\Modules\ContentAssistant\InclusiveLanguageChecker::class );
-		$this->container->singleton( 'word_complexity_scorer', \AmEveryWhere\Modules\ContentAssistant\WordComplexityScorer::class );
-		$this->container->singleton( 'bing_indexnow_api', \AmEveryWhere\Modules\Indexing\BingIndexNowApi::class );
+		$this->container->singleton( 'orphaned_content_finder', \Holvek\WordPress\Modules\TechnicalSeo\OrphanedContentFinder::class );
+		$this->container->singleton( 'image_object_schema', \Holvek\WordPress\Modules\ImageSeo\ImageObjectSchema::class );
+		$this->container->singleton( 'image_filename_enforcer', \Holvek\WordPress\Modules\ImageSeo\ImageFilenameEnforcer::class );
+		$this->container->singleton( 'technical_seo_audit_engine', \Holvek\WordPress\Modules\Admin\TechnicalSeoAuditEngine::class );
+		$this->container->singleton( 'ccpa_privacy_tools', \Holvek\WordPress\Modules\Compliance\CcpaPrivacyTools::class );
+		$this->container->singleton( 'internal_link_suggester', \Holvek\WordPress\Modules\ContentAssistant\InternalLinkSuggester::class );
+		$this->container->singleton( 'usage_metering_manager', \Holvek\WordPress\Modules\Ai\UsageMeteringManager::class );
+		$this->container->singleton( 'upgrade_prompt_manager', \Holvek\WordPress\Modules\Admin\UpgradePromptManager::class );
+		$this->container->singleton( 'htaccess_editor', \Holvek\WordPress\Modules\TechnicalSeo\HtaccessEditor::class );
+		$this->container->singleton( 'ai_disclosure_manager', \Holvek\WordPress\Modules\Compliance\AiDisclosureManager::class );
+		$this->container->singleton( 'index_status_checker', \Holvek\WordPress\Modules\Indexing\IndexStatusChecker::class );
+		$this->container->singleton( 'schema_output_validator', \Holvek\WordPress\Modules\Schema\SchemaOutputValidator::class );
+		$this->container->singleton( 'stale_cornerstone_detector', \Holvek\WordPress\Modules\ContentAssistant\StaleCornerStoneDetector::class );
+		$this->container->singleton( 'audit_scheduler', \Holvek\WordPress\Modules\ContentAssistant\AuditScheduler::class );
+		$this->container->singleton( 'search_intent_classifier', \Holvek\WordPress\Modules\ContentAssistant\SearchIntentClassifier::class );
+		$this->container->singleton( 'inclusive_language_checker', \Holvek\WordPress\Modules\ContentAssistant\InclusiveLanguageChecker::class );
+		$this->container->singleton( 'word_complexity_scorer', \Holvek\WordPress\Modules\ContentAssistant\WordComplexityScorer::class );
+		$this->container->singleton( 'bing_indexnow_api', \Holvek\WordPress\Modules\Indexing\BingIndexNowApi::class );
 
 		// ── Phase 2 backlog services ───────────────────────────────────────────
-		$this->container->singleton( 'morphological_keyword_matcher', \AmEveryWhere\Modules\ContentAssistant\MorphologicalKeywordMatcher::class );
-		$this->container->singleton( 'woocommerce_product_schema', \AmEveryWhere\Modules\Schema\WooCommerceProductSchema::class );
-		$this->container->singleton( 'headless_seo_endpoints', \AmEveryWhere\Modules\Api\HeadlessSeoEndpoints::class );
-		$this->container->singleton( 'content_gap_analyser', \AmEveryWhere\Modules\ContentAssistant\ContentGapAnalyser::class );
-		$this->container->singleton( 'frontend_seo_inspector', \AmEveryWhere\Modules\Admin\FrontendSeoInspector::class );
-		$this->container->singleton( 'sitemap_priority_manager', \AmEveryWhere\Modules\Sitemap\SitemapPriorityManager::class );
-		$this->container->singleton( 'llm_writing_assistant', \AmEveryWhere\Modules\ContentAssistant\LlmWritingAssistant::class );
-		$this->container->singleton( 'keyword_cannibalization_detector', \AmEveryWhere\Modules\Analytics\KeywordCannibalizationDetector::class );
-		$this->container->singleton( 'seo_audit_history_log', \AmEveryWhere\Modules\Admin\SeoAuditHistoryLog::class );
-		$this->container->singleton( 'custom_seo_user_roles', \AmEveryWhere\Modules\Admin\CustomSeoUserRoles::class );
-		$this->container->singleton( 'pagespeed_dashboard', \AmEveryWhere\Modules\Analytics\PageSpeedDashboard::class );
-		$this->container->singleton( 'competitor_seo_importer', \AmEveryWhere\Modules\Import\CompetitorSeoImporter::class );
-		$this->container->singleton( 'multisite_network_seo', \AmEveryWhere\Modules\Analytics\MultisiteNetworkSeo::class );
-		$this->container->singleton( 'google_search_console', \AmEveryWhere\Modules\Analytics\GoogleSearchConsoleIntegration::class );
-		$this->container->singleton( 'bing_webmaster', \AmEveryWhere\Modules\Analytics\BingWebmasterIntegration::class );
-		$this->container->singleton( 'keyword_rank_tracker', \AmEveryWhere\Modules\Analytics\KeywordRankTracker::class );
+		$this->container->singleton( 'morphological_keyword_matcher', \Holvek\WordPress\Modules\ContentAssistant\MorphologicalKeywordMatcher::class );
+		$this->container->singleton( 'woocommerce_product_schema', \Holvek\WordPress\Modules\Schema\WooCommerceProductSchema::class );
+		$this->container->singleton( 'headless_seo_endpoints', \Holvek\WordPress\Modules\Api\HeadlessSeoEndpoints::class );
+		$this->container->singleton( 'content_gap_analyser', \Holvek\WordPress\Modules\ContentAssistant\ContentGapAnalyser::class );
+		$this->container->singleton( 'frontend_seo_inspector', \Holvek\WordPress\Modules\Admin\FrontendSeoInspector::class );
+		$this->container->singleton( 'sitemap_priority_manager', \Holvek\WordPress\Modules\Sitemap\SitemapPriorityManager::class );
+		$this->container->singleton( 'llm_writing_assistant', \Holvek\WordPress\Modules\ContentAssistant\LlmWritingAssistant::class );
+		$this->container->singleton( 'keyword_cannibalization_detector', \Holvek\WordPress\Modules\Analytics\KeywordCannibalizationDetector::class );
+		$this->container->singleton( 'seo_audit_history_log', \Holvek\WordPress\Modules\Admin\SeoAuditHistoryLog::class );
+		$this->container->singleton( 'custom_seo_user_roles', \Holvek\WordPress\Modules\Admin\CustomSeoUserRoles::class );
+		$this->container->singleton( 'pagespeed_dashboard', \Holvek\WordPress\Modules\Analytics\PageSpeedDashboard::class );
+		$this->container->singleton( 'competitor_seo_importer', \Holvek\WordPress\Modules\Import\CompetitorSeoImporter::class );
+		$this->container->singleton( 'multisite_network_seo', \Holvek\WordPress\Modules\Analytics\MultisiteNetworkSeo::class );
+		$this->container->singleton( 'google_search_console', \Holvek\WordPress\Modules\Analytics\GoogleSearchConsoleIntegration::class );
+		$this->container->singleton( 'bing_webmaster', \Holvek\WordPress\Modules\Analytics\BingWebmasterIntegration::class );
+		$this->container->singleton( 'keyword_rank_tracker', \Holvek\WordPress\Modules\Analytics\KeywordRankTracker::class );
+	}
+
+	/**
+	 * Public response behavior for a cacheable HTML request.
+	 *
+	 * Sitemap, llms.txt, and IndexNow objects are constructed inside the
+	 * request callback, and only when the path matches.
+	 */
+	private function bootFrontendHtml(): void {
+		$this->container->get( 'seo_module' )->boot();
+		$this->container->get( 'schema_module' )->boot();
+		$this->container->get( 'robots_txt_editor' )->register();
+		$this->container->get( 'breadcrumb_renderer' )->register();
+
+		add_action( 'template_redirect', array( $this->container->get( 'redirect_manager' ), 'handleRedirects' ), 1 );
+		add_action( 'template_redirect', array( $this->container->get( 'error_monitor' ), 'log404Errors' ), 99 );
+
+		$custom404 = new \Holvek\WordPress\Modules\TechnicalSeo\Custom404Handler();
+		add_filter( 'template_include', array( $custom404, 'maybeServeCustom404' ), 99 );
+
+		$htmlSitemap = new \Holvek\WordPress\Modules\Sitemap\HtmlSitemapShortcode();
+		$htmlSitemap->register();
+
+		add_action( 'init', array( $this->container->get( 'ccpa_privacy_tools' ), 'handleGpcSignal' ) );
+
+		$cookieConfig = get_option( 'holvek_cookie_banner', array() );
+		if ( is_array( $cookieConfig ) && ! empty( $cookieConfig['enabled'] ) ) {
+			$this->container->get( 'cookie_banner_module' )->boot();
+		}
+
+		add_filter( 'the_content', array( $this->container->get( 'ai_disclosure_manager' ), 'injectDisclosure' ) );
+		add_action( 'template_redirect', array( $this->container->get( 'image_seo_module' ), 'redirectAttachmentPages' ) );
+
+		$this->container->get( 'woocommerce_product_schema' )->register();
+		$this->container->get( 'image_object_schema' )->register();
+
+		if ( is_user_logged_in() ) {
+			add_action( 'wp_footer', array( $this->container->get( 'frontend_seo_inspector' ), 'injectOverlay' ), 99 );
+		}
+
+		if ( get_option( 'holvek_filename_enforce', 'yes' ) === 'yes' ) {
+			add_filter(
+				'wp_handle_upload_prefilter',
+				array( $this->container->get( 'image_filename_enforcer' ), 'enforceFilename' )
+			);
+		}
+
+		add_filter( 'wp_sitemaps_enabled', array( $this, 'filterCoreSitemapsEnabled' ) );
+
+		if ( $this->isSitemapRequest() ) {
+			add_action( 'template_redirect', array( $this, 'serveFrontendSitemap' ), 0 );
+		}
+
+		if ( $this->isLlmsTxtRequest() ) {
+			add_action( 'template_redirect', array( $this, 'serveFrontendLlmsTxt' ), 0 );
+		}
+
+		if ( $this->isIndexNowKeyRequest() ) {
+			add_action( 'init', array( $this, 'serveFrontendIndexNowKey' ) );
+		}
+	}
+
+	public function retireHtaccessBackupsOnce(): void {
+		if ( get_option( 'holvek_htaccess_web_backups_retired', 'no' ) === 'yes' ) {
+			return;
+		}
+
+		$this->container->get( 'htaccess_editor' )->retirePublicBackupsOnce();
+	}
+
+	public function filterCoreSitemapsEnabled( bool $enabled ): bool {
+		$pluginSitemap = \Holvek\WordPress\Modules\Sitemap\SitemapSettings::get( 'enable_index_sitemap', 'no' );
+		if ( $pluginSitemap === 'yes' ) {
+			return false;
+		}
+
+		return $enabled;
+	}
+
+	public function serveFrontendSitemap(): void {
+		$this->container->get( 'sitemap_route_manager' )->handleSitemapRequests();
+	}
+
+	public function serveFrontendLlmsTxt(): void {
+		// This path does not register the rewrite query var, so set it before serving.
+		set_query_var( 'holvek_llms_txt', '1' );
+		$this->container->get( 'llms_txt_generator' )->serveFile();
+	}
+
+	public function serveFrontendIndexNowKey(): void {
+		$this->container->get( 'bing_indexnow_api' )->serveKeyFile();
+	}
+
+	/**
+	 * Register every REST controller without constructing its HTTP client.
+	 *
+	 * Hooked from the HTML boot so a request that was not yet marked as REST
+	 * still exposes routes when rest_api_init fires.
+	 */
+	public function registerRestControllers(): void {
+		$this->container->get( 'queue_manager' )->registerRoutes();
+		$this->container->get( 'admin_module' )->registerRestRoutes();
+		$this->container->get( 'sitemap_module' )->registerRoutes();
+		$this->container->get( 'redirect_manager' )->registerRoutes();
+		$this->container->get( 'error_monitor' )->registerRoutes();
+		$this->container->get( 'schema_module' )->registerRoutes();
+		$this->container->get( 'content_assistant_module' )->registerRestRoutes();
+		$this->container->get( 'robots_txt_editor' )->registerRoutes();
+		$this->container->get( 'migration_manager' )->registerRoutes();
+		$this->container->get( 'setup_wizard' )->registerRoutes();
+		$this->container->get( 'social_module' )->registerRestRoutes();
+		$this->container->get( 'llms_txt_generator' )->registerRestRoutes();
+		$this->container->get( 'bulk_meta_editor' )->registerRestRoutes();
+		$this->container->get( 'cookie_banner_module' )->registerRoutes();
+		$this->container->get( 'orphaned_content_finder' )->registerRoutes();
+		$this->container->get( 'image_object_schema' )->registerRoutes();
+		$this->container->get( 'image_filename_enforcer' )->registerRoutes();
+		$this->container->get( 'technical_seo_audit_engine' )->registerRoutes();
+		$this->container->get( 'ccpa_privacy_tools' )->registerRoutes();
+		$this->container->get( 'internal_link_suggester' )->registerRoutes();
+		$this->container->get( 'usage_metering_manager' )->registerRoutes();
+		$this->container->get( 'upgrade_prompt_manager' )->registerRoutes();
+		( new \Holvek\WordPress\Core\Api\CloudCredential() )->registerRoutes();
+		$this->container->get( 'htaccess_editor' )->registerRoutes();
+		$this->container->get( 'ai_disclosure_manager' )->registerRoutes();
+		$this->container->get( 'index_status_checker' )->registerRoutes();
+		$this->container->get( 'schema_output_validator' )->registerRoutes();
+		$this->container->get( 'stale_cornerstone_detector' )->registerRoutes();
+		$this->container->get( 'audit_scheduler' )->registerRoutes();
+		$this->container->get( 'search_intent_classifier' )->registerRoutes();
+		$this->container->get( 'inclusive_language_checker' )->registerRoutes();
+		$this->container->get( 'word_complexity_scorer' )->registerRoutes();
+		$this->container->get( 'bing_indexnow_api' )->registerRoutes();
+		$this->container->get( 'morphological_keyword_matcher' )->registerRoutes();
+
+		if ( class_exists( '\WC_Product' ) || function_exists( 'wc_get_product' ) ) {
+			$this->container->get( 'woocommerce_product_schema' )->registerRoutes();
+		}
+
+		$this->container->get( 'headless_seo_endpoints' )->registerRoutes();
+		$this->container->get( 'content_gap_analyser' )->registerRoutes();
+		$this->container->get( 'frontend_seo_inspector' )->registerRoutes();
+		$this->container->get( 'sitemap_priority_manager' )->registerRoutes();
+		$this->container->get( 'llm_writing_assistant' )->registerRoutes();
+		$this->container->get( 'keyword_cannibalization_detector' )->registerRoutes();
+		$this->container->get( 'seo_audit_history_log' )->registerRoutes();
+		$this->container->get( 'custom_seo_user_roles' )->registerRoutes();
+		$this->container->get( 'pagespeed_dashboard' )->registerRoutes();
+		$this->container->get( 'competitor_seo_importer' )->registerRoutes();
+		$this->container->get( 'multisite_network_seo' )->registerRoutes();
+		$this->container->get( 'google_search_console' )->registerRoutes();
+		$this->container->get( 'bing_webmaster' )->registerRoutes();
+		$this->container->get( 'keyword_rank_tracker' )->registerRoutes();
+
+		( new \Holvek\WordPress\Modules\ImageSeo\ImageAltAudit() )->registerRoutes();
+		( new \Holvek\WordPress\Modules\ImageSeo\ImageCompressor() )->registerRoutes();
+		( new \Holvek\WordPress\Modules\TechnicalSeo\Custom404Handler() )->registerRoutes();
+		( new \Holvek\WordPress\Modules\TechnicalSeo\BrokenLinkChecker() )->registerRoutes();
+	}
+
+	/**
+	 * Routes that bootModules() attaches only inside is_admin().
+	 */
+	public function registerAdminScopedRestControllers(): void {
+		$this->container->get( 'admin_module' )->registerRestRoutes();
+		$this->container->get( 'migration_manager' )->registerRoutes();
+		$this->container->get( 'setup_wizard' )->registerRoutes();
+		$this->container->get( 'bulk_meta_editor' )->registerRestRoutes();
+		$this->container->get( 'technical_seo_audit_engine' )->registerRoutes();
+		$this->container->get( 'upgrade_prompt_manager' )->registerRoutes();
+		( new \Holvek\WordPress\Core\Api\CloudCredential() )->registerRoutes();
+		$this->container->get( 'seo_audit_history_log' )->registerRoutes();
+		$this->container->get( 'custom_seo_user_roles' )->registerRoutes();
+	}
+
+	private function isFrontendHtmlRequest(): bool {
+		if ( is_admin() ) {
+			return false;
+		}
+		if ( function_exists( 'wp_doing_ajax' ) && wp_doing_ajax() ) {
+			return false;
+		}
+		if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) {
+			return false;
+		}
+		if ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) {
+			return false;
+		}
+		if ( defined( 'DOING_CRON' ) && DOING_CRON ) {
+			return false;
+		}
+		if ( defined( 'WP_CLI' ) && WP_CLI ) {
+			return false;
+		}
+		if ( $this->isRestRequest() ) {
+			return false;
+		}
+
+		return true;
+	}
+
+	private function isRestRequest(): bool {
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			return true;
+		}
+		if ( $this->hasRestRouteQuery() ) {
+			return true;
+		}
+
+		$path   = $this->requestPath();
+		$prefix = '/' . $this->restPrefix();
+		if ( str_contains( $path, $prefix . '/' ) ) {
+			return true;
+		}
+
+		return str_ends_with( $path, $prefix );
+	}
+
+	private function hasRestRouteQuery(): bool {
+		// Routing detection only. The value is not stored or authorized here.
+		if ( ! isset( $_GET['rest_route'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return false;
+		}
+
+		$route = wp_unslash( $_GET['rest_route'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		if ( ! is_string( $route ) ) {
+			return false;
+		}
+
+		return '' !== sanitize_text_field( $route );
+	}
+
+	private function restPrefix(): string {
+		$prefix = 'wp-json';
+		if ( function_exists( 'rest_get_url_prefix' ) ) {
+			$prefix = (string) rest_get_url_prefix();
+		}
+
+		$prefix = trim( $prefix, '/' );
+		if ( '' === $prefix ) {
+			return 'wp-json';
+		}
+
+		return $prefix;
+	}
+
+	private function requestPath(): string {
+		if ( ! isset( $_SERVER['REQUEST_URI'] ) ) {
+			return '/';
+		}
+
+		$uri = wp_unslash( $_SERVER['REQUEST_URI'] );
+		if ( ! is_string( $uri ) || '' === $uri ) {
+			return '/';
+		}
+
+		$path = wp_parse_url( sanitize_text_field( $uri ), PHP_URL_PATH );
+		if ( ! is_string( $path ) || '' === $path ) {
+			return '/';
+		}
+
+		return $path;
+	}
+
+	private function isSitemapRequest(): bool {
+		return 1 === preg_match(
+			'#/(sitemap\.xml|sitemap-posts-\d{4}-\d{2}(?:-(?:[2-9]|[1-9]\d+))?\.xml|sitemap-news\.xml|news-sitemap\.xml|video-sitemap\.xml)$#',
+			$this->requestPath()
+		);
+	}
+
+	private function isLlmsTxtRequest(): bool {
+		return str_ends_with( $this->requestPath(), '/llms.txt' );
+	}
+
+	private function isIndexNowKeyRequest(): bool {
+		$path = $this->requestPath();
+		if ( ! str_ends_with( $path, '.txt' ) ) {
+			return false;
+		}
+		if ( str_ends_with( $path, '/robots.txt' ) || str_ends_with( $path, '/llms.txt' ) ) {
+			return false;
+		}
+
+		return true;
 	}
 
 	private function bootModules(): void {
@@ -300,9 +621,11 @@ class Plugin {
 		$seoModule = $this->container->get( 'seo_module' );
 		$seoModule->boot();
 
-		/** @var AdminModule $adminModule */
-		$adminModule = $this->container->get( 'admin_module' );
-		$adminModule->boot();
+		if ( is_admin() ) {
+			/** @var AdminModule $adminModule */
+			$adminModule = $this->container->get( 'admin_module' );
+			$adminModule->boot();
+		}
 
 		/** @var SitemapModule $sitemapModule */
 		$sitemapModule = $this->container->get( 'sitemap_module' );
@@ -339,13 +662,15 @@ class Plugin {
 		// Register Robots.txt REST routes
 		add_action( 'rest_api_init', array( $robotsTxtEditor, 'registerRoutes' ) );
 
-		/** @var MigrationManager $migrationManager */
-		$migrationManager = $this->container->get( 'migration_manager' );
-		add_action( 'rest_api_init', array( $migrationManager, 'registerRoutes' ) );
+		if ( is_admin() ) {
+			/** @var MigrationManager $migrationManager */
+			$migrationManager = $this->container->get( 'migration_manager' );
+			add_action( 'rest_api_init', array( $migrationManager, 'registerRoutes' ) );
 
-		/** @var SetupWizard $setupWizard */
-		$setupWizard = $this->container->get( 'setup_wizard' );
-		$setupWizard->register();
+			/** @var SetupWizard $setupWizard */
+			$setupWizard = $this->container->get( 'setup_wizard' );
+			$setupWizard->register();
+		}
 
 		/** @var SocialModule $socialModule */
 		$socialModule = $this->container->get( 'social_module' );
@@ -356,156 +681,170 @@ class Plugin {
 		$llmsTxtGenerator->boot();
 		add_action( 'rest_api_init', array( $llmsTxtGenerator, 'registerRestRoutes' ) );
 
-		/** @var BulkMetaEditor $bulkMetaEditor */
-		$bulkMetaEditor = $this->container->get( 'bulk_meta_editor' );
-		add_action( 'rest_api_init', array( $bulkMetaEditor, 'registerRestRoutes' ) );
+		if ( is_admin() ) {
+			/** @var BulkMetaEditor $bulkMetaEditor */
+			$bulkMetaEditor = $this->container->get( 'bulk_meta_editor' );
+			add_action( 'rest_api_init', array( $bulkMetaEditor, 'registerRestRoutes' ) );
+		}
 
-		/** @var CookieBannerModule $cookieBannerModule */
-		$cookieBannerModule = $this->container->get( 'cookie_banner_module' );
-		$cookieBannerModule->boot();
+		if ( ! is_admin() ) {
+			/** @var CookieBannerModule $cookieBannerModule */
+			$cookieBannerModule = $this->container->get( 'cookie_banner_module' );
+			$cookieBannerModule->boot();
+		}
 
-		// HTML Sitemap shortcode: [ameverywhere_sitemap]
-		$htmlSitemapShortcode = new \AmEveryWhere\Modules\Sitemap\HtmlSitemapShortcode();
+		// HTML Sitemap shortcode: [holvek_sitemap]
+		$htmlSitemapShortcode = new \Holvek\WordPress\Modules\Sitemap\HtmlSitemapShortcode();
 		$htmlSitemapShortcode->register();
 
-		/** @var \AmEveryWhere\Modules\TechnicalSeo\OrphanedContentFinder $orphanedFinder */
+		/** @var \Holvek\WordPress\Modules\TechnicalSeo\OrphanedContentFinder $orphanedFinder */
 		$orphanedFinder = $this->container->get( 'orphaned_content_finder' );
 		$orphanedFinder->register();
 
-		/** @var \AmEveryWhere\Modules\ImageSeo\ImageObjectSchema $imageObjectSchema */
+		/** @var \Holvek\WordPress\Modules\ImageSeo\ImageObjectSchema $imageObjectSchema */
 		$imageObjectSchema = $this->container->get( 'image_object_schema' );
 		$imageObjectSchema->register();
 
-		/** @var \AmEveryWhere\Modules\ImageSeo\ImageFilenameEnforcer $imageFilenameEnforcer */
+		/** @var \Holvek\WordPress\Modules\ImageSeo\ImageFilenameEnforcer $imageFilenameEnforcer */
 		$imageFilenameEnforcer = $this->container->get( 'image_filename_enforcer' );
 		$imageFilenameEnforcer->register();
 
-		/** @var \AmEveryWhere\Modules\Admin\TechnicalSeoAuditEngine $auditEngine */
-		$auditEngine = $this->container->get( 'technical_seo_audit_engine' );
-		$auditEngine->register();
+		if ( is_admin() ) {
+			/** @var \Holvek\WordPress\Modules\Admin\TechnicalSeoAuditEngine $auditEngine */
+			$auditEngine = $this->container->get( 'technical_seo_audit_engine' );
+			$auditEngine->register();
+		}
 
-		/** @var \AmEveryWhere\Modules\Compliance\CcpaPrivacyTools $ccpaTools */
-		$ccpaTools = $this->container->get( 'ccpa_privacy_tools' );
-		$ccpaTools->boot();
+		if ( ! is_admin() ) {
+			/** @var \Holvek\WordPress\Modules\Compliance\CcpaPrivacyTools $ccpaTools */
+			$ccpaTools = $this->container->get( 'ccpa_privacy_tools' );
+			$ccpaTools->boot();
+		}
 
-		/** @var \AmEveryWhere\Modules\ContentAssistant\InternalLinkSuggester $linkSuggester */
+		/** @var \Holvek\WordPress\Modules\ContentAssistant\InternalLinkSuggester $linkSuggester */
 		$linkSuggester = $this->container->get( 'internal_link_suggester' );
 		$linkSuggester->register();
 
-		/** @var \AmEveryWhere\Modules\Ai\UsageMeteringManager $usageMetering */
+		/** @var \Holvek\WordPress\Modules\Ai\UsageMeteringManager $usageMetering */
 		$usageMetering = $this->container->get( 'usage_metering_manager' );
 		$usageMetering->boot();
 
-		/** @var \AmEveryWhere\Modules\Admin\UpgradePromptManager $upgradePrompt */
-		$upgradePrompt = $this->container->get( 'upgrade_prompt_manager' );
-		$upgradePrompt->boot();
+		if ( is_admin() ) {
+			/** @var \Holvek\WordPress\Modules\Admin\UpgradePromptManager $upgradePrompt */
+			$upgradePrompt = $this->container->get( 'upgrade_prompt_manager' );
+			$upgradePrompt->boot();
+		}
 
-		/** @var \AmEveryWhere\Modules\TechnicalSeo\HtaccessEditor $htaccessEditor */
+		/** @var \Holvek\WordPress\Modules\TechnicalSeo\HtaccessEditor $htaccessEditor */
 		$htaccessEditor = $this->container->get( 'htaccess_editor' );
 		$htaccessEditor->register();
 
-		/** @var \AmEveryWhere\Modules\Compliance\AiDisclosureManager $aiDisclosure */
+		/** @var \Holvek\WordPress\Modules\Compliance\AiDisclosureManager $aiDisclosure */
 		$aiDisclosure = $this->container->get( 'ai_disclosure_manager' );
 		$aiDisclosure->register();
 
-		/** @var \AmEveryWhere\Modules\Indexing\IndexStatusChecker $indexStatusChecker */
+		/** @var \Holvek\WordPress\Modules\Indexing\IndexStatusChecker $indexStatusChecker */
 		$indexStatusChecker = $this->container->get( 'index_status_checker' );
 		$indexStatusChecker->register();
 
-		/** @var \AmEveryWhere\Modules\Schema\SchemaOutputValidator $schemaValidator */
+		/** @var \Holvek\WordPress\Modules\Schema\SchemaOutputValidator $schemaValidator */
 		$schemaValidator = $this->container->get( 'schema_output_validator' );
 		$schemaValidator->register();
 
-		/** @var \AmEveryWhere\Modules\ContentAssistant\StaleCornerStoneDetector $staleDetector */
+		/** @var \Holvek\WordPress\Modules\ContentAssistant\StaleCornerStoneDetector $staleDetector */
 		$staleDetector = $this->container->get( 'stale_cornerstone_detector' );
 		$staleDetector->register();
 
-		/** @var \AmEveryWhere\Modules\ContentAssistant\AuditScheduler $auditScheduler */
+		/** @var \Holvek\WordPress\Modules\ContentAssistant\AuditScheduler $auditScheduler */
 		$auditScheduler = $this->container->get( 'audit_scheduler' );
 		$auditScheduler->register();
 
-		/** @var \AmEveryWhere\Modules\ContentAssistant\SearchIntentClassifier $intentClassifier */
+		/** @var \Holvek\WordPress\Modules\ContentAssistant\SearchIntentClassifier $intentClassifier */
 		$intentClassifier = $this->container->get( 'search_intent_classifier' );
 		$intentClassifier->register();
 
-		/** @var \AmEveryWhere\Modules\ContentAssistant\InclusiveLanguageChecker $inclusiveChecker */
+		/** @var \Holvek\WordPress\Modules\ContentAssistant\InclusiveLanguageChecker $inclusiveChecker */
 		$inclusiveChecker = $this->container->get( 'inclusive_language_checker' );
 		$inclusiveChecker->register();
 
-		/** @var \AmEveryWhere\Modules\ContentAssistant\WordComplexityScorer $complexityScorer */
+		/** @var \Holvek\WordPress\Modules\ContentAssistant\WordComplexityScorer $complexityScorer */
 		$complexityScorer = $this->container->get( 'word_complexity_scorer' );
 		$complexityScorer->register();
 
-		/** @var \AmEveryWhere\Modules\Indexing\BingIndexNowApi $bingIndexNow */
+		/** @var \Holvek\WordPress\Modules\Indexing\BingIndexNowApi $bingIndexNow */
 		$bingIndexNow = $this->container->get( 'bing_indexnow_api' );
 		$bingIndexNow->register();
 
 		// ── Boot Phase 2 Backlog Modules ─────────────────────────────────────
-		/** @var \AmEveryWhere\Modules\ContentAssistant\MorphologicalKeywordMatcher $morphoMatcher */
+		/** @var \Holvek\WordPress\Modules\ContentAssistant\MorphologicalKeywordMatcher $morphoMatcher */
 		$morphoMatcher = $this->container->get( 'morphological_keyword_matcher' );
 		$morphoMatcher->register();
 
-		/** @var \AmEveryWhere\Modules\Schema\WooCommerceProductSchema $wooSchema */
+		/** @var \Holvek\WordPress\Modules\Schema\WooCommerceProductSchema $wooSchema */
 		$wooSchema = $this->container->get( 'woocommerce_product_schema' );
 		$wooSchema->register();
 
-		/** @var \AmEveryWhere\Modules\Api\HeadlessSeoEndpoints $headlessEndpoints */
+		/** @var \Holvek\WordPress\Modules\Api\HeadlessSeoEndpoints $headlessEndpoints */
 		$headlessEndpoints = $this->container->get( 'headless_seo_endpoints' );
 		$headlessEndpoints->register();
 
-		/** @var \AmEveryWhere\Modules\ContentAssistant\ContentGapAnalyser $contentGap */
+		/** @var \Holvek\WordPress\Modules\ContentAssistant\ContentGapAnalyser $contentGap */
 		$contentGap = $this->container->get( 'content_gap_analyser' );
 		$contentGap->register();
 
-		/** @var \AmEveryWhere\Modules\Admin\FrontendSeoInspector $frontendInspector */
-		$frontendInspector = $this->container->get( 'frontend_seo_inspector' );
-		$frontendInspector->register();
+		if ( ! is_admin() ) {
+			/** @var \Holvek\WordPress\Modules\Admin\FrontendSeoInspector $frontendInspector */
+			$frontendInspector = $this->container->get( 'frontend_seo_inspector' );
+			$frontendInspector->register();
+		}
 
-		/** @var \AmEveryWhere\Modules\Sitemap\SitemapPriorityManager $sitemapPriority */
+		/** @var \Holvek\WordPress\Modules\Sitemap\SitemapPriorityManager $sitemapPriority */
 		$sitemapPriority = $this->container->get( 'sitemap_priority_manager' );
 		$sitemapPriority->register();
 
-		/** @var \AmEveryWhere\Modules\ContentAssistant\LlmWritingAssistant $llmAssistant */
+		/** @var \Holvek\WordPress\Modules\ContentAssistant\LlmWritingAssistant $llmAssistant */
 		$llmAssistant = $this->container->get( 'llm_writing_assistant' );
 		$llmAssistant->register();
 
-		/** @var \AmEveryWhere\Modules\Analytics\KeywordCannibalizationDetector $cannibalizationDetector */
+		/** @var \Holvek\WordPress\Modules\Analytics\KeywordCannibalizationDetector $cannibalizationDetector */
 		$cannibalizationDetector = $this->container->get( 'keyword_cannibalization_detector' );
 		$cannibalizationDetector->register();
 
-		/** @var \AmEveryWhere\Modules\Admin\SeoAuditHistoryLog $auditHistoryLog */
-		$auditHistoryLog = $this->container->get( 'seo_audit_history_log' );
-		$auditHistoryLog->register();
+		if ( is_admin() ) {
+			/** @var \Holvek\WordPress\Modules\Admin\SeoAuditHistoryLog $auditHistoryLog */
+			$auditHistoryLog = $this->container->get( 'seo_audit_history_log' );
+			$auditHistoryLog->register();
 
-		/** @var \AmEveryWhere\Modules\Admin\CustomSeoUserRoles $userRoles */
-		$userRoles = $this->container->get( 'custom_seo_user_roles' );
-		$userRoles->register();
+			/** @var \Holvek\WordPress\Modules\Admin\CustomSeoUserRoles $userRoles */
+			$userRoles = $this->container->get( 'custom_seo_user_roles' );
+			$userRoles->register();
+		}
 
-		/** @var \AmEveryWhere\Modules\Analytics\PageSpeedDashboard $pageSpeed */
+		/** @var \Holvek\WordPress\Modules\Analytics\PageSpeedDashboard $pageSpeed */
 		$pageSpeed = $this->container->get( 'pagespeed_dashboard' );
 		$pageSpeed->register();
 
-		/** @var \AmEveryWhere\Modules\Import\CompetitorSeoImporter $competitorImporter */
+		/** @var \Holvek\WordPress\Modules\Import\CompetitorSeoImporter $competitorImporter */
 		$competitorImporter = $this->container->get( 'competitor_seo_importer' );
 		$competitorImporter->register();
 
-		/** @var \AmEveryWhere\Modules\Analytics\MultisiteNetworkSeo $multisiteNetworkSeo */
+		/** @var \Holvek\WordPress\Modules\Analytics\MultisiteNetworkSeo $multisiteNetworkSeo */
 		$multisiteNetworkSeo = $this->container->get( 'multisite_network_seo' );
 		$multisiteNetworkSeo->register();
 
-		/** @var \AmEveryWhere\Modules\Analytics\GoogleSearchConsoleIntegration $gsc */
+		/** @var \Holvek\WordPress\Modules\Analytics\GoogleSearchConsoleIntegration $gsc */
 		$gsc = $this->container->get( 'google_search_console' );
 		$gsc->register();
 
 		$bing = $this->container->get( 'bing_webmaster' );
 		$bing->register();
 
-		/** @var \AmEveryWhere\Modules\Analytics\KeywordRankTracker $rankTracker */
+		/** @var \Holvek\WordPress\Modules\Analytics\KeywordRankTracker $rankTracker */
 		$rankTracker = $this->container->get( 'keyword_rank_tracker' );
 		$rankTracker->register();
 
 		// Broken Link Checker (BL-018)
-		$brokenLinkChecker = new \AmEveryWhere\Modules\TechnicalSeo\BrokenLinkChecker();
+		$brokenLinkChecker = new \Holvek\WordPress\Modules\TechnicalSeo\BrokenLinkChecker();
 		$brokenLinkChecker->register();
 	}
 
@@ -534,33 +873,120 @@ class Plugin {
 
 	private static function activateSite(): void {
 		// 1. Run schema installation
-		$installer = new \AmEveryWhere\Core\Database\Installer();
+		$installer = new \Holvek\WordPress\Core\Database\Installer();
 		$installer->install();
 
 		// 2. Generate persistent encryption salt for KeyVault
-		\AmEveryWhere\Core\Security\KeyVault::ensureSaltExists();
+		\Holvek\WordPress\Core\Security\KeyVault::ensureSaltExists();
 
 		// 3. Cache the 404 table existence flag
-		\AmEveryWhere\Modules\TechnicalSeo\ErrorMonitor::markTableExists();
+		\Holvek\WordPress\Modules\TechnicalSeo\ErrorMonitor::markTableExists();
 
 		// 4. Create AI usage metering table
-		\AmEveryWhere\Modules\Ai\UsageMeteringManager::createTable();
+		\Holvek\WordPress\Modules\Ai\UsageMeteringManager::createTable();
 
 		// 5. Create SEO Audit History log table
-		\AmEveryWhere\Modules\Admin\SeoAuditHistoryLog::createTable();
+		\Holvek\WordPress\Modules\Admin\SeoAuditHistoryLog::createTable();
 
 		// 6. Create keyword rank tracker table
-		\AmEveryWhere\Modules\Analytics\KeywordRankTracker::createTable();
+		\Holvek\WordPress\Modules\Analytics\KeywordRankTracker::createTable();
 
 		// 7. Create broken link checker results table
-		\AmEveryWhere\Modules\TechnicalSeo\BrokenLinkChecker::createTable();
+		\Holvek\WordPress\Modules\TechnicalSeo\BrokenLinkChecker::createTable();
 
 		// 8. Register custom SEO capabilities
-		\AmEveryWhere\Modules\Admin\CustomSeoUserRoles::addCapabilities();
+		\Holvek\WordPress\Modules\Admin\CustomSeoUserRoles::addCapabilities();
 
 		// 9. Register and persist sitemap routes during activation. The normal
 		// boot listeners are not registered while an activation hook runs.
 		self::sitemapRoutes()->flushRules();
+
+		// 10. Recurring work is scheduled here. Boot must not call wp_next_scheduled().
+		self::scheduleBackgroundEvents();
+
+		// 11. Secrets, logs, and dashboard caches stay out of the alloptions set.
+		self::enforceOptionAutoload();
+	}
+
+	/**
+	 * Schedule recurring events once. Each worker schedules again if its event is missing.
+	 */
+	private static function scheduleBackgroundEvents(): void {
+		\Holvek\WordPress\Modules\TechnicalSeo\ErrorMonitor::schedule();
+		\Holvek\WordPress\Modules\Analytics\KeywordRankTracker::schedule();
+		\Holvek\WordPress\Modules\Compliance\CcpaPrivacyTools::schedule();
+		\Holvek\WordPress\Modules\Ai\UsageMeteringManager::schedule();
+		\Holvek\WordPress\Modules\ContentAssistant\StaleCornerStoneDetector::schedule();
+		\Holvek\WordPress\Modules\Admin\SeoAuditHistoryLog::schedule();
+		\Holvek\WordPress\Modules\ContentAssistant\AuditScheduler::schedule();
+	}
+
+	/**
+	 * Front-end flags stay autoloaded. Secrets, logs, and dashboard caches do not.
+	 */
+	private static function enforceOptionAutoload(): void {
+		global $wpdb;
+
+		$frontEnd = array(
+			'holvek_redirect_counts',
+			'holvek_robots_txt_replaces_generated',
+			'holvek_block_ai_bots',
+			'holvek_custom_ai_bots',
+			'holvek_ai_training_optout',
+			'holvek_cookie_banner',
+			'holvek_filename_enforce',
+			'holvek_honour_gpc',
+			'holvek_htaccess_web_backups_retired',
+			'holvek_auto_index',
+		);
+		$quiet    = array(
+			'holvek_encryption_salt',
+			'holvek_license_key',
+			'holvek_api_key',
+			'holvek_cloud_revoked',
+			'holvek_cloud_verification',
+			'holvek_user_tier',
+			'holvek_google_indexing_key',
+			'holvek_openai_key',
+			'holvek_anthropic_key',
+			'holvek_ga4_credentials',
+			'holvek_indexnow_key',
+			'holvek_indexnow_log',
+			'holvek_indexnow_queue',
+			'holvek_indexnow_flush_pending',
+			'holvek_gsc_token',
+			'holvek_gsc_config',
+			'holvek_bing_api_key',
+			'holvek_social_apps',
+			'holvek_social_accounts',
+			'holvek_serpapi_key',
+			'holvek_robots_txt',
+			'holvek_last_audit_results',
+			'holvek_audit_history',
+			'holvek_audit_results',
+			'holvek_audit_progress',
+			'holvek_404_logs',
+			'holvek_stale_cornerstone_ids',
+			'holvek_htaccess_backups',
+		);
+
+		foreach ( $quiet as $name ) {
+			$wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$wpdb->options} SET autoload = 'no' WHERE option_name = %s AND autoload NOT IN ('no', 'off', 'auto-off')",
+					$name
+				)
+			);
+		}
+
+		foreach ( $frontEnd as $name ) {
+			$wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$wpdb->options} SET autoload = 'yes' WHERE option_name = %s AND autoload NOT IN ('yes', 'on', 'auto-on', 'auto')",
+					$name
+				)
+			);
+		}
 	}
 
 	public static function deactivate( bool $networkWide = false ): void {
@@ -584,8 +1010,8 @@ class Plugin {
 
 	private static function deactivateSite(): void {
 		// Stop all background work before the plugin is disabled.
-		\AmEveryWhere\Modules\TechnicalSeo\ErrorMonitor::deactivate();
-		\AmEveryWhere\Core\Queue\QueueManager::deactivate();
+		\Holvek\WordPress\Modules\TechnicalSeo\ErrorMonitor::deactivate();
+		\Holvek\WordPress\Core\Queue\QueueManager::deactivate();
 		self::clearScheduledWork();
 
 		// Remove plugin-owned rewrite rules before flushing so disabled plugins
@@ -603,27 +1029,28 @@ class Plugin {
 
 	private static function clearScheduledWork(): void {
 		$hooks = array(
-			'ameverywhere_process_job',
-			'ameverywhere_flush_404_buffer',
-			'ameverywhere_scan_orphaned',
-			'ameverywhere_stale_cornerstone_check',
-			'ameverywhere_cornerstone_staleness_check',
-			'ameverywhere_weekly_audit',
-			'ameverywhere_monthly_audit',
-			'ameverywhere_scheduled_audit',
-			'ameverywhere_rank_check',
-			'ameverywhere_404_cleanup',
-			'ameverywhere_apply_retention',
-			'ameverywhere_run_technical_audit',
-			'ameverywhere_blc_scan_batch',
-			'ameverywhere_weekly_usage_email',
+			'holvek_process_job',
+			'holvek_flush_404_buffer',
+			'holvek_scan_orphaned',
+			'holvek_stale_cornerstone_check',
+			'holvek_cornerstone_staleness_check',
+			'holvek_weekly_audit',
+			'holvek_monthly_audit',
+			'holvek_scheduled_audit',
+			'holvek_rank_check',
+			'holvek_prune_audit_log',
+			'holvek_404_cleanup',
+			'holvek_apply_retention',
+			'holvek_run_technical_audit',
+			'holvek_blc_scan_batch',
+			'holvek_weekly_usage_email',
 		);
 
 		foreach ( $hooks as $hook ) {
 			wp_clear_scheduled_hook( $hook );
 			if ( function_exists( 'as_unschedule_all_actions' ) ) {
 				as_unschedule_all_actions( $hook );
-				as_unschedule_all_actions( $hook, array(), 'ameverywhere' );
+				as_unschedule_all_actions( $hook, array(), 'holvek' );
 			}
 		}
 	}

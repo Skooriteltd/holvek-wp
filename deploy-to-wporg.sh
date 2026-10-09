@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# AmEveryWhere — WordPress.org SVN Deploy Script
+# Holvek — WordPress.org SVN Deploy Script
 # =============================================================================
 # Usage:
 #   chmod +x deploy-to-wporg.sh
@@ -14,14 +14,14 @@
 
 set -e
 
-PLUGIN_SLUG="ameverywhere"
-WP_ORG_USER="${WP_ORG_USER:-ameverywhereteam}"
+PLUGIN_SLUG="holvek"
+WP_ORG_USER="${WP_ORG_USER:-holvekteam}"
 VERSION=$(grep "Stable tag:" readme.txt | sed 's/Stable tag: //' | tr -d '[:space:]')
 SVN_URL="https://plugins.svn.wordpress.org/${PLUGIN_SLUG}"
 BUILD_DIR="$(pwd)/.svn-build"
 PLUGIN_DIR="$(pwd)"
 
-echo "==> Deploying AmEveryWhere v${VERSION} to WordPress.org"
+echo "==> Deploying Holvek v${VERSION} to WordPress.org"
 echo "    SVN URL : ${SVN_URL}"
 echo "    WP User : ${WP_ORG_USER}"
 echo ""
@@ -127,5 +127,5 @@ cd "${PLUGIN_DIR}"
 composer install --quiet
 
 echo ""
-echo "✅ AmEveryWhere v${VERSION} deployed to WordPress.org"
+echo "✅ Holvek v${VERSION} deployed to WordPress.org"
 echo "   View at: https://wordpress.org/plugins/${PLUGIN_SLUG}/"

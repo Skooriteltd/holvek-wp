@@ -2,6 +2,18 @@
 
 All notable changes of the PHPUnit 10.5 release series are documented in this file using the [Keep a CHANGELOG](https://keepachangelog.com/) principles.
 
+## [10.5.65] - 2026-09-23
+
+### Changed
+
+* Do not pass empty output of a test that was run in a separate process to `unserialize()` (which emits a warning for an empty string as of PHP 8.6)
+
+## [10.5.64] - 2026-07-06
+
+### Changed
+
+* [#6797](https://github.com/sebastianbergmann/phpunit/issues/6797): Adapt code generated for test double of interface with constructor for PHP 8.6
+
 ## [10.5.63] - 2026-01-27
 
 ### Fixed
@@ -527,6 +539,8 @@ All notable changes of the PHPUnit 10.5 release series are documented in this fi
 
 * [#5563](https://github.com/sebastianbergmann/phpunit/issues/5563): `createMockForIntersectionOfInterfaces()` does not automatically register mock object for expectation verification
 
+[10.5.65]: https://github.com/sebastianbergmann/phpunit/compare/10.5.64...10.5.65
+[10.5.64]: https://github.com/sebastianbergmann/phpunit/compare/10.5.63...10.5.64
 [10.5.63]: https://github.com/sebastianbergmann/phpunit/compare/10.5.62...10.5.63
 [10.5.62]: https://github.com/sebastianbergmann/phpunit/compare/10.5.61...10.5.62
 [10.5.61]: https://github.com/sebastianbergmann/phpunit/compare/10.5.60...10.5.61

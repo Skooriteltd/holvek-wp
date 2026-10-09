@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Onboarding;
+namespace Holvek\WordPress\Modules\Onboarding;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -17,18 +17,16 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class SetupWizard {
 
-	private const COMPLETED_OPTION = 'ameverywhere_setup_complete';
+	private const COMPLETED_OPTION = 'holvek_setup_complete';
+
+	private const DISMISSED_META = 'holvek_setup_notice_dismissed';
 
 	/**
 	 * Register hooks.
 	 */
 	public function register(): void {
-		// Show welcome notice if setup hasn't been completed
-		if ( ! get_option( self::COMPLETED_OPTION ) ) {
-			add_action( 'admin_notices', array( $this, 'showWelcomeNotice' ) );
-		}
-
-		// Register REST routes for the wizard
+		add_action( 'admin_notices', array( $this, 'showWelcomeNotice' ) );
+		add_action( 'wp_ajax_holvek_dismiss_setup_notice', array( $this, 'dismissWelcomeNotice' ) );
 		add_action( 'rest_api_init', array( $this, 'registerRoutes' ) );
 	}
 
@@ -36,26 +34,68 @@ class SetupWizard {
 	 * Show a dismissible welcome notice that links to the setup wizard.
 	 */
 	public function showWelcomeNotice(): void {
-		$screen = get_current_screen();
-
-		// Don't show on the AmEveryWhere page itself
-		if ( $screen && $screen->id === 'toplevel_page_ameverywhere' ) {
+		if ( get_option( self::COMPLETED_OPTION ) || get_user_meta( get_current_user_id(), self::DISMISSED_META, true ) ) {
+			return;
+		}
+		if ( ! current_user_can( 'manage_seo' ) && ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		if ( ! $this->isHolvekScreen() ) {
 			return;
 		}
 
-		$setupUrl = admin_url( 'admin.php?page=ameverywhere#setup' );
+		$setupUrl = admin_url( 'admin.php?page=holvek#setup' );
+		$nonce    = wp_create_nonce( 'holvek_dismiss_setup_notice' );
 
-		echo '<div class="notice notice-info is-dismissible" style="border-left-color: #3b82f6; padding: 16px 20px;">';
-		echo '<div style="display:flex; align-items:center; gap:12px;">';
-		echo '<span style="font-size:24px;">🚀</span>';
+		echo '<div class="notice notice-info is-dismissible holvek-setup-notice" style="border-left-color: #3b82f6; padding: 16px 20px;" data-nonce="' . esc_attr( $nonce ) . '">';
 		echo '<div>';
-		echo '<p style="margin:0; font-size:15px; font-weight:600; color:#0f172a;">Welcome to AmEveryWhere!</p>';
-		echo '<p style="margin:4px 0 0; color:#475569;">Your SEO is already working with smart defaults. ';
-		echo '<a href="' . esc_url( $setupUrl ) . '" style="color:#3b82f6; font-weight:500;">Complete the 30-second setup</a>';
-		echo ' to customize site type and import existing SEO data.</p>';
+		echo '<p style="margin:0; font-size:15px; font-weight:600; color:#0f172a;">' . esc_html__( 'Welcome to Holvek!', 'holvek' ) . '</p>';
+		echo '<p style="margin:4px 0 0; color:#475569;">';
+		printf(
+			wp_kses(
+				/* translators: %s: setup wizard URL */
+				__( 'Your SEO is already working with smart defaults. <a href="%s" style="color:#3b82f6; font-weight:500;">Complete the 30-second setup</a> to customize site type and import existing SEO data.', 'holvek' ),
+				array(
+					'a' => array(
+						'href'  => true,
+						'style' => true,
+					),
+				)
+			),
+			esc_url( $setupUrl )
+		);
+		echo '</p>';
 		echo '</div>';
 		echo '</div>';
-		echo '</div>';
+		echo '<script>';
+		echo 'document.addEventListener("DOMContentLoaded",function(){var el=document.querySelector(".holvek-setup-notice");if(!el){return;}el.addEventListener("click",function(e){if(!e.target.classList.contains("notice-dismiss")){return;}var body=new FormData();body.append("action","holvek_dismiss_setup_notice");body.append("_ajax_nonce",el.dataset.nonce);fetch(window.ajaxurl,{method:"POST",body:body});});});';
+		echo '</script>';
+	}
+
+	/**
+	 * Keep the welcome notice dismissed for this user.
+	 */
+	public function dismissWelcomeNotice(): void {
+		check_ajax_referer( 'holvek_dismiss_setup_notice' );
+		if ( ! current_user_can( 'manage_seo' ) && ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error(
+				array( 'message' => __( 'Sorry, you are not allowed to do that.', 'holvek' ) ),
+				403
+			);
+		}
+		update_user_meta( get_current_user_id(), self::DISMISSED_META, '1' );
+		wp_send_json_success();
+	}
+
+	/**
+	 * Admin notices stay on Holvek screens.
+	 */
+	private function isHolvekScreen(): bool {
+		if ( ! function_exists( 'get_current_screen' ) ) {
+			return false;
+		}
+		$screen = get_current_screen();
+		return is_object( $screen ) && isset( $screen->id ) && str_contains( (string) $screen->id, 'holvek' );
 	}
 
 	/**
@@ -63,7 +103,7 @@ class SetupWizard {
 	 */
 	public function registerRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/setup/auto-detect',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -74,7 +114,7 @@ class SetupWizard {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/setup/complete',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -97,12 +137,12 @@ class SetupWizard {
 		$socialProfiles = $this->detectSocialProfiles();
 
 		// Detect if other SEO plugins have data to import
-		$migrationManager = new \AmEveryWhere\Modules\Migration\MigrationManager();
+		$migrationManager = new \Holvek\WordPress\Modules\Migration\MigrationManager();
 		$detectedPlugins  = $migrationManager->detectPlugins();
 
 		// Check what's already configured
-		$hasGoogleKey = ! empty( get_option( 'ameverywhere_google_indexing_key', '' ) );
-		$hasBingKey   = ! empty( get_option( 'ameverywhere_indexnow_key', '' ) );
+		$hasGoogleKey = ! empty( get_option( 'holvek_google_indexing_key', '' ) );
+		$hasBingKey   = ! empty( get_option( 'holvek_indexnow_key', '' ) );
 
 		return rest_ensure_response(
 			array(
@@ -122,17 +162,31 @@ class SetupWizard {
 	 */
 	public function completeSetup( \WP_REST_Request $request ): \WP_REST_Response {
 		$params = $request->get_json_params();
+		$params = is_array( $params ) ? $params : array();
+
+		update_user_meta( get_current_user_id(), self::DISMISSED_META, '1' );
+
+		if ( ! empty( $params['skip'] ) ) {
+			update_option( self::COMPLETED_OPTION, true );
+			return rest_ensure_response(
+				array(
+					'success' => true,
+					'skipped' => true,
+					'message' => __( 'Setup skipped. Holvek keeps the current defaults.', 'holvek' ),
+				)
+			);
+		}
 
 		// Save site type (affects schema output)
 		if ( ! empty( $params['site_type'] ) ) {
-			update_option( 'ameverywhere_site_type', sanitize_text_field( $params['site_type'] ) );
+			update_option( 'holvek_site_type', sanitize_text_field( $params['site_type'] ) );
 		}
 
 		// Save social profiles
 		$socialFields = array( 'facebook', 'twitter', 'instagram', 'linkedin', 'youtube' );
 		foreach ( $socialFields as $field ) {
 			if ( isset( $params['social'][ $field ] ) ) {
-				update_option( 'ameverywhere_social_' . $field, esc_url_raw( $params['social'][ $field ] ) );
+				update_option( 'holvek_social_' . $field, esc_url_raw( $params['social'][ $field ] ) );
 			}
 		}
 
@@ -145,7 +199,7 @@ class SetupWizard {
 		return rest_ensure_response(
 			array(
 				'success' => true,
-				'message' => 'Setup complete! AmEveryWhere is fully configured.',
+				'message' => __( 'Setup complete. Holvek is using the choices you saved.', 'holvek' ),
 			)
 		);
 	}
@@ -207,9 +261,9 @@ class SetupWizard {
 			$profiles['twitter']  = $profiles['twitter'] ?: ( $rmOptions['twitter_author_names'] ?? '' );
 		}
 
-		// Check already-saved AmEveryWhere values
+		// Check already-saved Holvek values
 		foreach ( $profiles as $key => &$val ) {
-			$existing = get_option( 'ameverywhere_social_' . $key, '' );
+			$existing = get_option( 'holvek_social_' . $key, '' );
 			if ( ! empty( $existing ) ) {
 				$val = $existing;
 			}

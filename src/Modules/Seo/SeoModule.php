@@ -1,12 +1,12 @@
 <?php
 
-namespace AmEveryWhere\Modules\Seo;
+namespace Holvek\WordPress\Modules\Seo;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use AmEveryWhere\Core\Event\EventManager;
+use Holvek\WordPress\Core\Event\EventManager;
 
 class SeoModule {
 

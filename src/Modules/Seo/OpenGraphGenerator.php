@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Seo;
+namespace Holvek\WordPress\Modules\Seo;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -13,7 +13,7 @@ class OpenGraphGenerator {
 			return;
 		}
 
-		echo "<!-- AmEveryWhere Social Meta Tags -->\n";
+		echo "<!-- Holvek Social Meta Tags -->\n";
 
 		$title       = $this->getContextTitle();
 		$description = $this->getContextDescription();
@@ -49,7 +49,7 @@ class OpenGraphGenerator {
 			printf( '<meta name="twitter:image" content="%s" />' . "\n", esc_url( $image['url'] ) );
 		}
 
-		echo "<!-- /AmEveryWhere Social Meta Tags -->\n\n";
+		echo "<!-- /Holvek Social Meta Tags -->\n\n";
 	}
 
 	// ── Context helpers ──────────────────────────────────────────────────────
@@ -71,7 +71,7 @@ class OpenGraphGenerator {
 
 	private function getContextTitle(): string {
 		if ( is_singular() ) {
-			$custom = get_post_meta( get_the_ID(), '_ameverywhere_og_title', true );
+			$custom = get_post_meta( get_the_ID(), '_holvek_og_title', true );
 			return ! empty( $custom ) ? $custom : get_the_title();
 		}
 
@@ -107,7 +107,7 @@ class OpenGraphGenerator {
 
 	private function getContextDescription(): string {
 		if ( is_singular() ) {
-			$custom = get_post_meta( get_the_ID(), '_ameverywhere_og_description', true );
+			$custom = get_post_meta( get_the_ID(), '_holvek_og_description', true );
 			if ( ! empty( $custom ) ) {
 				return $custom;
 			}
@@ -123,7 +123,7 @@ class OpenGraphGenerator {
 
 		if ( is_category() || is_tag() || is_tax() ) {
 			$term     = get_queried_object();
-			$termDesc = ( $term instanceof \WP_Term ) ? wp_strip_all_tags( term_description( $term->term_id, $term->taxonomy ) ) : '';
+			$termDesc = ( $term instanceof \WP_Term ) ? wp_strip_all_tags( term_description( $term ) ) : '';
 			return ! empty( $termDesc ) ? wp_trim_words( $termDesc, 25 ) : get_bloginfo( 'description' );
 		}
 
@@ -148,7 +148,7 @@ class OpenGraphGenerator {
 		// Singular: check custom OG image meta, then featured image
 		if ( is_singular() ) {
 			$postId    = get_the_ID();
-			$customUrl = get_post_meta( $postId, '_ameverywhere_og_image', true );
+			$customUrl = get_post_meta( $postId, '_holvek_og_image', true );
 			if ( ! empty( $customUrl ) ) {
 				return $this->resolveDimensions( $customUrl );
 			}
@@ -159,12 +159,12 @@ class OpenGraphGenerator {
 		}
 
 		// Site default share image
-		$defaultId = (int) get_option( 'ameverywhere_default_share_image_id', 0 );
+		$defaultId = (int) get_option( 'holvek_default_share_image_id', 0 );
 		if ( $defaultId > 0 ) {
 			return $this->resolveAttachmentImage( $defaultId );
 		}
 
-		$defaultUrl = (string) get_option( 'ameverywhere_default_share_image', '' );
+		$defaultUrl = (string) get_option( 'holvek_default_share_image', '' );
 		if ( ! empty( $defaultUrl ) ) {
 			return $this->resolveDimensions( $defaultUrl );
 		}

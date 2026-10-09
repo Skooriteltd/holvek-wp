@@ -1,7 +1,7 @@
 # Table of contents
 
 * [Introduction](README.md)
-* [About AmEveryWhere](about.md)
+* [About Holvek](about.md)
 * [Features](features.md)
 * [Product Roadmap](roadmap.md)
 

@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Compliance;
+namespace Holvek\WordPress\Modules\Compliance;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -13,12 +13,12 @@ if ( ! defined( 'ABSPATH' ) ) {
  * This module records a visitor's notice choice. It does not discover, block,
  * categorize, or manage third-party scripts and is therefore not presented as
  * a GDPR/CCPA consent-management solution.
- * Stores consent in a first-party cookie (ameverywhere_consent).
+ * Stores consent in a first-party cookie (holvek_consent).
  */
 class CookieBannerModule {
 
-	private const OPTION_KEY     = 'ameverywhere_cookie_banner';
-	private const CONSENT_COOKIE = 'ameverywhere_consent';
+	private const OPTION_KEY     = 'holvek_cookie_banner';
+	private const CONSENT_COOKIE = 'holvek_consent';
 
 	public function boot(): void {
 		add_action( 'wp_footer', array( $this, 'renderBanner' ), 100 );
@@ -32,26 +32,26 @@ class CookieBannerModule {
 			return;
 		}
 
-		$pluginUrl = AMEVERYWHERE_PLUGIN_URL;
+		$pluginUrl = HOLVEK_PLUGIN_URL;
 
 		wp_enqueue_style(
-			'ameverywhere-cookie-banner',
+			'holvek-cookie-banner',
 			$pluginUrl . 'build/cookie-banner.css',
 			array(),
-			AMEVERYWHERE_VERSION ?? '1.0.0'
+			HOLVEK_VERSION ?? '1.0.0'
 		);
 
 		wp_enqueue_script(
-			'ameverywhere-cookie-banner',
+			'holvek-cookie-banner',
 			$pluginUrl . 'build/cookie-banner.js',
 			array(),
-			AMEVERYWHERE_VERSION ?? '1.0.0',
+			HOLVEK_VERSION ?? '1.0.0',
 			true
 		);
 
 		wp_localize_script(
-			'ameverywhere-cookie-banner',
-			'amEveryWhereCookieConfig',
+			'holvek-cookie-banner',
+			'holvekCookieConfig',
 			array(
 				'cookieName' => self::CONSENT_COOKIE,
 				'cookieDays' => 365,
@@ -65,16 +65,16 @@ class CookieBannerModule {
 			return;
 		}
 		?>
-		<div id="ameverywhere-cookie-banner" class="aew-cookie-banner" role="dialog" aria-live="polite" aria-label="Cookie consent" style="display:none;">
-			<div class="aew-cookie-banner__inner">
-				<p class="aew-cookie-banner__text"><?php echo wp_kses_post( $config['message'] ); ?>
+		<div id="holvek-cookie-banner" class="holvek-cookie-banner" role="dialog" aria-live="polite" aria-label="<?php echo esc_attr__( 'Cookie consent', 'holvek' ); ?>" style="display:none;">
+			<div class="holvek-cookie-banner__inner">
+				<p class="holvek-cookie-banner__text"><?php echo wp_kses_post( $config['message'] ); ?>
 					<?php if ( ! empty( $config['policy_url'] ) ) : ?>
-						<a href="<?php echo esc_url( $config['policy_url'] ); ?>" target="_blank" rel="noopener">Privacy Policy</a>.
+						<a href="<?php echo esc_url( $config['policy_url'] ); ?>" target="_blank" rel="noopener"><?php echo esc_html__( 'Privacy Policy', 'holvek' ); ?></a>.
 					<?php endif; ?>
 				</p>
-				<div class="aew-cookie-banner__actions">
-					<button id="aew-cookie-accept" class="aew-cookie-btn aew-cookie-btn--accept"><?php echo esc_html( $config['accept_label'] ); ?></button>
-					<button id="aew-cookie-decline" class="aew-cookie-btn aew-cookie-btn--decline"><?php echo esc_html( $config['decline_label'] ); ?></button>
+				<div class="holvek-cookie-banner__actions">
+					<button id="holvek-cookie-accept" class="holvek-cookie-btn holvek-cookie-btn--accept"><?php echo esc_html( $config['accept_label'] ); ?></button>
+					<button id="holvek-cookie-decline" class="holvek-cookie-btn holvek-cookie-btn--decline"><?php echo esc_html( $config['decline_label'] ); ?></button>
 				</div>
 			</div>
 		</div>
@@ -85,7 +85,7 @@ class CookieBannerModule {
 
 	public function registerRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/settings/cookie-banner',
 			array(
 				array(
@@ -115,7 +115,7 @@ class CookieBannerModule {
 			'decline_label' => sanitize_text_field( $params['decline_label'] ?? 'Decline' ),
 			'policy_url'    => esc_url_raw( $params['policy_url'] ?? '' ),
 		);
-		update_option( self::OPTION_KEY, $config );
+		update_option( self::OPTION_KEY, $config, true );
 		return rest_ensure_response(
 			array(
 				'success' => true,

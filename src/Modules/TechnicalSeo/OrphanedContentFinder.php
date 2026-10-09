@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\TechnicalSeo;
+namespace Holvek\WordPress\Modules\TechnicalSeo;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -17,21 +17,22 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class OrphanedContentFinder {
 
-	private const INBOUND_META_KEY = '_ameverywhere_inbound_links';
-	private const LAST_RUN_OPTION  = 'ameverywhere_orphan_scan_last_run';
-	private const CRON_HOOK        = 'ameverywhere_scan_orphaned';
-	private const CHUNK_SIZE       = 200;
+	private const INBOUND_META_KEY = '_holvek_inbound_links';
+	private const LAST_RUN_OPTION  = 'holvek_orphan_scan_last_run';
+	private const PENDING_OPTION   = 'holvek_orphan_scan_pending';
+	private const CRON_HOOK        = 'holvek_scan_orphaned';
+	private const POST_BATCH       = 20;
 
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'registerRoutes' ) );
-		add_action( self::CRON_HOOK, array( $this, 'scanOrphanedContent' ) );
+		add_action( self::CRON_HOOK, array( $this, 'enqueueFromCron' ) );
 	}
 
 	// ── REST routes ───────────────────────────────────────────────────────────
 
 	public function registerRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/orphaned-content',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -55,7 +56,7 @@ class OrphanedContentFinder {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/orphaned-content/refresh',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -119,78 +120,127 @@ class OrphanedContentFinder {
 	}
 
 	public function refreshScan( \WP_REST_Request $request ): \WP_REST_Response {
-		if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
-			wp_schedule_single_event( time() + 5, self::CRON_HOOK );
+		if ( $this->scanIsPending() ) {
+			return rest_ensure_response(
+				array(
+					'success' => true,
+					'queued'  => true,
+					'message' => __( 'An orphaned content scan is already queued.', 'holvek' ),
+				)
+			);
 		}
+
+		$this->enqueueScan( 0 );
 
 		return rest_ensure_response(
 			array(
 				'success' => true,
-				'message' => 'Orphaned content scan scheduled. Results will be available within a few minutes.',
+				'queued'  => true,
+				'message' => __( 'Orphaned content scan scheduled. Results will be available within a few minutes.', 'holvek' ),
 			)
 		);
 	}
 
-	// ── Cron callback ─────────────────────────────────────────────────────────
+	/**
+	 * An older cron event only enqueues the first page.
+	 */
+	public function enqueueFromCron(): void {
+		if ( $this->scanIsPending() ) {
+			return;
+		}
+
+		$this->enqueueScan( 0 );
+	}
 
 	/**
-	 * Scan all published content and record the inbound-link count per post.
-	 *
-	 * Strategy: for each target post, count how many OTHER published posts
-	 * contain a link to its permalink in their post_content. Uses a SQL LIKE
-	 * query per post to avoid loading all content into PHP memory.
+	 * Count inbound links for one page of posts. Another job is queued when
+	 * this page is full, so one cron run cannot walk the whole library.
 	 */
-	public function scanOrphanedContent(): void {
+	public function scanBatch( int $offset ): void {
+		$postTypes = array_values( get_post_types( array( 'public' => true ) ) );
+		if ( array() === $postTypes ) {
+			$this->completeScan();
+			return;
+		}
+
+		$query = new \WP_Query(
+			array(
+				'post_type'           => $postTypes,
+				'post_status'         => 'publish',
+				'posts_per_page'      => self::POST_BATCH,
+				'offset'              => max( 0, $offset ),
+				'orderby'             => 'ID',
+				'order'               => 'ASC',
+				'fields'              => 'ids',
+				'no_found_rows'       => true,
+				'ignore_sticky_posts' => true,
+				'suppress_filters'    => true,
+			)
+		);
+
+		$ids = is_array( $query->posts ) ? $query->posts : array();
+		foreach ( $ids as $postId ) {
+			$postId = (int) $postId;
+			if ( $postId < 1 ) {
+				continue;
+			}
+			$this->storeInboundCount( $postId );
+		}
+
+		$found = count( $ids );
+		if ( self::POST_BATCH === $found ) {
+			$this->enqueueScan( $offset + $found );
+			return;
+		}
+
+		$this->completeScan();
+	}
+
+	private function enqueueScan( int $offset ): void {
+		update_option( self::PENDING_OPTION, time(), false );
+		( new \Holvek\WordPress\Core\Queue\QueueManager() )->push(
+			OrphanScanJob::class,
+			array( 'offset' => max( 0, $offset ) )
+		);
+	}
+
+	private function scanIsPending(): bool {
+		$pending = get_option( self::PENDING_OPTION, 0 );
+		if ( ! is_numeric( $pending ) ) {
+			return false;
+		}
+
+		return ( time() - (int) $pending ) < 15 * MINUTE_IN_SECONDS;
+	}
+
+	private function completeScan(): void {
+		delete_option( self::PENDING_OPTION );
+		update_option( self::LAST_RUN_OPTION, current_time( 'mysql' ), false );
+	}
+
+	private function storeInboundCount( int $postId ): void {
 		global $wpdb;
 
-		$postTypes = array_values( get_post_types( array( 'public' => true ) ) );
+		$permalink = get_permalink( $postId );
+		if ( ! is_string( $permalink ) || '' === $permalink ) {
+			update_post_meta( $postId, self::INBOUND_META_KEY, 0 );
+			return;
+		}
 
-		// Fetch all published post IDs and permalinks in chunks
-		$offset = 0;
+		$relative = wp_make_link_relative( $permalink );
+		if ( ! is_string( $relative ) ) {
+			$relative = '';
+		}
 
-		do {
-            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-			$placeholders = implode( ',', array_fill( 0, count( $postTypes ), '%s' ) );
-            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$posts = $wpdb->get_results(
-				$wpdb->prepare(
-					"SELECT ID FROM $wpdb->posts
-                     WHERE post_status = 'publish'
-                       AND post_type IN ($placeholders)
-                     LIMIT %d OFFSET %d",
-					...array_merge( $postTypes, array( self::CHUNK_SIZE, $offset ) )
-				)
-			);
+		$count = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_status = 'publish' AND ID != %d AND (post_content LIKE %s OR post_content LIKE %s)",
+				$postId,
+				'%' . $wpdb->esc_like( $permalink ) . '%',
+				'%' . $wpdb->esc_like( $relative ) . '%'
+			)
+		);
 
-			if ( empty( $posts ) ) {
-				break;
-			}
-
-			foreach ( $posts as $post ) {
-				$permalink = get_permalink( $post->ID );
-				$relPath   = wp_make_link_relative( $permalink );
-
-				// Count other published posts whose content links to this post.
-				// We check both the absolute URL and the relative path.
-				$count = (int) $wpdb->get_var(
-					$wpdb->prepare(
-						"SELECT COUNT(*) FROM $wpdb->posts
-                         WHERE post_status = 'publish'
-                           AND ID != %d
-                           AND (post_content LIKE %s OR post_content LIKE %s)",
-						$post->ID,
-						'%' . $wpdb->esc_like( $permalink ) . '%',
-						'%' . $wpdb->esc_like( $relPath ) . '%'
-					)
-				);
-
-				update_post_meta( $post->ID, self::INBOUND_META_KEY, $count );
-			}
-
-			$offset += self::CHUNK_SIZE;
-
-		} while ( count( $posts ) === self::CHUNK_SIZE );
-
-		update_option( self::LAST_RUN_OPTION, current_time( 'mysql' ) );
+		update_post_meta( $postId, self::INBOUND_META_KEY, $count );
 	}
 }

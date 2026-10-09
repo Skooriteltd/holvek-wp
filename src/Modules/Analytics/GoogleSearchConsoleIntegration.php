@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Analytics;
+namespace Holvek\WordPress\Modules\Analytics;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -15,8 +15,8 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class GoogleSearchConsoleIntegration {
 
-	private const TOKEN_OPTION  = 'ameverywhere_gsc_token';
-	private const CONFIG_OPTION = 'ameverywhere_gsc_config';
+	private const TOKEN_OPTION  = 'holvek_gsc_token';
+	private const CONFIG_OPTION = 'holvek_gsc_config';
 	private const CACHE_TTL     = 6 * HOUR_IN_SECONDS;
 
 	public function register(): void {
@@ -28,7 +28,7 @@ class GoogleSearchConsoleIntegration {
 		$reportCap = fn() => current_user_can( 'view_seo_reports' ) || current_user_can( 'manage_options' );
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/gsc/auth-url',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -38,7 +38,7 @@ class GoogleSearchConsoleIntegration {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/gsc/callback',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -48,7 +48,7 @@ class GoogleSearchConsoleIntegration {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/gsc/disconnect',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -58,7 +58,7 @@ class GoogleSearchConsoleIntegration {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/gsc/status',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -68,7 +68,7 @@ class GoogleSearchConsoleIntegration {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/gsc/performance',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -92,7 +92,7 @@ class GoogleSearchConsoleIntegration {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/gsc/declining-keywords',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -106,11 +106,11 @@ class GoogleSearchConsoleIntegration {
 		$config = $this->getConfig();
 
 		if ( empty( $config['client_id'] ) ) {
-			return new \WP_Error( 'no_config', 'Set your Google OAuth client_id and client_secret in AmEveryWhere → Settings → Integrations.', array( 'status' => 400 ) );
+			return new \WP_Error( 'no_config', __( 'Set your Google OAuth client_id and client_secret in Holvek → Settings → Integrations.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
-		$state       = wp_create_nonce( 'ameverywhere_gsc_oauth' );
-		$redirectUri = rest_url( 'ameverywhere/v1/gsc/callback' );
+		$state       = wp_create_nonce( 'holvek_gsc_oauth' );
+		$redirectUri = rest_url( 'holvek/v1/gsc/callback' );
 
 		$params = http_build_query(
 			array(
@@ -135,12 +135,12 @@ class GoogleSearchConsoleIntegration {
 		$code  = sanitize_text_field( $request->get_param( 'code' ) ?? '' );
 		$state = sanitize_text_field( $request->get_param( 'state' ) ?? '' );
 
-		if ( ! wp_verify_nonce( $state, 'ameverywhere_gsc_oauth' ) ) {
-			return new \WP_Error( 'invalid_state', 'OAuth state mismatch. Possible CSRF.', array( 'status' => 403 ) );
+		if ( ! wp_verify_nonce( $state, 'holvek_gsc_oauth' ) ) {
+			return new \WP_Error( 'invalid_state', __( 'OAuth state mismatch. Possible CSRF.', 'holvek' ), array( 'status' => 403 ) );
 		}
 
 		if ( empty( $code ) ) {
-			return new \WP_Error( 'no_code', 'No authorization code received.', array( 'status' => 400 ) );
+			return new \WP_Error( 'no_code', __( 'No authorization code received.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		$config = $this->getConfig();
@@ -150,12 +150,12 @@ class GoogleSearchConsoleIntegration {
 			return $token;
 		}
 
-		update_option( self::TOKEN_OPTION, $token );
+		update_option( self::TOKEN_OPTION, $token, false );
 
 		return rest_ensure_response(
 			array(
 				'success' => true,
-				'message' => 'Google Search Console connected successfully.',
+				'message' => __( 'Google Search Console connected successfully.', 'holvek' ),
 			)
 		);
 	}
@@ -192,8 +192,8 @@ class GoogleSearchConsoleIntegration {
 			return $token;
 		}
 
-		$endDate   = date( 'Y-m-d' );
-		$startDate = date( 'Y-m-d', strtotime( "-{$days} days" ) );
+		$endDate   = gmdate( 'Y-m-d' );
+		$startDate = gmdate( 'Y-m-d', strtotime( "-{$days} days" ) );
 
 		$body = array(
 			'startDate'  => $startDate,
@@ -230,7 +230,7 @@ class GoogleSearchConsoleIntegration {
 			);
 		}
 
-		$siteUrl  = urlencode( home_url( '/' ) );
+		$siteUrl  = rawurlencode( home_url( '/' ) );
 		$response = wp_safe_remote_post(
 			"https://www.googleapis.com/webmasters/v3/sites/{$siteUrl}/searchAnalytics/query",
 			array(
@@ -249,7 +249,7 @@ class GoogleSearchConsoleIntegration {
 
 		$data = json_decode( wp_remote_retrieve_body( $response ), true );
 		if ( isset( $data['error'] ) ) {
-			return new \WP_Error( 'gsc_error', $data['error']['message'] ?? 'GSC error.', array( 'status' => 502 ) );
+			return new \WP_Error( 'gsc_error', $data['error']['message'] ?? __( 'GSC error.', 'holvek' ), array( 'status' => 502 ) );
 		}
 
 		$result = array(
@@ -267,11 +267,11 @@ class GoogleSearchConsoleIntegration {
 			return $token;
 		}
 
-		$siteUrl = urlencode( home_url( '/' ) );
-		$today   = date( 'Y-m-d' );
+		$siteUrl = rawurlencode( home_url( '/' ) );
+		$today   = gmdate( 'Y-m-d' );
 		$periods = array(
-			'recent' => array( date( 'Y-m-d', strtotime( '-28 days' ) ), $today ),
-			'prior'  => array( date( 'Y-m-d', strtotime( '-56 days' ) ), date( 'Y-m-d', strtotime( '-29 days' ) ) ),
+			'recent' => array( gmdate( 'Y-m-d', strtotime( '-28 days' ) ), $today ),
+			'prior'  => array( gmdate( 'Y-m-d', strtotime( '-56 days' ) ), gmdate( 'Y-m-d', strtotime( '-29 days' ) ) ),
 		);
 
 		$data = array();
@@ -327,7 +327,7 @@ class GoogleSearchConsoleIntegration {
 	private function getValidToken(): string|\WP_Error {
 		$token = get_option( self::TOKEN_OPTION );
 		if ( empty( $token['access_token'] ) ) {
-			return new \WP_Error( 'not_connected', 'Google Search Console not connected.', array( 'status' => 401 ) );
+			return new \WP_Error( 'not_connected', __( 'Google Search Console not connected.', 'holvek' ), array( 'status' => 401 ) );
 		}
 
 		// Refresh if expired
@@ -336,7 +336,7 @@ class GoogleSearchConsoleIntegration {
 				$refreshed = $this->refreshToken( $token['refresh_token'] );
 				if ( ! is_wp_error( $refreshed ) ) {
 					$token = $refreshed;
-					update_option( self::TOKEN_OPTION, $token );
+					update_option( self::TOKEN_OPTION, $token, false );
 				}
 			}
 		}
@@ -353,7 +353,7 @@ class GoogleSearchConsoleIntegration {
 					'code'          => $code,
 					'client_id'     => $config['client_id'],
 					'client_secret' => $config['client_secret'],
-					'redirect_uri'  => rest_url( 'ameverywhere/v1/gsc/callback' ),
+					'redirect_uri'  => rest_url( 'holvek/v1/gsc/callback' ),
 					'grant_type'    => 'authorization_code',
 				),
 			)
@@ -365,7 +365,7 @@ class GoogleSearchConsoleIntegration {
 
 		$data = json_decode( wp_remote_retrieve_body( $response ), true );
 		if ( isset( $data['error'] ) ) {
-			return new \WP_Error( 'oauth_error', $data['error_description'] ?? 'OAuth error.', array( 'status' => 400 ) );
+			return new \WP_Error( 'oauth_error', $data['error_description'] ?? __( 'OAuth error.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		return array(
@@ -396,7 +396,7 @@ class GoogleSearchConsoleIntegration {
 
 		$data = json_decode( wp_remote_retrieve_body( $response ), true );
 		if ( isset( $data['error'] ) ) {
-			return new \WP_Error( 'refresh_error', $data['error_description'] ?? 'Token refresh error.', array( 'status' => 401 ) );
+			return new \WP_Error( 'refresh_error', $data['error_description'] ?? __( 'Token refresh error.', 'holvek' ), array( 'status' => 401 ) );
 		}
 
 		$existing = get_option( self::TOKEN_OPTION, array() );

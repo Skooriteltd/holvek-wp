@@ -1,6 +1,6 @@
 # Production Readiness Backlog
 
-This document tracks the consolidated production readiness backlog for the AmEveryWhere WordPress plugin. 
+This document tracks the consolidated production readiness backlog for the Holvek WordPress plugin. 
 
 ## P0: Release Blockers
 *All P0 release blockers have been successfully implemented and verified.*

@@ -1,7 +1,7 @@
-# AmEveryWhere Master Tasklist & Progress Tracker
+# Holvek Master Tasklist & Progress Tracker
 
 > **Document Version:** 1.3
-> **Target Platform:** AmEveryWhere Full Suite (WordPress, Headless API, Laravel Package)  
+> **Target Platform:** Holvek Full Suite (WordPress, Headless API, Laravel Package)  
 > **Linked specification:** `specification.md`
 > **Last Updated:** 19 September 2026
 
@@ -56,7 +56,7 @@
 ## 🛠️ Phase 0: Core Architecture & Setup
 *Establish clean PSR-compliant OOP boundaries, DI container, event router, and database schema.*
   - Conforms to PSR-12 and WordPress standards.
-  - Autoload mapping established for namespace `AmEveryWhere\`.
+  - Autoload mapping established for namespace `Holvek\`.
   - Created dynamic event dispatcher managing core Actions and Filters dynamically.
   - Booted React Admin Panel with styled components.
   - Webpack bundles (`editor.js`, `index.js`) compiled safely.
@@ -113,18 +113,18 @@
   - *Status: Executed*
   - Support custom local server URLs with test connection ping test.
 - [x] **Task 1.25: Usage Metering and Limits** `[AI-INF-005, BILL-004]` *(Priority: P1)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Ai\UsageMeteringManager`)
+  - *Status: Fully Executed* (`Holvek\Modules\Ai\UsageMeteringManager`)
   - Tracks raw token usage and limits weekly counts based on admin restrictions.
 - [x] **Task 1.26: Subscription Upgrade Prompt Flows** `[BILL-003]` *(Priority: P1)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Admin\UpgradePromptManager`)
+  - *Status: Fully Executed* (`Holvek\Modules\Admin\UpgradePromptManager`)
   - In-dashboard alerts and guides linking users to premium upgrades.
 
 ### US Compliance Foundation
 - [x] **Task 1.27: CCPA Privacy Tools** `[COMP-001]` *(Priority: P1)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Compliance\CcpaPrivacyTools`)
+  - *Status: Fully Executed* (`Holvek\Modules\Compliance\CcpaPrivacyTools`)
   - Automated export/deletion tools for user search tracking metrics and privacy framework exporter/eraser.
 - [x] **Task 1.28: FTC AI-Disclosure Labels** `[COMP-002]` *(Priority: P1)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Compliance\AiDisclosureManager`)
+  - *Status: Fully Executed* (`Holvek\Modules\Compliance\AiDisclosureManager`)
   - Dynamic AI-generated content disclosures, schema markup integration, and automatic frontend label rendering.
 
 ---
@@ -134,48 +134,48 @@
 
 ### Advanced Content Intelligence
 - [x] **Task 2.1: LLM-Driven Real-time Writing Assistant** `[ACO-001]` *(Priority: P1)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\ContentAssistant\LlmWritingAssistant`)
+  - *Status: Fully Executed* (`Holvek\Modules\ContentAssistant\LlmWritingAssistant`)
   - Gated on-demand click triggers & debounced REST generation to prevent API/thread saturation.
 - [x] **Task 2.2: Competitive Content Gap Engine** `[ACO-002]` *(Priority: P1)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\ContentAssistant\ContentGapAnalyser`)
+  - *Status: Fully Executed* (`Holvek\Modules\ContentAssistant\ContentGapAnalyser`)
   - Compares content against target topics and identifies coverage gaps with one-click draft creation.
 - [x] **Task 2.3: Contextual Internal Link Recommendations** `[ACO-004]` *(Priority: P1)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\ContentAssistant\InternalLinkEngine`)
+  - *Status: Fully Executed* (`Holvek\Modules\ContentAssistant\InternalLinkEngine`)
   - Contextual link suggestions using indexed sentence vectors without heavy full-table scans.
 - [x] **Task 2.4: Search Intent Classifier** `[ACO-003]` *(Priority: P2)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\ContentAssistant\SearchIntentClassifier`)
+  - *Status: Fully Executed* (`Holvek\Modules\ContentAssistant\SearchIntentClassifier`)
   - Classifies informational, commercial, transactional, and navigational intent.
 - [x] **Task 2.5: SEO Metadata Version History Logs** `[ACO-005]` *(Priority: P2)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Admin\SeoAuditHistoryLog`)
+  - *Status: Fully Executed* (`Holvek\Modules\Admin\SeoAuditHistoryLog`)
   - Tamper-evident change logs tracking user, timestamp, post_id, old/new values with CSV export.
 - [x] **Task 2.6: Morphological Focus Keyword Recognition** `[ACO-006]` *(Priority: P2)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\ContentAssistant\MorphologicalKeywordMatcher`)
+  - *Status: Fully Executed* (`Holvek\Modules\ContentAssistant\MorphologicalKeywordMatcher`)
   - Stemming and pluralization support for keyword density checks.
 - [x] **Task 2.7: Inclusive Language Compliance scanner** `[ACO-007]` *(Priority: P2)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\ContentAssistant\InclusiveLanguageScanner`)
+  - *Status: Fully Executed* (`Holvek\Modules\ContentAssistant\InclusiveLanguageScanner`)
   - Scans content for non-inclusive terms and suggests modern, accessible alternatives.
 - [x] **Task 2.8: Word Complexity & Simplicity recommendations** `[ACO-008]` *(Priority: P2)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\ContentAssistant\WordComplexityScorer`)
+  - *Status: Fully Executed* (`Holvek\Modules\ContentAssistant\WordComplexityScorer`)
   - Flesch-Kincaid scoring and polysyllabic word simplification engine.
 
 ### Verticals: Local, E-Commerce, & Headless APIs
 - [x] **Task 2.19: WooCommerce Dynamic Schema mapper** `[EC-001]` *(Priority: P1)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Schema\WooCommerceProductSchema`)
+  - *Status: Fully Executed* (`Holvek\Modules\Schema\WooCommerceProductSchema`)
   - Dynamic variable product support, Offer schemas, price currency, and AggregateRating.
 - [x] **Task 2.20: Product Category & Taxonomies SEO settings** `[EC-002]` *(Priority: P1)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Schema\ProductTaxonomySeo`)
+  - *Status: Fully Executed* (`Holvek\Modules\Schema\ProductTaxonomySeo`)
   - Per-taxonomy SEO titles, meta descriptions, and schema overrides for WooCommerce categories.
 - [x] **Task 2.21: Headless WordPress REST API SEO metadata CRUD** `[HEAD-001]` *(Priority: P1)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Api\HeadlessSeoEndpoints`)
+  - *Status: Fully Executed* (`Holvek\Modules\Api\HeadlessSeoEndpoints`)
   - Full REST API endpoints returning JSON-LD graph, meta tags, and Open Graph objects for Jamstack frontends.
 - [x] **Task 2.22: Multi-Location Business Locations schema manager** `[LB-002]` *(Priority: P2)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Schema\MultiLocationSchema`)
+  - *Status: Fully Executed* (`Holvek\Modules\Schema\MultiLocationSchema`)
   - Support for multi-branch local business profiles with GeoCoordinates and opening hours.
 - [x] **Task 2.23: Dynamic Business NAP Shortcode helpers** `[LB-003]` *(Priority: P2)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Schema\NapShortcodes`)
-  - Shortcodes `[ameverywhere_nap]` rendering consistent Name, Address, Phone schema markup.
+  - *Status: Fully Executed* (`Holvek\Modules\Schema\NapShortcodes`)
+  - Shortcodes `[holvek_nap]` rendering consistent Name, Address, Phone schema markup.
 - [x] **Task 2.24: Google Business Profile optimization insights** `[LB-004]` *(Priority: P2)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Schema\GoogleBusinessProfileOptimization`)
+  - *Status: Fully Executed* (`Holvek\Modules\Schema\GoogleBusinessProfileOptimization`)
   - Profile completeness scoring and audit recommendations.
 - [ ] **Task 2.25: Easy Digital Downloads SEO schemas** `[EC-004]` *(Priority: P2)*
   - *Status: Pending* (Enterprise Add-on)
@@ -188,34 +188,34 @@
 
 ### Hardened Technical SEO Suite
 - [x] **Task 2.31: Broken Link & Image Scanner** `[TT-003]` *(Priority: P1)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\TechnicalSeo\BrokenLinkChecker`)
+  - *Status: Fully Executed* (`Holvek\Modules\TechnicalSeo\BrokenLinkChecker`)
   - Safe, rate-limited batch scanning with custom results table and off-peak cron processing.
 - [x] **Task 2.32: Inbound Orphaned Page Finder & linking builder** `[TT-004]` *(Priority: P1)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\TechnicalSeo\OrphanedPageFinder`)
+  - *Status: Fully Executed* (`Holvek\Modules\TechnicalSeo\OrphanedPageFinder`)
   - Discovers pages with 0 internal links and provides internal link recommendations.
 - [x] **Task 2.33: Stale Cornerstone Content Age Scanner** `[CS-001]` *(Priority: P2)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\ContentAssistant\StaleCornerStoneDetector`)
+  - *Status: Fully Executed* (`Holvek\Modules\ContentAssistant\StaleCornerStoneDetector`)
   - Monitors cornerstone content age with dismissible admin notices and email alerts.
 - [x] **Task 2.34: Guided Orphaned Content Remediation Workflow** `[CS-002]` *(Priority: P2)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\ContentAssistant\OrphanContentRemediationWorkflow`)
+  - *Status: Fully Executed* (`Holvek\Modules\ContentAssistant\OrphanContentRemediationWorkflow`)
   - One-click workflow to link or redirect orphaned pages.
 - [x] **Task 2.35: Recurring SEO Audits scheduler** `[CS-003]` *(Priority: P2)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\ContentAssistant\AuditScheduler`)
+  - *Status: Fully Executed* (`Holvek\Modules\ContentAssistant\AuditScheduler`)
   - Weekly automated health scans with issue/warning summaries.
 - [x] **Task 2.36: .htaccess Safe visual editor & backups** `[TT-005]` *(Priority: P2)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\TechnicalSeo\HtaccessEditor`)
+  - *Status: Fully Executed* (`Holvek\Modules\TechnicalSeo\HtaccessEditor`)
   - Timestamped backup rotations, syntax checks, and blocking of dangerous PHP directives.
 - [x] **Task 2.37: Taxonomy base permalinks remover** `[TT-006]` *(Priority: P2)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\TechnicalSeo\TaxonomyBaseRemover`)
+  - *Status: Fully Executed* (`Holvek\Modules\TechnicalSeo\TaxonomyBaseRemover`)
   - Strips `/category/` from permalinks with automatic 301 redirects.
 - [x] **Task 2.38: Parent post media attachment redirect rules** `[TT-007]` *(Priority: P2)*
   - *Status: Fully Executed*
   - Intercepts and redirects thin media attachments cleanly back to their parent pages.
 - [x] **Task 2.39: Live Frontend Overlay SEO Inspector** `[TT-008]` *(Priority: P2)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Admin\FrontendSeoInspector`)
+  - *Status: Fully Executed* (`Holvek\Modules\Admin\FrontendSeoInspector`)
   - Admin-only shadow DOM inspector showing live canonical, meta, and OpenGraph data.
 - [x] **Task 2.40: Live Schema Output health validator** `[TT-009]` *(Priority: P2)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Schema\SchemaOutputValidator`)
+  - *Status: Fully Executed* (`Holvek\Modules\Schema\SchemaOutputValidator`)
   - Live client-side schema graph inspector with direct Rich Results test link.
 
 ---
@@ -225,24 +225,24 @@
 - [x] **Task 3.2: Automated `llms.txt` config generator** `[AI-001]` *(Priority: P1)*
   - *Status: Executed*
 - [x] **Task 3.3: Chatbot Citation Tracker (Perplexity, ChatGPT, Gemini)** `[AI-002]` *(Priority: P1)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Ai\ChatbotCitationTracker`)
+  - *Status: Fully Executed* (`Holvek\Modules\Ai\ChatbotCitationTracker`)
   - Tracks incoming referral user agents and AI citation mentions across major LLMs.
 - [x] **Task 3.4: LLM Training Data Opt-Out Directives manager** `[AI-008]` *(Priority: P1)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\TechnicalSeo\RobotsTxtEditor`)
+  - *Status: Fully Executed* (`Holvek\Modules\TechnicalSeo\RobotsTxtEditor`)
   - NoAI directives, TDM-Reservation HTTP headers, and robots.txt crawler opt-out rules.
 - [x] **Task 3.5: Multi-Engine Keyword Rank Tracker** `[AR-002]` *(Priority: P1)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Analytics\KeywordRankTracker`)
+  - *Status: Fully Executed* (`Holvek\Modules\Analytics\KeywordRankTracker`)
   - Multi-engine SERP position logging with 180-day trend chart visualization.
 - [x] **Task 3.6: Multi-Point Technical Audit checker** `[AR-003]` *(Priority: P1)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Admin\TechnicalSeoAuditEngine`)
+  - *Status: Fully Executed* (`Holvek\Modules\Admin\TechnicalSeoAuditEngine`)
   - 30-point technical audit covering SSL, canonicals, robots, 404s, mobile friendliness.
 - [x] **Task 3.7: Granular Custom User Role SEO Manager permissions** `[UM-001]` *(Priority: P1)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Admin\CustomSeoUserRoles`)
-  - Custom capabilities (`manage_ameverywhere_seo`, `edit_ameverywhere_meta`) for agency handoff.
+  - *Status: Fully Executed* (`Holvek\Modules\Admin\CustomSeoUserRoles`)
+  - Custom capabilities (`manage_holvek_seo`, `edit_holvek_meta`) for agency handoff.
 - [ ] **Task 3.8: Native page builder editors SEO wrappers (Elementor, WPBakery)** `[IN-001]` *(Deferred after v1.0)*
   - Page-builder integration is intentionally out of scope for v1.0. It requires an approved compatibility matrix, dedicated UX, and end-to-end integration coverage before reintroduction.
 - [x] **Task 3.9: Multisite network configuration manager** `[IN-003]` *(Priority: P1)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Analytics\MultisiteNetworkSeo`)
+  - *Status: Fully Executed* (`Holvek\Modules\Analytics\MultisiteNetworkSeo`)
   - Network-wide settings inheritance and cross-site audit synchronization.
   - Proactive scans detect legacy data and migrate with one-click REST execution.
 - [x] **Task 3.11: Bulk Meta Title/Description Editor table** `[PM-005]` *(Priority: P1)*
@@ -263,19 +263,19 @@
 - [ ] **Task 3.18: Automated PDF Performance client reports scheduler** `[AR-004]` *(Priority: P2)*
   - *Status: Pending* (Enterprise Add-on)
 - [x] **Task 3.19: Keyword Rank Cannibalization detector** `[AR-005]` *(Priority: P2)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Analytics\KeywordCannibalizationDetector`)
+  - *Status: Fully Executed* (`Holvek\Modules\Analytics\KeywordCannibalizationDetector`)
   - Discovers conflicting URLs competing for the same target keywords.
 - [ ] **Task 3.20: Position Rank Drop trigger notifications** `[AR-006]` *(Priority: P2)*
   - *Status: Pending* (Enterprise Add-on)
 - [x] **Task 3.21: PageSpeed Insights web vitals stats dashboard** `[AR-007]` *(Priority: P2)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Analytics\PageSpeedDashboard`)
+  - *Status: Fully Executed* (`Holvek\Modules\Analytics\PageSpeedDashboard`)
   - Core Web Vitals (LCP, FID/INP, CLS) performance dashboard.
 - [ ] **Task 3.22: Agency Isolated Multi-Brand Workspace switcher** `[UM-002]` *(Priority: P2)*
   - *Status: Pending* (Agency Cloud Portal)
 - [ ] **Task 3.23: Team SEO Comments, Tasks, & Approvals dashboard** `[UM-003]` *(Priority: P2)*
   - *Status: Pending* (Agency Cloud Portal)
 - [x] **Task 3.24: System-wide Actions audit history logs** `[UM-004]` *(Priority: P2)*
-  - *Status: Fully Executed* (`AmEveryWhere\Modules\Admin\SeoAuditHistoryLog`)
+  - *Status: Fully Executed* (`Holvek\Modules\Admin\SeoAuditHistoryLog`)
   - Immutable audit trail of all SEO metadata changes across users.
 - [ ] **Task 3.25: Google Analytics 4 traffic integrations** `[IN-006]` *(Priority: P2)*
   - *Status: Pending* (SaaS Integration)

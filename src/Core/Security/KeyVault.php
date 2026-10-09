@@ -1,163 +1,387 @@
 <?php
 
-namespace AmEveryWhere\Core\Security;
+namespace Holvek\WordPress\Core\Security;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
 /**
- * KeyVault: Encrypts and decrypts sensitive API keys using AES-256-CBC.
+ * Encrypts secrets stored in wp_options with AES-256-CBC and an HMAC.
  *
- * Encryption key is derived from a persistent, site-specific salt stored in
- * wp_options upon activation. This ensures the master key is STABLE across
- * URL migrations (staging → production).
+ * The key comes only from the site-specific salt in the option
+ * `holvek_encryption_salt`. There is no fallback key. Settings export omits
+ * that option. A full database copy still includes the salt and the
+ * ciphertext, so that copy can be decrypted. Encryption protects a leaked
+ * settings export, not a stolen database.
+ *
+ * New ciphertext uses the prefix `holvek_enc::`. Decrypt still accepts the
+ * previous prefix `aew_enc::`. Ciphertext written before a salt existed used
+ * a fallback key and can no longer be decrypted.
  */
 class KeyVault {
 
-	private const CIPHER      = 'aes-256-cbc';
-	private const PREFIX      = 'aew_enc::';
-	private const SALT_OPTION = 'ameverywhere_encryption_salt';
+	private const CIPHER        = 'aes-256-cbc';
+	private const PREFIX        = 'holvek_enc::';
+	private const LEGACY_PREFIX = 'aew_enc::';
+	private const SALT_OPTION   = 'holvek_encryption_salt';
+	private const HMAC_LENGTH   = 32;
 
 	/**
-	 * Generate and persist a unique encryption salt on plugin activation.
-	 * Must be called from Plugin::activate() to ensure the salt exists
-	 * before any credentials are encrypted.
+	 * Test seam. PHPUnit cannot unload the OpenSSL extension.
 	 */
-	public static function ensureSaltExists(): void {
-		if ( get_option( self::SALT_OPTION ) ) {
-			return; // Already generated — do not overwrite
+	private static bool $blockSaltCreation = false;
+
+	/**
+	 * Test seam. PHPUnit cannot unload the OpenSSL extension.
+	 */
+	private static bool $forceCipherUnavailable = false;
+
+	/**
+	 * Create the site salt when it is missing.
+	 *
+	 * An existing salt is left unchanged. An empty stored value is replaced.
+	 * The option is not autoloaded.
+	 */
+	public static function ensureSaltExists(): bool {
+		if ( self::saltValue() !== '' ) {
+			return true;
 		}
 
-		// Generate 64 cryptographically random hex characters (256 bits of entropy)
-		$salt = bin2hex( random_bytes( 32 ) );
-		add_option( self::SALT_OPTION, $salt, '', false ); // autoload=false (not needed on frontend)
+		if ( self::$blockSaltCreation ) {
+			return false;
+		}
+
+		try {
+			$salt = bin2hex( random_bytes( 32 ) );
+		} catch ( \Throwable ) {
+			return false;
+		}
+
+		// Missing options come back as the default. An empty string is stored.
+		if ( false === get_option( self::SALT_OPTION, false ) ) {
+			if ( add_option( self::SALT_OPTION, $salt, '', false ) ) {
+				return true;
+			}
+		}
+
+		if ( self::saltValue() !== '' ) {
+			return true;
+		}
+
+		return update_option( self::SALT_OPTION, $salt, false );
 	}
 
 	/**
-	 * Derive a 256-bit encryption key unique to this WordPress installation.
-	 * Uses the persistent dedicated salt so the key survives URL migrations.
+	 * Encrypt a secret for storage.
+	 *
+	 * An empty string stays empty. A value that already uses the current or
+	 * legacy prefix is returned unchanged. Any other failure returns
+	 * WP_Error. Callers must not persist that error or the original plaintext.
+	 *
+	 * @return string|\WP_Error
 	 */
-	private static function deriveMasterKey(): string {
-		// 1. Dedicated persistent salt (stable across URL changes)
-		$salt = get_option( self::SALT_OPTION, '' );
-
-		// 2. Fall back to AUTH_KEY if option is missing (e.g. before first activation)
-		if ( empty( $salt ) ) {
-			$salt = defined( 'AUTH_KEY' ) ? AUTH_KEY : 'ameverywhere-fallback-key-change-me';
-		}
-
-		return hash( 'sha256', $salt, true ); // 32 raw bytes
-	}
-
-	/**
-	 * Encrypt a plaintext string. Returns a base64-encoded cipher string with IV prefix.
-	 */
-	public static function encrypt( string $plaintext ): string {
-		if ( empty( $plaintext ) ) {
+	public static function encrypt( string $plaintext ): string|\WP_Error {
+		if ( $plaintext === '' ) {
 			return '';
 		}
 
-		// Avoid double-encrypting already-encrypted values
-		if ( str_starts_with( $plaintext, self::PREFIX ) ) {
+		if ( self::isCiphertext( $plaintext ) ) {
 			return $plaintext;
 		}
 
-		$key   = self::deriveMasterKey();
-		$ivLen = openssl_cipher_iv_length( self::CIPHER );
-		$iv    = openssl_random_pseudo_bytes( $ivLen );
+		if ( ! self::cipherAvailable() ) {
+			return self::encryptionError(
+				'holvek_cipher_unavailable',
+				__( 'Holvek cannot store this secret because the PHP OpenSSL extension is unavailable. The value was not saved.', 'holvek' )
+			);
+		}
+
+		if ( ! self::ensureSaltExists() ) {
+			return self::encryptionError(
+				'holvek_salt_missing',
+				__( 'Holvek cannot store this secret because the encryption salt is missing. The value was not saved.', 'holvek' )
+			);
+		}
+
+		$key = self::deriveMasterKey();
+		if ( $key === '' ) {
+			return self::encryptionError(
+				'holvek_salt_missing',
+				__( 'Holvek cannot store this secret because the encryption salt is missing. The value was not saved.', 'holvek' )
+			);
+		}
+
+		$ivLength = openssl_cipher_iv_length( self::CIPHER );
+		if ( ! is_int( $ivLength ) || $ivLength < 1 ) {
+			return self::encryptionError(
+				'holvek_encryption_failed',
+				__( 'Holvek could not encrypt this secret. The value was not saved.', 'holvek' )
+			);
+		}
+
+		try {
+			$iv = random_bytes( $ivLength );
+		} catch ( \Throwable ) {
+			return self::encryptionError(
+				'holvek_encryption_failed',
+				__( 'Holvek could not encrypt this secret. The value was not saved.', 'holvek' )
+			);
+		}
 
 		$cipherRaw = openssl_encrypt( $plaintext, self::CIPHER, $key, OPENSSL_RAW_DATA, $iv );
-		if ( $cipherRaw === false ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( '[AmEveryWhere KeyVault] Encryption failed: ' . ( openssl_error_string() ?: 'unknown error' ) );
-			}
-			return '';
+		if ( ! is_string( $cipherRaw ) || $cipherRaw === '' ) {
+			return self::encryptionError(
+				'holvek_encryption_failed',
+				__( 'Holvek could not encrypt this secret. The value was not saved.', 'holvek' )
+			);
 		}
 
 		$hmac = hash_hmac( 'sha256', $cipherRaw, $key, true );
 
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- AES payload encoding, not obfuscation.
 		return self::PREFIX . base64_encode( $iv . $hmac . $cipherRaw );
 	}
 
 	/**
-	 * Decrypt a previously encrypted string.
+	 * Decrypt a stored secret.
+	 *
+	 * Values without a Holvek prefix are returned unchanged so older plaintext
+	 * keys keep working. Ciphertext cannot be decrypted without the salt and
+	 * OpenSSL, and then the result is an empty string.
 	 */
 	public static function decrypt( string $encrypted ): string {
-		if ( empty( $encrypted ) ) {
+		if ( $encrypted === '' ) {
 			return '';
 		}
 
-		if ( ! str_starts_with( $encrypted, self::PREFIX ) ) {
-			// Not encrypted by us — return as-is
+		$prefix = self::matchedPrefix( $encrypted );
+		if ( $prefix === '' ) {
 			return $encrypted;
 		}
 
-		$key     = self::deriveMasterKey();
-		$decoded = base64_decode( substr( $encrypted, strlen( self::PREFIX ) ) );
-
-		$ivLen   = openssl_cipher_iv_length( self::CIPHER );
-		$hmacLen = 32;
-
-		if ( strlen( $decoded ) < $ivLen + $hmacLen ) {
+		if ( ! self::cipherAvailable() ) {
 			return '';
 		}
 
-		$iv        = substr( $decoded, 0, $ivLen );
-		$hmac      = substr( $decoded, $ivLen, $hmacLen );
-		$cipherRaw = substr( $decoded, $ivLen + $hmacLen );
+		$key = self::deriveMasterKey();
+		if ( $key === '' ) {
+			return '';
+		}
 
-		// Verify HMAC integrity before decrypting
-		$expectedHmac = hash_hmac( 'sha256', $cipherRaw, $key, true );
-		if ( ! hash_equals( $expectedHmac, $hmac ) ) {
-			return ''; // Tampered or corrupt data
+		$ivLength = openssl_cipher_iv_length( self::CIPHER );
+		if ( ! is_int( $ivLength ) || $ivLength < 1 ) {
+			return '';
+		}
+
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- AES payload encoding, not obfuscation.
+		$decoded = base64_decode( substr( $encrypted, strlen( $prefix ) ), true );
+		if ( ! is_string( $decoded ) || strlen( $decoded ) < $ivLength + self::HMAC_LENGTH ) {
+			return '';
+		}
+
+		$iv        = substr( $decoded, 0, $ivLength );
+		$hmac      = substr( $decoded, $ivLength, self::HMAC_LENGTH );
+		$cipherRaw = substr( $decoded, $ivLength + self::HMAC_LENGTH );
+		$expected  = hash_hmac( 'sha256', $cipherRaw, $key, true );
+
+		if ( ! hash_equals( $expected, $hmac ) ) {
+			return '';
 		}
 
 		$plaintext = openssl_decrypt( $cipherRaw, self::CIPHER, $key, OPENSSL_RAW_DATA, $iv );
 
-		return $plaintext === false ? '' : $plaintext;
+		return is_string( $plaintext ) ? $plaintext : '';
 	}
 
 	/**
-	 * Encrypt all known sensitive keys in a settings array before persisting to DB.
+	 * Encrypt known secret fields before they are stored.
+	 *
+	 * A field that cannot be encrypted is removed so the caller does not
+	 * persist the plaintext.
+	 *
+	 * @param array<string, mixed> $settings
+	 * @return array<string, mixed>
 	 */
 	public static function encryptSettings( array $settings ): array {
 		foreach ( self::sensitiveKeys() as $key ) {
-			if ( ! empty( $settings[ $key ] ) ) {
-				$settings[ $key ] = self::encrypt( $settings[ $key ] );
+			if ( ! isset( $settings[ $key ] ) || ! is_string( $settings[ $key ] ) || $settings[ $key ] === '' ) {
+				continue;
 			}
+
+			$encrypted = self::encrypt( $settings[ $key ] );
+			if ( is_wp_error( $encrypted ) || ! self::isCiphertext( $encrypted ) ) {
+				unset( $settings[ $key ] );
+				continue;
+			}
+
+			$settings[ $key ] = $encrypted;
 		}
+
 		return $settings;
 	}
 
 	/**
-	 * Decrypt all known sensitive keys in a settings array after reading from DB.
+	 * Decrypt known secret fields after reading them.
+	 *
+	 * @param array<string, mixed> $settings
+	 * @return array<string, mixed>
 	 */
 	public static function decryptSettings( array $settings ): array {
 		foreach ( self::sensitiveKeys() as $key ) {
-			if ( ! empty( $settings[ $key ] ) ) {
-				$settings[ $key ] = self::decrypt( $settings[ $key ] );
+			if ( ! isset( $settings[ $key ] ) || ! is_string( $settings[ $key ] ) || $settings[ $key ] === '' ) {
+				continue;
 			}
+
+			$settings[ $key ] = self::decrypt( $settings[ $key ] );
 		}
+
 		return $settings;
 	}
 
 	/**
-	 * List of settings keys that contain sensitive API credentials.
+	 * Option names that must not appear in a settings export or import.
+	 *
+	 * The salt is in the same table as the ciphertext. Exporting it would
+	 * make the exported file decryptable. A full database copy still is.
+	 *
+	 * @return array<int, string>
+	 */
+	public static function neverExportOptions(): array {
+		return array(
+			self::SALT_OPTION,
+		);
+	}
+
+	/**
+	 * Whether a value is already Holvek ciphertext.
+	 */
+	public static function isCiphertext( string $value ): bool {
+		return self::matchedPrefix( $value ) !== '';
+	}
+
+	/**
+	 * Show one admin notice when secrets cannot be encrypted.
+	 */
+	public static function registerAdminNotice(): void {
+		add_action( 'admin_notices', array( self::class, 'renderMissingCipherNotice' ) );
+		add_action( 'wp_ajax_holvek_dismiss_cipher_notice', array( self::class, 'dismissMissingCipherNotice' ) );
+	}
+
+	/**
+	 * Tell administrators that secret storage is off until OpenSSL is available.
+	 *
+	 * The notice is limited to Holvek screens when the current screen is known.
+	 */
+	public static function renderMissingCipherNotice(): void {
+		if ( self::cipherAvailable() || ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		if ( get_user_meta( get_current_user_id(), 'holvek_cipher_notice_dismissed', true ) ) {
+			return;
+		}
+		if ( ! function_exists( 'get_current_screen' ) ) {
+			return;
+		}
+
+		$screen = get_current_screen();
+		if ( ! is_object( $screen ) || ! isset( $screen->id ) || ! str_contains( (string) $screen->id, 'holvek' ) ) {
+			return;
+		}
+
+		$nonce = wp_create_nonce( 'holvek_dismiss_cipher_notice' );
+		printf(
+			'<div class="notice notice-error is-dismissible holvek-cipher-notice" data-nonce="%1$s"><p>%2$s</p></div>',
+			esc_attr( $nonce ),
+			esc_html(
+				__( 'Holvek cannot encrypt API keys or access tokens because the PHP OpenSSL extension is missing. Saving those secrets is turned off until OpenSSL is enabled. The rest of the plugin keeps working.', 'holvek' )
+			)
+		);
+		echo '<script>document.addEventListener("DOMContentLoaded",function(){var el=document.querySelector(".holvek-cipher-notice");if(!el){return;}el.addEventListener("click",function(e){if(!e.target.classList.contains("notice-dismiss")){return;}var body=new FormData();body.append("action","holvek_dismiss_cipher_notice");body.append("_ajax_nonce",el.dataset.nonce);fetch(window.ajaxurl,{method:"POST",body:body});});});</script>';
+	}
+
+	/**
+	 * Remember that this administrator dismissed the OpenSSL notice.
+	 */
+	public static function dismissMissingCipherNotice(): void {
+		check_ajax_referer( 'holvek_dismiss_cipher_notice' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error(
+				array( 'message' => __( 'Sorry, you are not allowed to do that.', 'holvek' ) ),
+				403
+			);
+		}
+		update_user_meta( get_current_user_id(), 'holvek_cipher_notice_dismissed', '1' );
+		wp_send_json_success();
+	}
+
+	/**
+	 * Force the failure paths that PHPUnit cannot reach by unloading OpenSSL.
+	 *
+	 * Production code must not call this.
+	 */
+	public static function setTestConstraints( bool $blockSaltCreation = false, bool $forceCipherUnavailable = false ): void {
+		self::$blockSaltCreation      = $blockSaltCreation;
+		self::$forceCipherUnavailable = $forceCipherUnavailable;
+	}
+
+	/**
+	 * @return array<int, string>
 	 */
 	private static function sensitiveKeys(): array {
 		return array(
-			'ameverywhere_api_key',
+			'holvek_api_key',
 			'openai_api_key',
 			'anthropic_api_key',
 			'gsc_api_key',
 			'bing_api_key',
-			'ameverywhere_google_indexing_key',
-			'ameverywhere_ga4_credentials',
-			'ameverywhere_google_indexing_key',
-			'ameverywhere_ga4_credentials',
+			'holvek_google_indexing_key',
+			'holvek_ga4_credentials',
 			'google_indexing_key',
 			'ga4_credentials',
+			'holvek_license_key',
 		);
+	}
+
+	private static function saltValue(): string {
+		$salt = get_option( self::SALT_OPTION, '' );
+		return is_string( $salt ) ? $salt : '';
+	}
+
+	private static function deriveMasterKey(): string {
+		$salt = self::saltValue();
+		if ( $salt === '' ) {
+			return '';
+		}
+
+		return hash( 'sha256', $salt, true );
+	}
+
+	private static function matchedPrefix( string $value ): string {
+		if ( str_starts_with( $value, self::PREFIX ) ) {
+			return self::PREFIX;
+		}
+
+		if ( str_starts_with( $value, self::LEGACY_PREFIX ) ) {
+			return self::LEGACY_PREFIX;
+		}
+
+		return '';
+	}
+
+	private static function cipherAvailable(): bool {
+		if ( self::$forceCipherUnavailable ) {
+			return false;
+		}
+
+		if ( ! function_exists( 'openssl_encrypt' ) || ! function_exists( 'openssl_decrypt' ) || ! function_exists( 'openssl_get_cipher_methods' ) ) {
+			return false;
+		}
+
+		return in_array( self::CIPHER, openssl_get_cipher_methods(), true );
+	}
+
+	private static function encryptionError( string $code, string $message ): \WP_Error {
+		return new \WP_Error( $code, $message, array( 'status' => 500 ) );
 	}
 }

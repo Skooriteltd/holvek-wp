@@ -1,9 +1,9 @@
 <?php
 
-namespace AmEveryWhere\Tests\Unit;
+namespace Holvek\WordPress\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use AmEveryWhere\Modules\Schema\SchemaGenerator;
+use Holvek\WordPress\Modules\Schema\SchemaGenerator;
 
 class SchemaGeneratorTest extends TestCase
 {
@@ -28,7 +28,7 @@ class SchemaGeneratorTest extends TestCase
     public function testGetEffectivePrimarySchemaLocalOverride(): void
     {
         global $mock_post_meta;
-        $mock_post_meta[10]['_ameverywhere_primary_schema'] = 'faq';
+        $mock_post_meta[10]['_holvek_primary_schema'] = 'faq';
 
         $resolved = SchemaGenerator::getEffectivePrimarySchema(10);
         $this->assertSame('faq', $resolved);
@@ -42,7 +42,7 @@ class SchemaGeneratorTest extends TestCase
             'ID' => 20,
             'post_type' => 'post',
         ]);
-        $mock_post_meta[20]['_ameverywhere_primary_schema'] = ''; // No local override
+        $mock_post_meta[20]['_holvek_primary_schema'] = ''; // No local override
 
         $rules = [
             [
@@ -56,7 +56,7 @@ class SchemaGeneratorTest extends TestCase
                 'schema_type' => 'localbusiness',
             ]
         ];
-        update_option('ameverywhere_global_schema_rules', json_encode($rules));
+        update_option('holvek_global_schema_rules', json_encode($rules));
 
         $resolved = SchemaGenerator::getEffectivePrimarySchema(20);
         $this->assertSame('article', $resolved);
@@ -114,12 +114,12 @@ class SchemaGeneratorTest extends TestCase
         ]);
 
         // Enable FAQ schema on this post
-        $mock_post_meta[$postId]['_ameverywhere_primary_schema'] = 'faq';
+        $mock_post_meta[$postId]['_holvek_primary_schema'] = 'faq';
         $faqs = [
-            ['question' => 'What is AmEveryWhere?', 'answer' => 'An AI SEO WordPress plugin.'],
+            ['question' => 'What is Holvek?', 'answer' => 'An AI SEO WordPress plugin.'],
             ['question' => 'Does it support Schema.org?', 'answer' => 'Yes, comprehensive JSON-LD graphs.']
         ];
-        $mock_post_meta[$postId]['_ameverywhere_schema_faq_questions'] = json_encode($faqs);
+        $mock_post_meta[$postId]['_holvek_schema_faq_questions'] = json_encode($faqs);
 
         $schema = $this->generator->getSchemaForPost($postId);
         $this->assertNotEmpty($schema['@graph']);
@@ -135,7 +135,7 @@ class SchemaGeneratorTest extends TestCase
         $this->assertNotNull($faqNode);
         $this->assertSame('https://example.com/post-101/#faq', $faqNode['@id']);
         $this->assertCount(2, $faqNode['mainEntity']);
-        $this->assertSame('What is AmEveryWhere?', $faqNode['mainEntity'][0]['name']);
+        $this->assertSame('What is Holvek?', $faqNode['mainEntity'][0]['name']);
         $this->assertSame('An AI SEO WordPress plugin.', $faqNode['mainEntity'][0]['acceptedAnswer']['text']);
     }
 
@@ -158,6 +158,6 @@ class SchemaGeneratorTest extends TestCase
         $this->assertStringContainsString('<script type="application/ld+json">', $rendered);
         $this->assertStringContainsString('https://schema.org', $rendered);
         $this->assertStringContainsString('BreadcrumbList', $rendered);
-        $this->assertStringContainsString('<!-- /AmEveryWhere Schema -->', $rendered);
+        $this->assertStringContainsString('<!-- /Holvek Schema -->', $rendered);
     }
 }

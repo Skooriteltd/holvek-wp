@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Admin;
+namespace Holvek\WordPress\Modules\Admin;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -14,7 +14,7 @@ class BulkMetaEditor {
 
 	public function registerRestRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/bulk-meta',
 			array(
 				array(
@@ -72,9 +72,9 @@ class BulkMetaEditor {
 		$items = array();
 
 		foreach ( $query->posts as $post ) {
-			$seoTitle = get_post_meta( $post->ID, '_ameverywhere_seo_title', true );
-			$seoDesc  = get_post_meta( $post->ID, '_ameverywhere_meta_description', true );
-			$noIndex  = get_post_meta( $post->ID, '_ameverywhere_noindex', true );
+			$seoTitle = get_post_meta( $post->ID, '_holvek_seo_title', true );
+			$seoDesc  = get_post_meta( $post->ID, '_holvek_meta_description', true );
+			$noIndex  = get_post_meta( $post->ID, '_holvek_noindex', true );
 
 			// Compute a simple SEO score indicator
 			$score = 0;
@@ -117,7 +117,7 @@ class BulkMetaEditor {
 		$updates = $params['updates'] ?? array();
 
 		if ( empty( $updates ) || ! is_array( $updates ) ) {
-			return new \WP_Error( 'missing_data', 'No updates provided.', array( 'status' => 400 ) );
+			return new \WP_Error( 'missing_data', __( 'No updates provided.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		$saved  = array();
@@ -135,13 +135,13 @@ class BulkMetaEditor {
 			}
 
 			if ( isset( $update['seo_title'] ) ) {
-				update_post_meta( $postId, '_ameverywhere_seo_title', sanitize_text_field( $update['seo_title'] ) );
+				update_post_meta( $postId, '_holvek_seo_title', sanitize_text_field( $update['seo_title'] ) );
 			}
 			if ( isset( $update['seo_desc'] ) ) {
-				update_post_meta( $postId, '_ameverywhere_meta_description', sanitize_textarea_field( $update['seo_desc'] ) );
+				update_post_meta( $postId, '_holvek_meta_description', sanitize_textarea_field( $update['seo_desc'] ) );
 			}
 			if ( isset( $update['noindex'] ) ) {
-				update_post_meta( $postId, '_ameverywhere_noindex', $update['noindex'] ? 'yes' : 'no' );
+				update_post_meta( $postId, '_holvek_noindex', $update['noindex'] ? 'yes' : 'no' );
 			}
 
 			$saved[] = $postId;

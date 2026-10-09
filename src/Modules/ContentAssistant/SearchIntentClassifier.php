@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\ContentAssistant;
+namespace Holvek\WordPress\Modules\ContentAssistant;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class SearchIntentClassifier {
 
-	private const META_KEY = '_ameverywhere_search_intent';
+	private const META_KEY = '_holvek_search_intent';
 
 	private const SIGNALS = array(
 		'transactional' => array(
@@ -154,7 +154,7 @@ class SearchIntentClassifier {
 
 	public function classifyPost( int $postId ): string {
 		$post    = get_post( $postId );
-		$keyword = (string) get_post_meta( $postId, '_ameverywhere_focus_keyword', true );
+		$keyword = (string) get_post_meta( $postId, '_holvek_focus_keyword', true );
 
 		if ( ! $post ) {
 			return 'informational';
@@ -190,7 +190,7 @@ class SearchIntentClassifier {
 
 	public function getConfidenceScore( int $postId ): array {
 		$post    = get_post( $postId );
-		$keyword = (string) get_post_meta( $postId, '_ameverywhere_focus_keyword', true );
+		$keyword = (string) get_post_meta( $postId, '_holvek_focus_keyword', true );
 
 		if ( ! $post ) {
 			return array(
@@ -245,7 +245,7 @@ class SearchIntentClassifier {
 		$editorCap = fn() => current_user_can( 'edit_posts' );
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/content/intent',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -261,7 +261,7 @@ class SearchIntentClassifier {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/content/intent/bulk-classify',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -276,7 +276,7 @@ class SearchIntentClassifier {
 		$post   = get_post( $postId );
 
 		if ( ! $post ) {
-			return new \WP_Error( 'not_found', 'Post not found.', array( 'status' => 404 ) );
+			return new \WP_Error( 'not_found', __( 'Post not found.', 'holvek' ), array( 'status' => 404 ) );
 		}
 
 		$stored     = get_post_meta( $postId, self::META_KEY, true );

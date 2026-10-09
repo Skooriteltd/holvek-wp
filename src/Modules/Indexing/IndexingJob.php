@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Indexing;
+namespace Holvek\WordPress\Modules\Indexing;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -27,7 +27,7 @@ class IndexingJob {
 
 		if (
 			! empty( $this->data['submit_google'] ) &&
-			get_option( 'ameverywhere_enable_google_indexing_api', 'no' ) === 'yes' &&
+			get_option( 'holvek_enable_google_indexing_api', 'no' ) === 'yes' &&
 			$quotaManager->canPingGoogle()
 		) {
 			$googleApi     = new GoogleIndexingApi();
@@ -37,14 +37,7 @@ class IndexingJob {
 			}
 		}
 
-		if ( $quotaManager->canPingBing() ) {
-			$bingApi     = new BingIndexNowApi();
-			$bingSuccess = $bingApi->ping( $url );
-			if ( $bingSuccess ) {
-				$quotaManager->incrementBing();
-			}
-		}
-
-		// Here we would log the $googleSuccess and $bingSuccess statuses to our custom indexing_logs table
+		// IndexNow is queued by BingIndexNowApi and sent by IndexNowFlushJob.
+		// This job must not open that request, or a publish would notify twice.
 	}
 }

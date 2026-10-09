@@ -1,13 +1,15 @@
 <?php
 
-namespace AmEveryWhere\Modules\Admin;
+namespace Holvek\WordPress\Modules\Admin;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use AmEveryWhere\Core\Event\EventManager;
-use AmEveryWhere\Core\Security\KeyVault;
+use Holvek\WordPress\Core\Ai\OllamaEndpoint;
+use Holvek\WordPress\Core\Event\EventManager;
+use Holvek\WordPress\Core\Security\KeyVault;
+use Holvek\WordPress\Modules\Indexing\BingIndexNowApi;
 
 class AdminModule {
 
@@ -31,7 +33,7 @@ class AdminModule {
 
 	public function registerRestRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/settings',
 			array(
 				array(
@@ -48,7 +50,7 @@ class AdminModule {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/settings/ai/test-connection',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -58,7 +60,7 @@ class AdminModule {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/index-url',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -69,7 +71,7 @@ class AdminModule {
 
 		// ── Phase 1 Backlog: PageSpeed per post ──────────────────────────────
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/pagespeed',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -87,7 +89,7 @@ class AdminModule {
 
 		// ── Phase 1 Backlog: GSC per-post ranking keywords ───────────────────
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/gsc/keywords',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -105,7 +107,7 @@ class AdminModule {
 
 		// ── Phase 2 Backlog: Site-wide GSC Dashboard ─────────────────────────
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/gsc/dashboard',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -116,7 +118,7 @@ class AdminModule {
 
 		// ── Phase 2 Backlog: Keyword Cannibalization Report ──────────────────
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/gsc/cannibalization',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -127,18 +129,28 @@ class AdminModule {
 
 		// ── Phase 2 Backlog: Orphan Pages Report ─────────────────────────────
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/links/orphans',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'getOrphanPages' ),
 				'permission_callback' => array( $this, 'checkPermission' ),
+				'args'                => array(
+					'page'     => array(
+						'default'           => 1,
+						'sanitize_callback' => 'absint',
+					),
+					'per_page' => array(
+						'default'           => 50,
+						'sanitize_callback' => 'absint',
+					),
+				),
 			)
 		);
 
 		// ── Phase 2 Backlog: Site-wide Link Statistics ───────────────────────
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/links/stats',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -149,7 +161,7 @@ class AdminModule {
 
 		// ── Phase 2 Backlog: GA4 Integration settings ────────────────────────
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/settings/ga4',
 			array(
 				array(
@@ -167,7 +179,7 @@ class AdminModule {
 
 		// ── Phase 2 Backlog: GA4 Traffic Report ──────────────────────────────
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/ga4/report',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -178,28 +190,28 @@ class AdminModule {
 
 		// ── Phase 3: Import / Export settings ────────────────────────────────
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/settings/export',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'exportSettings' ),
-				'permission_callback' => array( $this, 'checkPermission' ),
+				'permission_callback' => array( $this, 'checkSettingsTransferPermission' ),
 			)
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/settings/import',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'importSettings' ),
-				'permission_callback' => array( $this, 'checkPermission' ),
+				'permission_callback' => array( $this, 'checkSettingsTransferPermission' ),
 			)
 		);
 
 		// ── Phase 3: HTML Sitemap ─────────────────────────────────────────────
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/html-sitemap',
 			array(
 				array(
@@ -216,7 +228,7 @@ class AdminModule {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/html-sitemap/preview',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -230,141 +242,182 @@ class AdminModule {
 		return current_user_can( 'manage_seo' ) || current_user_can( 'manage_options' );
 	}
 
-	public function getSettings( \WP_REST_Request $request ): \WP_REST_Response {
-		$aiGateway = new \AmEveryWhere\Core\Ai\AiGateway();
+	/**
+	 * Import and export move the public settings snapshot, so they require an administrator.
+	 */
+	public function checkSettingsTransferPermission(): bool {
+		return current_user_can( 'manage_options' );
+	}
 
-		$openaiKeyStored = get_option( 'ameverywhere_openai_key', '' );
+	public function getSettings( \WP_REST_Request $request ): \WP_REST_Response {
+		$aiGateway = new \Holvek\WordPress\Core\Ai\AiGateway();
+
+		$openaiKeyStored = get_option( 'holvek_openai_key', '' );
 		$openaiKey       = ! empty( $openaiKeyStored ) ? '••••••••••••' : '';
 
-		$anthropicKeyStored = get_option( 'ameverywhere_anthropic_key', '' );
+		$anthropicKeyStored = get_option( 'holvek_anthropic_key', '' );
 		$anthropicKey       = ! empty( $anthropicKeyStored ) ? '••••••••••••' : '';
-		$rawGoogleKey       = (string) get_option( 'ameverywhere_google_indexing_key', '' );
+		$rawGoogleKey       = (string) get_option( 'holvek_google_indexing_key', '' );
 
 		return rest_ensure_response(
 			array(
 				'google_indexing_configured' => $rawGoogleKey !== '',
-				'indexnow_configured'        => (string) get_option( 'ameverywhere_indexnow_key', '' ) !== '',
-				'auto_index'                 => get_option( 'ameverywhere_auto_index', 'no' ) === 'yes',
-				'enable_google_indexing_api' => get_option( 'ameverywhere_enable_google_indexing_api', 'no' ) === 'yes',
-				'delete_data_on_uninstall'   => get_option( 'ameverywhere_delete_data_on_uninstall', 'no' ) === 'yes',
-				'google_verify'              => get_option( 'ameverywhere_google_verify', '' ),
-				'bing_verify'                => get_option( 'ameverywhere_bing_verify', '' ),
-				'yandex_verify'              => get_option( 'ameverywhere_yandex_verify', '' ),
-				'pinterest_verify'           => get_option( 'ameverywhere_pinterest_verify', '' ),
-				'rss_before_content'         => get_option( 'ameverywhere_rss_before_content', '' ),
-				'rss_after_content'          => get_option( 'ameverywhere_rss_after_content', '' ),
-				'breadcrumb_separator'       => get_option( 'ameverywhere_breadcrumb_separator', '›' ),
-				'breadcrumb_home_label'      => get_option( 'ameverywhere_breadcrumb_home_label', 'Home' ),
-				'breadcrumb_auto_insert'     => get_option( 'ameverywhere_breadcrumb_auto_insert', 'none' ),
-				'sitemap_exclude_post_types' => get_option( 'ameverywhere_sitemap_exclude_post_types', '' ),
-				'sitemap_exclude_posts'      => get_option( 'ameverywhere_sitemap_exclude_posts', '' ),
+				'indexnow_configured'        => (string) get_option( 'holvek_indexnow_key', '' ) !== '',
+				'auto_index'                 => get_option( 'holvek_auto_index', 'no' ) === 'yes',
+				'enable_google_indexing_api' => get_option( 'holvek_enable_google_indexing_api', 'no' ) === 'yes',
+				'delete_data_on_uninstall'   => get_option( 'holvek_delete_data_on_uninstall', 'no' ) === 'yes',
+				'google_verify'              => get_option( 'holvek_google_verify', '' ),
+				'bing_verify'                => get_option( 'holvek_bing_verify', '' ),
+				'yandex_verify'              => get_option( 'holvek_yandex_verify', '' ),
+				'pinterest_verify'           => get_option( 'holvek_pinterest_verify', '' ),
+				'rss_before_content'         => get_option( 'holvek_rss_before_content', '' ),
+				'rss_after_content'          => get_option( 'holvek_rss_after_content', '' ),
+				'breadcrumb_separator'       => get_option( 'holvek_breadcrumb_separator', '›' ),
+				'breadcrumb_home_label'      => get_option( 'holvek_breadcrumb_home_label', 'Home' ),
+				'breadcrumb_auto_insert'     => get_option( 'holvek_breadcrumb_auto_insert', 'none' ),
+				'sitemap_exclude_post_types' => get_option( 'holvek_sitemap_exclude_post_types', '' ),
+				'sitemap_exclude_posts'      => get_option( 'holvek_sitemap_exclude_posts', '' ),
 
 				// Secure AI Vault settings
-				'ai_provider'                => get_option( 'ameverywhere_ai_provider', 'openai' ),
+				'ai_provider'                => get_option( 'holvek_ai_provider', 'openai' ),
 				'openai_key'                 => $openaiKey,
 				'anthropic_key'              => $anthropicKey,
-				'ollama_url'                 => get_option( 'ameverywhere_ollama_url', 'http://localhost:11434' ),
-				'default_share_image'        => get_option( 'ameverywhere_default_share_image', '' ),
+				'ollama_url'                 => OllamaEndpoint::displayUrl(),
+				'ollama_remote_ack'          => OllamaEndpoint::remoteIsConfirmed( OllamaEndpoint::displayUrl() ),
+				'default_share_image'        => get_option( 'holvek_default_share_image', '' ),
 			)
 		);
 	}
 
-	public function updateSettings( \WP_REST_Request $request ): \WP_REST_Response {
-		$params    = $request->get_json_params();
-		$aiGateway = new \AmEveryWhere\Core\Ai\AiGateway();
+	public function updateSettings( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$params = $request->get_json_params();
+		if ( ! is_array( $params ) ) {
+			$params = array();
+		}
+
+		if ( isset( $params['indexnow_key'] ) && '' !== $params['indexnow_key'] ) {
+			if ( ! is_string( $params['indexnow_key'] ) ) {
+				return new \WP_Error(
+					'invalid_indexnow_key',
+					__( 'The IndexNow key must be 8 to 128 letters, numbers, or dashes. Holvek does not create one for you.', 'holvek' ),
+					array( 'status' => 400 )
+				);
+			}
+
+			$indexNowKey = sanitize_text_field( wp_unslash( $params['indexnow_key'] ) );
+			if ( ! BingIndexNowApi::isValidKey( $indexNowKey ) ) {
+				return new \WP_Error(
+					'invalid_indexnow_key',
+					__( 'The IndexNow key must be 8 to 128 letters, numbers, or dashes. Holvek does not create one for you.', 'holvek' ),
+					array( 'status' => 400 )
+				);
+			}
+		}
+
+		if ( isset( $params['ollama_url'] ) ) {
+			$saved = OllamaEndpoint::save( (string) $params['ollama_url'], ! empty( $params['ollama_remote_confirmed'] ) );
+			if ( is_wp_error( $saved ) ) {
+				return $saved;
+			}
+		}
 
 		if ( ! empty( $params['google_indexing_key'] ) ) {
 			$jsonValue = wp_unslash( $params['google_indexing_key'] );
 			if ( json_decode( $jsonValue ) !== null ) {
-				update_option( 'ameverywhere_google_indexing_key', KeyVault::encrypt( $jsonValue ) );
+				$stored = $this->storeSecret( 'holvek_google_indexing_key', $jsonValue );
+				if ( is_wp_error( $stored ) ) {
+					return $stored;
+				}
 			}
 		}
 
-		if ( ! empty( $params['indexnow_key'] ) ) {
-			update_option( 'ameverywhere_indexnow_key', sanitize_text_field( $params['indexnow_key'] ) );
+		if ( ! empty( $params['indexnow_key'] ) && is_string( $params['indexnow_key'] ) ) {
+			update_option( 'holvek_indexnow_key', sanitize_text_field( wp_unslash( $params['indexnow_key'] ) ), false );
 		}
 
 		if ( isset( $params['auto_index'] ) ) {
-			update_option( 'ameverywhere_auto_index', $params['auto_index'] ? 'yes' : 'no' );
+			update_option( 'holvek_auto_index', $params['auto_index'] ? 'yes' : 'no', true );
 		}
 
 		if ( isset( $params['enable_google_indexing_api'] ) ) {
-			update_option( 'ameverywhere_enable_google_indexing_api', $params['enable_google_indexing_api'] ? 'yes' : 'no' );
+			update_option( 'holvek_enable_google_indexing_api', $params['enable_google_indexing_api'] ? 'yes' : 'no' );
 		}
 
 		if ( isset( $params['delete_data_on_uninstall'] ) ) {
-			update_option( 'ameverywhere_delete_data_on_uninstall', $params['delete_data_on_uninstall'] ? 'yes' : 'no' );
+			update_option( 'holvek_delete_data_on_uninstall', $params['delete_data_on_uninstall'] ? 'yes' : 'no' );
 		}
 
 		if ( isset( $params['google_verify'] ) ) {
-			update_option( 'ameverywhere_google_verify', sanitize_text_field( $params['google_verify'] ) );
+			update_option( 'holvek_google_verify', sanitize_text_field( $params['google_verify'] ) );
 		}
 
 		if ( isset( $params['bing_verify'] ) ) {
-			update_option( 'ameverywhere_bing_verify', sanitize_text_field( $params['bing_verify'] ) );
+			update_option( 'holvek_bing_verify', sanitize_text_field( $params['bing_verify'] ) );
 		}
 
 		if ( isset( $params['yandex_verify'] ) ) {
-			update_option( 'ameverywhere_yandex_verify', sanitize_text_field( $params['yandex_verify'] ) );
+			update_option( 'holvek_yandex_verify', sanitize_text_field( $params['yandex_verify'] ) );
 		}
 
 		if ( isset( $params['pinterest_verify'] ) ) {
-			update_option( 'ameverywhere_pinterest_verify', sanitize_text_field( $params['pinterest_verify'] ) );
+			update_option( 'holvek_pinterest_verify', sanitize_text_field( $params['pinterest_verify'] ) );
 		}
 
 		if ( isset( $params['rss_before_content'] ) ) {
-			update_option( 'ameverywhere_rss_before_content', wp_kses_post( $params['rss_before_content'] ) );
+			update_option( 'holvek_rss_before_content', wp_kses_post( $params['rss_before_content'] ) );
 		}
 
 		if ( isset( $params['rss_after_content'] ) ) {
-			update_option( 'ameverywhere_rss_after_content', wp_kses_post( $params['rss_after_content'] ) );
+			update_option( 'holvek_rss_after_content', wp_kses_post( $params['rss_after_content'] ) );
 		}
 
 		if ( isset( $params['breadcrumb_separator'] ) ) {
-			update_option( 'ameverywhere_breadcrumb_separator', sanitize_text_field( $params['breadcrumb_separator'] ) );
+			update_option( 'holvek_breadcrumb_separator', sanitize_text_field( $params['breadcrumb_separator'] ) );
 		}
 
 		if ( isset( $params['breadcrumb_home_label'] ) ) {
-			update_option( 'ameverywhere_breadcrumb_home_label', sanitize_text_field( $params['breadcrumb_home_label'] ) );
+			update_option( 'holvek_breadcrumb_home_label', sanitize_text_field( $params['breadcrumb_home_label'] ) );
 		}
 
 		if ( isset( $params['breadcrumb_auto_insert'] ) ) {
-			update_option( 'ameverywhere_breadcrumb_auto_insert', sanitize_text_field( $params['breadcrumb_auto_insert'] ) );
+			update_option( 'holvek_breadcrumb_auto_insert', sanitize_text_field( $params['breadcrumb_auto_insert'] ) );
 		}
 
 		if ( isset( $params['sitemap_exclude_post_types'] ) ) {
-			update_option( 'ameverywhere_sitemap_exclude_post_types', sanitize_text_field( $params['sitemap_exclude_post_types'] ) );
+			update_option( 'holvek_sitemap_exclude_post_types', sanitize_text_field( $params['sitemap_exclude_post_types'] ) );
 		}
 
 		if ( isset( $params['sitemap_exclude_posts'] ) ) {
-			update_option( 'ameverywhere_sitemap_exclude_posts', sanitize_text_field( $params['sitemap_exclude_posts'] ) );
+			update_option( 'holvek_sitemap_exclude_posts', sanitize_text_field( $params['sitemap_exclude_posts'] ) );
 		}
 
 		// Save secure AI parameters
 		if ( isset( $params['ai_provider'] ) ) {
-			update_option( 'ameverywhere_ai_provider', sanitize_text_field( $params['ai_provider'] ) );
+			update_option( 'holvek_ai_provider', sanitize_text_field( $params['ai_provider'] ) );
 		}
 
 		if ( isset( $params['openai_key'] ) ) {
 			$val = $params['openai_key'];
 			if ( $val !== '••••••••••••' ) {
-				update_option( 'ameverywhere_openai_key', empty( $val ) ? '' : KeyVault::encrypt( $val ) );
+				$stored = $this->storeSecret( 'holvek_openai_key', empty( $val ) ? '' : (string) $val );
+				if ( is_wp_error( $stored ) ) {
+					return $stored;
+				}
 			}
 		}
 
 		if ( isset( $params['anthropic_key'] ) ) {
 			$val = $params['anthropic_key'];
 			if ( $val !== '••••••••••••' ) {
-				update_option( 'ameverywhere_anthropic_key', empty( $val ) ? '' : KeyVault::encrypt( $val ) );
+				$stored = $this->storeSecret( 'holvek_anthropic_key', empty( $val ) ? '' : (string) $val );
+				if ( is_wp_error( $stored ) ) {
+					return $stored;
+				}
 			}
 		}
 
-		if ( isset( $params['ollama_url'] ) ) {
-			update_option( 'ameverywhere_ollama_url', esc_url_raw( $params['ollama_url'] ) );
-		}
-
 		if ( isset( $params['default_share_image'] ) ) {
-			update_option( 'ameverywhere_default_share_image', esc_url_raw( $params['default_share_image'] ) );
+			update_option( 'holvek_default_share_image', esc_url_raw( $params['default_share_image'] ) );
 		}
 
 		return rest_ensure_response( array( 'success' => true ) );
@@ -373,23 +426,36 @@ class AdminModule {
 	/**
 	 * Authenticated endpoint to test AI provider connections.
 	 */
-	public function testAiConnection( \WP_REST_Request $request ): \WP_REST_Response {
+	public function testAiConnection( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$params = $request->get_json_params();
+		if ( ! is_array( $params ) ) {
+			$params = array();
+		}
+
+		if ( isset( $params['ollama_url'] ) ) {
+			$saved = OllamaEndpoint::save( (string) $params['ollama_url'], ! empty( $params['ollama_remote_confirmed'] ) );
+			if ( is_wp_error( $saved ) ) {
+				return $saved;
+			}
+		}
 
 		$provider  = isset( $params['ai_provider'] ) ? sanitize_text_field( $params['ai_provider'] ) : 'openai';
-		$aiGateway = new \AmEveryWhere\Core\Ai\AiGateway();
+		$aiGateway = new \Holvek\WordPress\Core\Ai\AiGateway();
 
 		// Temporarily override parameters for connection test if updated in the UI
 		if ( isset( $params['openai_key'] ) && $params['openai_key'] !== '••••••••••••' ) {
-			update_option( 'ameverywhere_openai_key', empty( $params['openai_key'] ) ? '' : KeyVault::encrypt( $params['openai_key'] ) );
+			$stored = $this->storeSecret( 'holvek_openai_key', empty( $params['openai_key'] ) ? '' : (string) $params['openai_key'] );
+			if ( is_wp_error( $stored ) ) {
+				return $stored;
+			}
 		}
 		if ( isset( $params['anthropic_key'] ) && $params['anthropic_key'] !== '••••••••••••' ) {
-			update_option( 'ameverywhere_anthropic_key', empty( $params['anthropic_key'] ) ? '' : KeyVault::encrypt( $params['anthropic_key'] ) );
+			$stored = $this->storeSecret( 'holvek_anthropic_key', empty( $params['anthropic_key'] ) ? '' : (string) $params['anthropic_key'] );
+			if ( is_wp_error( $stored ) ) {
+				return $stored;
+			}
 		}
-		if ( isset( $params['ollama_url'] ) ) {
-			update_option( 'ameverywhere_ollama_url', esc_url_raw( $params['ollama_url'] ) );
-		}
-		update_option( 'ameverywhere_ai_provider', $provider );
+		update_option( 'holvek_ai_provider', $provider );
 
 		// Ping the provider with a short prompt
 		$result = $aiGateway->queryModel( 'Return exactly the word "SUCCESS" and nothing else.', 'System test.' );
@@ -398,55 +464,61 @@ class AdminModule {
 			return rest_ensure_response(
 				array(
 					'success' => true,
-					'message' => __( 'Connection test passed successfully!', 'ameverywhere' ),
+					'message' => __( 'Connection test passed successfully!', 'holvek' ),
 				)
 			);
 		}
 
-		$msg = isset( $result['message'] ) ? $result['message'] : __( 'Failed to connect to the selected AI provider.', 'ameverywhere' );
+		$msg = isset( $result['message'] ) ? $result['message'] : __( 'Failed to connect to the selected AI provider.', 'holvek' );
 		return new \WP_Error( 'ai_conn_fail', $msg, array( 'status' => 400 ) );
 	}
 
 	public function manualIndexUrl( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$postId = $request->get_param( 'post_id' );
 		if ( ! $postId ) {
-			return new \WP_Error( 'missing_param', __( 'Post ID is required.', 'ameverywhere' ), array( 'status' => 400 ) );
+			return new \WP_Error( 'missing_param', __( 'Post ID is required.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		if ( ! current_user_can( 'edit_post', $postId ) ) {
-			return new \WP_Error( 'forbidden_post', __( 'You cannot submit this post for indexing.', 'ameverywhere' ), array( 'status' => 403 ) );
+			return new \WP_Error( 'forbidden_post', __( 'You cannot submit this post for indexing.', 'holvek' ), array( 'status' => 403 ) );
 		}
 
 		$url = get_permalink( $postId );
-		if ( ! $url ) {
-			return new \WP_Error( 'invalid_post', __( 'Invalid Post ID.', 'ameverywhere' ), array( 'status' => 400 ) );
+		if ( ! is_string( $url ) || '' === $url ) {
+			return new \WP_Error( 'invalid_post', __( 'Invalid Post ID.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
-		// Fire job in the background securely via WP Cron
-		$queueManager = new \AmEveryWhere\Core\Queue\QueueManager();
-		$queueManager->push(
-			\AmEveryWhere\Modules\Indexing\IndexingJob::class,
-			array(
-				'post_id' => $postId,
-				'url'     => $url,
-				'action'  => 'URL_UPDATED',
-			)
-		);
+		$indexNow = new BingIndexNowApi();
+		if ( ! $indexNow->isEnabled() ) {
+			return new \WP_Error(
+				'indexnow_disabled',
+				__( 'Turn on IndexNow and save a key before submitting a URL. Holvek does not create a key.', 'holvek' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		if ( ! $indexNow->enqueueUrl( $url ) ) {
+			return new \WP_Error(
+				'indexnow_not_queued',
+				__( 'That URL could not be queued for IndexNow.', 'holvek' ),
+				array( 'status' => 400 )
+			);
+		}
 
 		return rest_ensure_response(
 			array(
 				'success' => true,
-				'message' => __( 'IndexNow notification queued. Google Indexing API submission is limited to eligible JobPosting and livestream pages.', 'ameverywhere' ),
+				'message' => __( 'IndexNow notification queued. Google Indexing API submission is limited to eligible JobPosting and livestream pages.', 'holvek' ),
 			)
 		);
 	}
 
 	/**
-	 * GET /ameverywhere/v1/pagespeed?post_id=N
+	 * GET /holvek/v1/pagespeed?post_id=N
 	 *
 	 * Fetches mobile and desktop PageSpeed Insights scores for the post URL.
-	 * Results are cached in post-meta (_ameverywhere_pagespeed_cache) for 7 days.
-	 * Requires AMEVERYWHERE_PSI_KEY constant or ameverywhere_psi_key option to be set
+	 * Results are cached in post-meta (_holvek_pagespeed_cache) for 7 days.
+	 * Requires HOLVEK_PSI_KEY constant or holvek_psi_key option to be set
 	 * (PageSpeed Insights API key). Without a key the public API rate-limit applies.
 	 */
 	public function getPageSpeed( \WP_REST_Request $request ): \WP_REST_Response {
@@ -454,11 +526,11 @@ class AdminModule {
 		$url    = get_permalink( $postId );
 
 		if ( ! $url ) {
-			return new \WP_Error( 'invalid_post', __( 'Could not resolve post URL.', 'ameverywhere' ), array( 'status' => 404 ) );
+			return new \WP_Error( 'invalid_post', __( 'Could not resolve post URL.', 'holvek' ), array( 'status' => 404 ) );
 		}
 
 		// 7-day cache: return stored result unless older than a week
-		$cached = get_post_meta( $postId, '_ameverywhere_pagespeed_cache', true );
+		$cached = get_post_meta( $postId, '_holvek_pagespeed_cache', true );
 		if ( $cached ) {
 			$data = json_decode( $cached, true );
 			if ( isset( $data['fetched_at'] ) && ( time() - $data['fetched_at'] ) < WEEK_IN_SECONDS ) {
@@ -472,16 +544,16 @@ class AdminModule {
 			}
 		}
 
-		$apiKey   = defined( 'AMEVERYWHERE_PSI_KEY' )
-			? AMEVERYWHERE_PSI_KEY
-			: get_option( 'ameverywhere_psi_key', '' );
-		$keyParam = $apiKey ? '&key=' . urlencode( $apiKey ) : '';
+		$apiKey   = defined( 'HOLVEK_PSI_KEY' )
+			? HOLVEK_PSI_KEY
+			: get_option( 'holvek_psi_key', '' );
+		$keyParam = $apiKey ? '&key=' . rawurlencode( $apiKey ) : '';
 
 		$scores = array( 'fetched_at' => time() );
 
 		foreach ( array( 'mobile', 'desktop' ) as $strategy ) {
 			$endpoint = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed'
-				. '?url=' . urlencode( $url )
+				. '?url=' . rawurlencode( $url )
 				. '&strategy=' . $strategy
 				. $keyParam;
 
@@ -489,7 +561,7 @@ class AdminModule {
 				$endpoint,
 				array(
 					'timeout'    => 30,
-					'user-agent' => 'AmEveryWhere/' . AMEVERYWHERE_VERSION,
+					'user-agent' => 'Holvek/' . HOLVEK_VERSION,
 				)
 			);
 
@@ -514,7 +586,7 @@ class AdminModule {
 		}
 
 		// Persist to post-meta so the editor sidebar can display cached values
-		update_post_meta( $postId, '_ameverywhere_pagespeed_cache', wp_json_encode( $scores ) );
+		update_post_meta( $postId, '_holvek_pagespeed_cache', wp_json_encode( $scores ) );
 
 		return rest_ensure_response(
 			array(
@@ -526,27 +598,27 @@ class AdminModule {
 	}
 
 	/**
-	 * GET /ameverywhere/v1/gsc/keywords?post_id=N
+	 * GET /holvek/v1/gsc/keywords?post_id=N
 	 *
 	 * Returns the top 25 Google Search Console queries driving traffic to this
 	 * specific post URL, ordered by clicks desc. Results are cached in post-meta
-	 * (_ameverywhere_ranking_keywords) for 24 hours.
+	 * (_holvek_ranking_keywords) for 24 hours.
 	 *
 	 * Requires the Google Search Console OAuth token to be present
-	 * (same credential used by the Indexing API — ameverywhere_google_indexing_key).
+	 * (same credential used by the Indexing API — holvek_google_indexing_key).
 	 */
 	public function getGscKeywords( \WP_REST_Request $request ): \WP_REST_Response {
 		$postId = $request->get_param( 'post_id' );
 		$url    = get_permalink( $postId );
 
 		if ( ! $url ) {
-			return new \WP_Error( 'invalid_post', __( 'Could not resolve post URL.', 'ameverywhere' ), array( 'status' => 404 ) );
+			return new \WP_Error( 'invalid_post', __( 'Could not resolve post URL.', 'holvek' ), array( 'status' => 404 ) );
 		}
 
 		// 24-hour in-memory cache via post-meta
-		$cachedAt = (int) get_post_meta( $postId, '_ameverywhere_ranking_keywords_at', true );
+		$cachedAt = (int) get_post_meta( $postId, '_holvek_ranking_keywords_at', true );
 		if ( $cachedAt && ( time() - $cachedAt ) < DAY_IN_SECONDS ) {
-			$cached = get_post_meta( $postId, '_ameverywhere_ranking_keywords', true );
+			$cached = get_post_meta( $postId, '_holvek_ranking_keywords', true );
 			if ( $cached ) {
 				return rest_ensure_response(
 					array(
@@ -560,13 +632,13 @@ class AdminModule {
 
 		// Obtain a fresh access token via the same Google service-account JSON
 		// that powers the Indexing API (GoogleIndexingApi::getAccessToken).
-		$api         = new \AmEveryWhere\Modules\Indexing\GoogleIndexingApi();
+		$api         = new \Holvek\WordPress\Modules\Indexing\GoogleIndexingApi();
 		$accessToken = $api->getAccessToken();
 
 		if ( ! $accessToken ) {
 			return new \WP_Error(
 				'gsc_no_token',
-				'Google Search Console is not connected. Please add your Service Account JSON under AmEveryWhere → Settings → Indexing.',
+				__( 'Google Search Console is not connected. Please add your Service Account JSON under Holvek → Settings → Indexing.', 'holvek' ),
 				array( 'status' => 401 )
 			);
 		}
@@ -575,8 +647,8 @@ class AdminModule {
 		$siteUrl = trailingslashit( get_option( 'siteurl' ) );
 
 		$body = array(
-			'startDate'             => date( 'Y-m-d', strtotime( '-90 days' ) ),
-			'endDate'               => date( 'Y-m-d' ),
+			'startDate'             => gmdate( 'Y-m-d', strtotime( '-90 days' ) ),
+			'endDate'               => gmdate( 'Y-m-d' ),
 			'dimensions'            => array( 'query' ),
 			'dimensionFilterGroups' => array(
 				array(
@@ -600,7 +672,7 @@ class AdminModule {
 
 		$response = wp_safe_remote_post(
 			'https://searchconsole.googleapis.com/webmasters/v3/sites/'
-			. urlencode( $siteUrl )
+			. rawurlencode( $siteUrl )
 			. '/searchAnalytics/query',
 			array(
 				'headers' => array(
@@ -620,8 +692,8 @@ class AdminModule {
 
 		if ( empty( $data['rows'] ) ) {
 			// No data yet — could mean no traffic or GSC hasn't indexed the page yet
-			update_post_meta( $postId, '_ameverywhere_ranking_keywords', wp_json_encode( array() ) );
-			update_post_meta( $postId, '_ameverywhere_ranking_keywords_at', time() );
+			update_post_meta( $postId, '_holvek_ranking_keywords', wp_json_encode( array() ) );
+			update_post_meta( $postId, '_holvek_ranking_keywords_at', time() );
 			return rest_ensure_response(
 				array(
 					'success'  => true,
@@ -644,8 +716,8 @@ class AdminModule {
 			$data['rows']
 		);
 
-		update_post_meta( $postId, '_ameverywhere_ranking_keywords', wp_json_encode( $keywords ) );
-		update_post_meta( $postId, '_ameverywhere_ranking_keywords_at', time() );
+		update_post_meta( $postId, '_holvek_ranking_keywords', wp_json_encode( $keywords ) );
+		update_post_meta( $postId, '_holvek_ranking_keywords_at', time() );
 
 		return rest_ensure_response(
 			array(
@@ -661,37 +733,37 @@ class AdminModule {
 	// ══════════════════════════════════════════════════════════════════════════
 
 	/**
-	 * GET /ameverywhere/v1/gsc/dashboard
+	 * GET /holvek/v1/gsc/dashboard
 	 *
 	 * Returns site-wide Google Search Console data for the last 28 days.
 	 * Cached in a site-wide transient for 6 hours.
 	 */
 	public function getGscDashboard( \WP_REST_Request $request ): \WP_REST_Response {
-		$cacheKey = 'ameverywhere_gsc_dashboard_v1';
+		$cacheKey = 'holvek_gsc_dashboard_v1';
 		$cached   = get_transient( $cacheKey );
 		if ( $cached !== false ) {
 			return rest_ensure_response( array_merge( $cached, array( 'cached' => true ) ) );
 		}
 
-		$api         = new \AmEveryWhere\Modules\Indexing\GoogleIndexingApi();
+		$api         = new \Holvek\WordPress\Modules\Indexing\GoogleIndexingApi();
 		$accessToken = $api->getAccessToken();
 
 		if ( ! $accessToken ) {
 			return new \WP_Error(
 				'gsc_not_connected',
-				'Google Search Console is not connected. Add your Service Account JSON under AmEveryWhere → Settings → Indexing.',
+				__( 'Google Search Console is not connected. Add your Service Account JSON under Holvek → Settings → Indexing.', 'holvek' ),
 				array( 'status' => 401 )
 			);
 		}
 
 		$siteUrl   = trailingslashit( get_option( 'siteurl' ) );
-		$endDate   = date( 'Y-m-d' );
-		$startDate = date( 'Y-m-d', strtotime( '-28 days' ) );
+		$endDate   = gmdate( 'Y-m-d' );
+		$startDate = gmdate( 'Y-m-d', strtotime( '-28 days' ) );
 
 		$gscQuery = function ( array $body ) use ( $siteUrl, $accessToken ): ?array {
 			$response = wp_safe_remote_post(
 				'https://searchconsole.googleapis.com/webmasters/v3/sites/'
-				. urlencode( $siteUrl ) . '/searchAnalytics/query',
+				. rawurlencode( $siteUrl ) . '/searchAnalytics/query',
 				array(
 					'headers' => array(
 						'Authorization' => 'Bearer ' . $accessToken,
@@ -828,30 +900,30 @@ class AdminModule {
 	// ══════════════════════════════════════════════════════════════════════════
 
 	/**
-	 * GET /ameverywhere/v1/gsc/cannibalization
+	 * GET /holvek/v1/gsc/cannibalization
 	 *
 	 * Groups GSC queries where two or more distinct pages both have clicks,
 	 * indicating posts competing for the same keyword. Cached 6 hours.
 	 */
 	public function getKeywordCannibalization( \WP_REST_Request $request ): \WP_REST_Response {
-		$cacheKey = 'ameverywhere_cannibalization_v1';
+		$cacheKey = 'holvek_cannibalization_v1';
 		$cached   = get_transient( $cacheKey );
 		if ( $cached !== false ) {
 			return rest_ensure_response( array_merge( $cached, array( 'cached' => true ) ) );
 		}
 
-		$api         = new \AmEveryWhere\Modules\Indexing\GoogleIndexingApi();
+		$api         = new \Holvek\WordPress\Modules\Indexing\GoogleIndexingApi();
 		$accessToken = $api->getAccessToken();
 
 		if ( ! $accessToken ) {
-			return new \WP_Error( 'gsc_not_connected', __( 'Google Search Console not connected.', 'ameverywhere' ), array( 'status' => 401 ) );
+			return new \WP_Error( 'gsc_not_connected', __( 'Google Search Console not connected.', 'holvek' ), array( 'status' => 401 ) );
 		}
 
 		$siteUrl = trailingslashit( get_option( 'siteurl' ) );
 
 		$response = wp_safe_remote_post(
 			'https://searchconsole.googleapis.com/webmasters/v3/sites/'
-			. urlencode( $siteUrl ) . '/searchAnalytics/query',
+			. rawurlencode( $siteUrl ) . '/searchAnalytics/query',
 			array(
 				'headers' => array(
 					'Authorization' => 'Bearer ' . $accessToken,
@@ -859,8 +931,8 @@ class AdminModule {
 				),
 				'body'    => wp_json_encode(
 					array(
-						'startDate'  => date( 'Y-m-d', strtotime( '-90 days' ) ),
-						'endDate'    => date( 'Y-m-d' ),
+						'startDate'  => gmdate( 'Y-m-d', strtotime( '-90 days' ) ),
+						'endDate'    => gmdate( 'Y-m-d' ),
 						'dimensions' => array( 'query', 'page' ),
 						'rowLimit'   => 500,
 						'orderBy'    => array(
@@ -939,13 +1011,20 @@ class AdminModule {
 	// ══════════════════════════════════════════════════════════════════════════
 
 	/**
-	 * GET /ameverywhere/v1/links/orphans
+	 * GET /holvek/v1/links/orphans
 	 *
 	 * Returns all published posts/pages that have zero incoming internal links
-	 * according to the wp_ameverywhere_links index table. Results cached 1 hour.
+	 * according to the wp_holvek_links index table. Results cached 1 hour.
 	 */
 	public function getOrphanPages( \WP_REST_Request $request ): \WP_REST_Response {
-		$cacheKey = 'ameverywhere_orphan_pages_v1';
+		$page    = max( 1, absint( $request->get_param( 'page' ) ) );
+		$perPage = absint( $request->get_param( 'per_page' ) );
+		if ( $perPage < 1 ) {
+			$perPage = 50;
+		}
+		$perPage = min( 100, $perPage );
+
+		$cacheKey = "holvek_orphan_pages_v2_{$page}_{$perPage}";
 		$cached   = get_transient( $cacheKey );
 		if ( $cached !== false ) {
 			return rest_ensure_response(
@@ -960,7 +1039,7 @@ class AdminModule {
 		}
 
 		global $wpdb;
-		$linksTable = $wpdb->prefix . 'ameverywhere_links';
+		$linksTable = $wpdb->prefix . 'holvek_links';
 
 		// Check if table exists using prepared statement
 		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $linksTable ) ) !== $linksTable ) {
@@ -971,24 +1050,51 @@ class AdminModule {
 					'total'        => 0,
 					'orphan_count' => 0,
 					'linked_count' => 0,
+					'page'         => $page,
+					'total_pages'  => 0,
 				)
 			);
 		}
 
-		// Fetch all distinct linked targets in a single query (O(1) in-memory lookup map)
-		$linkedUrls = $wpdb->get_col( "SELECT DISTINCT target_url FROM {$linksTable}" );
-		$linkedMap  = array_flip( $linkedUrls ?: array() );
+		$totalPosts = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN ('post', 'page')" );
 
-		// Get published posts and pages
+		// One page of published posts. The link index is read only for those URLs.
 		$posts = get_posts(
 			array(
 				'post_type'      => array( 'post', 'page' ),
 				'post_status'    => 'publish',
-				'posts_per_page' => 1000,
+				'posts_per_page' => $perPage,
+				'paged'          => $page,
 				'no_found_rows'  => true,
 				'fields'         => 'ids',
 			)
 		);
+
+		update_post_caches( $posts, 'any', false, true );
+
+		$urls = array();
+		foreach ( $posts as $postId ) {
+			$permalink = get_permalink( $postId );
+			if ( ! $permalink ) {
+				continue;
+			}
+			$urls[] = $permalink;
+			$path   = wp_make_link_relative( $permalink );
+			if ( is_string( $path ) && '' !== $path ) {
+				$urls[] = $path;
+			}
+		}
+		$urls       = array_values( array_unique( $urls ) );
+		$linkedUrls = array();
+		if ( array() !== $urls ) {
+			$placeholders = implode( ',', array_fill( 0, count( $urls ), '%s' ) );
+			// $placeholders is only a list of %s. The URL values are the prepare arguments.
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$linkedSql = "SELECT DISTINCT target_url FROM {$wpdb->prefix}holvek_links WHERE target_url IN ($placeholders)";
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$linkedUrls = $wpdb->get_col( $wpdb->prepare( $linkedSql, ...$urls ) );
+		}
+		$linkedMap = array_flip( is_array( $linkedUrls ) ? $linkedUrls : array() );
 
 		$orphans    = array();
 		$nonOrphans = 0;
@@ -1008,7 +1114,7 @@ class AdminModule {
 					'url'       => $permalink,
 					'post_type' => get_post_type( $postId ),
 					'modified'  => get_the_modified_date( 'Y-m-d', $postId ),
-					'seo_score' => (int) get_post_meta( $postId, '_ameverywhere_seo_score', true ),
+					'seo_score' => (int) get_post_meta( $postId, '_holvek_seo_score', true ),
 					'edit_url'  => get_edit_post_link( $postId, 'raw' ),
 				);
 			} else {
@@ -1021,9 +1127,12 @@ class AdminModule {
 
 		$data = array(
 			'orphans'      => $orphans,
-			'total'        => count( $posts ),
+			'total'        => $totalPosts,
 			'orphan_count' => count( $orphans ),
 			'linked_count' => $nonOrphans,
+			'page'         => $page,
+			'per_page'     => $perPage,
+			'total_pages'  => $perPage > 0 ? (int) ceil( $totalPosts / $perPage ) : 0,
 		);
 
 		set_transient( $cacheKey, $data, HOUR_IN_SECONDS );
@@ -1039,7 +1148,7 @@ class AdminModule {
 	}
 
 	/**
-	 * GET /ameverywhere/v1/links/stats
+	 * GET /holvek/v1/links/stats
 	 *
 	 * Returns site-wide internal link statistics:
 	 *   - Total indexed links
@@ -1048,7 +1157,7 @@ class AdminModule {
 	 *   - Posts with the most outgoing links
 	 */
 	public function getLinkStats( \WP_REST_Request $request ): \WP_REST_Response {
-		$cacheKey = 'ameverywhere_link_stats_v1';
+		$cacheKey = 'holvek_link_stats_v1';
 		$cached   = get_transient( $cacheKey );
 		if ( $cached !== false ) {
 			return rest_ensure_response(
@@ -1063,24 +1172,24 @@ class AdminModule {
 		}
 
 		global $wpdb;
-		$table = $wpdb->prefix . 'ameverywhere_links';
+		$table = $wpdb->prefix . 'holvek_links';
 
 		// Check if table exists
 		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
 			return rest_ensure_response(
 				array(
 					'success' => true,
-					'message' => __( 'Link index table not found. Save a post to initialize it.', 'ameverywhere' ),
+					'message' => __( 'Link index table not found. Save a post to initialize it.', 'holvek' ),
 					'stats'   => null,
 				)
 			);
 		}
 
-		$totalLinks = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+		$totalLinks = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}holvek_links" );
 
 		// Top 10 most linked-to pages
 		$topTargets = $wpdb->get_results(
-			"SELECT target_url, COUNT(*) as link_count FROM {$table}
+			"SELECT target_url, COUNT(*) as link_count FROM {$wpdb->prefix}holvek_links
              GROUP BY target_url ORDER BY link_count DESC LIMIT 10",
 			ARRAY_A
 		) ?? array();
@@ -1098,7 +1207,7 @@ class AdminModule {
 
 		// Top 10 posts by outgoing link count
 		$topSources = $wpdb->get_results(
-			"SELECT post_id, COUNT(*) as link_count FROM {$table}
+			"SELECT post_id, COUNT(*) as link_count FROM {$wpdb->prefix}holvek_links
              GROUP BY post_id ORDER BY link_count DESC LIMIT 10",
 			ARRAY_A
 		) ?? array();
@@ -1135,14 +1244,14 @@ class AdminModule {
 	// ══════════════════════════════════════════════════════════════════════════
 
 	/**
-	 * GET /ameverywhere/v1/settings/ga4
+	 * GET /holvek/v1/settings/ga4
 	 *
 	 * Returns the current GA4 configuration (measurement ID and status).
 	 */
 	public function getGa4Settings( \WP_REST_Request $request ): \WP_REST_Response {
-		$measurementId = get_option( 'ameverywhere_ga4_measurement_id', '' );
-		$propertyId    = get_option( 'ameverywhere_ga4_property_id', '' );
-		$credentialSet = ! empty( get_option( 'ameverywhere_ga4_credentials', '' ) );
+		$measurementId = get_option( 'holvek_ga4_measurement_id', '' );
+		$propertyId    = get_option( 'holvek_ga4_property_id', '' );
+		$credentialSet = ! empty( get_option( 'holvek_ga4_credentials', '' ) );
 
 		return rest_ensure_response(
 			array(
@@ -1154,20 +1263,20 @@ class AdminModule {
 	}
 
 	/**
-	 * POST /ameverywhere/v1/settings/ga4
+	 * POST /holvek/v1/settings/ga4
 	 *
 	 * Saves GA4 configuration: Measurement ID (for the frontend snippet injection),
 	 * Property ID (for the Data API), and the Service Account JSON credentials.
 	 */
-	public function updateGa4Settings( \WP_REST_Request $request ): \WP_REST_Response {
+	public function updateGa4Settings( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$params = $request->get_json_params();
 
 		if ( isset( $params['measurement_id'] ) ) {
-			update_option( 'ameverywhere_ga4_measurement_id', sanitize_text_field( $params['measurement_id'] ) );
+			update_option( 'holvek_ga4_measurement_id', sanitize_text_field( $params['measurement_id'] ) );
 		}
 
 		if ( isset( $params['property_id'] ) ) {
-			update_option( 'ameverywhere_ga4_property_id', sanitize_text_field( $params['property_id'] ) );
+			update_option( 'holvek_ga4_property_id', sanitize_text_field( $params['property_id'] ) );
 		}
 
 		if ( isset( $params['credentials'] ) && ! empty( $params['credentials'] ) ) {
@@ -1175,23 +1284,26 @@ class AdminModule {
 			// Validate that it's a valid JSON service-account credential
 			$decoded = json_decode( $jsonValue, true );
 			if ( $decoded && isset( $decoded['private_key'], $decoded['client_email'] ) ) {
-				update_option( 'ameverywhere_ga4_credentials', KeyVault::encrypt( $jsonValue ) );
+				$stored = $this->storeSecret( 'holvek_ga4_credentials', $jsonValue );
+				if ( is_wp_error( $stored ) ) {
+					return $stored;
+				}
 				// Clear cached report on credential change
-				delete_transient( 'ameverywhere_ga4_report_v1' );
+				delete_transient( 'holvek_ga4_report_v1' );
 			} else {
-				return new \WP_Error( 'invalid_credentials', __( 'The provided credentials JSON is not a valid Google Service Account file.', 'ameverywhere' ), array( 'status' => 422 ) );
+				return new \WP_Error( 'invalid_credentials', __( 'The provided credentials JSON is not a valid Google Service Account file.', 'holvek' ), array( 'status' => 422 ) );
 			}
 		}
 
 		// Inject the gtag snippet into wp_head if a Measurement ID is provided
 		// (This is toggled by saving settings — the actual inject hook is in SeoModule boot)
-		delete_transient( 'ameverywhere_ga4_report_v1' );
+		delete_transient( 'holvek_ga4_report_v1' );
 
 		return rest_ensure_response( array( 'success' => true ) );
 	}
 
 	/**
-	 * GET /ameverywhere/v1/ga4/report
+	 * GET /holvek/v1/ga4/report
 	 *
 	 * Fetches a GA4 traffic report via the Google Analytics Data API v1beta.
 	 * Returns:
@@ -1200,24 +1312,24 @@ class AdminModule {
 	 *   - Top 10 pages by sessions
 	 *   - Traffic channels breakdown
 	 *
-	 * Requires: ameverywhere_ga4_property_id and ameverywhere_ga4_credentials options.
+	 * Requires: holvek_ga4_property_id and holvek_ga4_credentials options.
 	 * Cached for 4 hours.
 	 */
 	public function getGa4Report( \WP_REST_Request $request ): \WP_REST_Response {
-		$cacheKey = 'ameverywhere_ga4_report_v1';
+		$cacheKey = 'holvek_ga4_report_v1';
 		$cached   = get_transient( $cacheKey );
 		if ( $cached !== false ) {
 			return rest_ensure_response( array_merge( $cached, array( 'cached' => true ) ) );
 		}
 
-		$propertyId  = get_option( 'ameverywhere_ga4_property_id', '' );
-		$rawCredJson = (string) get_option( 'ameverywhere_ga4_credentials', '' );
+		$propertyId  = get_option( 'holvek_ga4_property_id', '' );
+		$rawCredJson = (string) get_option( 'holvek_ga4_credentials', '' );
 		$credJson    = KeyVault::decrypt( $rawCredJson );
 
 		if ( empty( $propertyId ) || empty( $credJson ) ) {
 			return new \WP_Error(
 				'ga4_not_configured',
-				__( 'GA4 Property ID and Service Account credentials are required. Configure them under AmEveryWhere → Analytics.', 'ameverywhere' ),
+				__( 'GA4 Property ID and Service Account credentials are required. Configure them under Holvek → Analytics.', 'holvek' ),
 				array( 'status' => 401 )
 			);
 		}
@@ -1225,17 +1337,17 @@ class AdminModule {
 		// Get OAuth2 token using the GA4 service account credentials
 		$credentials = json_decode( $credJson, true );
 		if ( ! $credentials || ! isset( $credentials['private_key'], $credentials['client_email'] ) ) {
-			return new \WP_Error( 'ga4_invalid_credentials', __( 'Invalid GA4 credentials.', 'ameverywhere' ), array( 'status' => 422 ) );
+			return new \WP_Error( 'ga4_invalid_credentials', __( 'Invalid GA4 credentials.', 'holvek' ), array( 'status' => 422 ) );
 		}
 
 		// Build JWT for GA4 Data API scope
 		$accessToken = $this->getGa4AccessToken( $credentials );
 		if ( ! $accessToken ) {
-			return new \WP_Error( 'ga4_auth_failed', __( 'Failed to obtain GA4 access token. Check your Service Account credentials.', 'ameverywhere' ), array( 'status' => 401 ) );
+			return new \WP_Error( 'ga4_auth_failed', __( 'Failed to obtain GA4 access token. Check your Service Account credentials.', 'holvek' ), array( 'status' => 401 ) );
 		}
 
-		$endDate   = date( 'Y-m-d' );
-		$startDate = date( 'Y-m-d', strtotime( '-28 days' ) );
+		$endDate   = gmdate( 'Y-m-d' );
+		$startDate = gmdate( 'Y-m-d', strtotime( '-28 days' ) );
 
 		$apiBase = "https://analyticsdata.googleapis.com/v1beta/properties/{$propertyId}:runReport";
 
@@ -1401,13 +1513,18 @@ class AdminModule {
 		return rest_ensure_response( $result );
 	}
 
+	private function base64UrlEncode( string $data ): string {
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Base64 is the token wire encoding, not code obfuscation.
+		return rtrim( strtr( base64_encode( $data ), '+/', '-_' ), '=' );
+	}
+
 	/**
 	 * Build a short-lived OAuth2 access token for the GA4 Data API using
 	 * a Service Account JSON credential (RS256 JWT signing).
 	 * Reuses a 55-minute transient to avoid signing a new JWT on every request.
 	 */
 	private function getGa4AccessToken( array $credentials ): ?string {
-		$transientKey = 'ameverywhere_ga4_token';
+		$transientKey = 'holvek_ga4_token';
 		$token        = get_transient( $transientKey );
 		if ( $token ) {
 			return $token;
@@ -1416,7 +1533,7 @@ class AdminModule {
 		$scope = 'https://www.googleapis.com/auth/analytics.readonly';
 		$now   = time();
 
-		$header  = base64_encode(
+		$header  = $this->base64UrlEncode(
 			wp_json_encode(
 				array(
 					'alg' => 'RS256',
@@ -1424,7 +1541,7 @@ class AdminModule {
 				)
 			)
 		);
-		$payload = base64_encode(
+		$payload = $this->base64UrlEncode(
 			wp_json_encode(
 				array(
 					'iss'   => $credentials['client_email'],
@@ -1447,7 +1564,7 @@ class AdminModule {
 			return null;
 		}
 
-		$jwt = $toSign . '.' . base64_encode( $signature );
+		$jwt = $toSign . '.' . $this->base64UrlEncode( $signature );
 
 		$response = wp_safe_remote_post(
 			'https://oauth2.googleapis.com/token',
@@ -1478,128 +1595,69 @@ class AdminModule {
 	// ══════════════════════════════════════════════════════════════════════════
 
 	/**
-	 * GET /ameverywhere/v1/settings/export
+	 * Persist a secret only as ciphertext.
 	 *
-	 * Returns a complete JSON snapshot of all AmEveryWhere settings.
-	 * Sensitive values (private keys, service account JSON) are included
-	 * because this is an authenticated admin-only endpoint — the admin can
-	 * choose to redact before sharing the file.
+	 * An empty value clears the option. A failed encrypt leaves the stored value unchanged.
+	 *
+	 * @return true|\WP_Error
 	 */
-	public function exportSettings( \WP_REST_Request $request ): \WP_REST_Response {
-		$optionKeys = array(
-			'ameverywhere_google_indexing_key',
-			'ameverywhere_indexnow_key',
-			'ameverywhere_auto_index',
-			'ameverywhere_enable_google_indexing_api',
-			'ameverywhere_google_verify',
-			'ameverywhere_bing_verify',
-			'ameverywhere_yandex_verify',
-			'ameverywhere_pinterest_verify',
-			'ameverywhere_rss_before_content',
-			'ameverywhere_rss_after_content',
-			'ameverywhere_breadcrumb_separator',
-			'ameverywhere_breadcrumb_home_label',
-			'ameverywhere_breadcrumb_auto_insert',
-			'ameverywhere_sitemap_exclude_post_types',
-			'ameverywhere_sitemap_exclude_posts',
-			'ameverywhere_ai_provider',
-			'ameverywhere_openai_key',
-			'ameverywhere_anthropic_key',
-			'ameverywhere_ollama_url',
-			'ameverywhere_default_share_image',
-			'ameverywhere_ga4_measurement_id',
-			'ameverywhere_ga4_property_id',
-			// Intentionally exclude ameverywhere_ga4_credentials & google_indexing_key JSON
-			// for security — they contain private keys.
-			'ameverywhere_html_sitemap_post_types',
-			'ameverywhere_html_sitemap_exclude_ids',
-			'ameverywhere_html_sitemap_depth',
-			'ameverywhere_html_sitemap_order',
-			'ameverywhere_html_sitemap_show_count',
-			'ameverywhere_psi_key',
-		);
-
-		$data = array(
-			'_version'  => '1.0',
-			'_plugin'   => 'ameverywhere',
-			'_exported' => date( 'c' ),
-			'_site_url' => get_option( 'siteurl' ),
-			'settings'  => array(),
-		);
-
-		foreach ( $optionKeys as $key ) {
-			$data['settings'][ $key ] = get_option( $key, '' );
+	private function storeSecret( string $option, string $plaintext ): true|\WP_Error {
+		if ( $plaintext === '' ) {
+			update_option( $option, '', false );
+			return true;
 		}
 
+		$encrypted = KeyVault::encrypt( $plaintext );
+		if ( is_wp_error( $encrypted ) ) {
+			return $encrypted;
+		}
+
+		if ( ! is_string( $encrypted ) || ! KeyVault::isCiphertext( $encrypted ) ) {
+			return new \WP_Error(
+				'holvek_encryption_failed',
+				__( 'Holvek could not encrypt this secret. The value was not saved.', 'holvek' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		update_option( $option, $encrypted, false );
+		return true;
+	}
+
+	/**
+	 * GET /holvek/v1/settings/export
+	 *
+	 * Public settings only. Secrets are named in `_redacted` and their values
+	 * are omitted. A full database copy can still decrypt stored secrets.
+	 */
+	public function exportSettings( \WP_REST_Request $request ): \WP_REST_Response {
 		return rest_ensure_response(
 			array(
 				'success' => true,
-				'data'    => $data,
+				'data'    => SettingsTransfer::exportPayload(),
 			)
 		);
 	}
 
 	/**
-	 * POST /ameverywhere/v1/settings/import
+	 * POST /holvek/v1/settings/import
 	 *
-	 * Accepts a JSON payload previously exported via /settings/export.
-	 * Validates the structure before writing anything.
-	 * Silently skips unknown keys for forward compatibility.
+	 * Writes allow-listed settings after each value is checked.
+	 * Unknown keys reject the file before anything is saved.
+	 * Known secrets are ignored and left as they are on this site.
 	 */
-	public function importSettings( \WP_REST_Request $request ): \WP_REST_Response {
+	public function importSettings( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$params = $request->get_json_params();
-
-		if ( empty( $params['settings'] ) || ! is_array( $params['settings'] ) ) {
-			return new \WP_Error( 'invalid_payload', __( 'Missing or malformed settings object.', 'ameverywhere' ), array( 'status' => 422 ) );
+		if ( ! is_array( $params ) ) {
+			$params = array();
 		}
 
-		if ( ( $params['_plugin'] ?? '' ) !== 'ameverywhere' ) {
-			return new \WP_Error( 'wrong_plugin', __( 'This settings file was not exported from AmEveryWhere.', 'ameverywhere' ), array( 'status' => 422 ) );
+		$result = SettingsTransfer::importPayload( $params );
+		if ( is_wp_error( $result ) ) {
+			return $result;
 		}
 
-		// Whitelist — only import known, safe options
-		$allowed = array(
-			'ameverywhere_auto_index',
-			'ameverywhere_enable_google_indexing_api',
-			'ameverywhere_google_verify',
-			'ameverywhere_bing_verify',
-			'ameverywhere_yandex_verify',
-			'ameverywhere_pinterest_verify',
-			'ameverywhere_rss_before_content',
-			'ameverywhere_rss_after_content',
-			'ameverywhere_breadcrumb_separator',
-			'ameverywhere_breadcrumb_home_label',
-			'ameverywhere_breadcrumb_auto_insert',
-			'ameverywhere_sitemap_exclude_post_types',
-			'ameverywhere_sitemap_exclude_posts',
-			'ameverywhere_ai_provider',
-			'ameverywhere_ollama_url',
-			'ameverywhere_default_share_image',
-			'ameverywhere_ga4_measurement_id',
-			'ameverywhere_ga4_property_id',
-			'ameverywhere_html_sitemap_post_types',
-			'ameverywhere_html_sitemap_exclude_ids',
-			'ameverywhere_html_sitemap_depth',
-			'ameverywhere_html_sitemap_order',
-			'ameverywhere_html_sitemap_show_count',
-		);
-
-		$imported = 0;
-		foreach ( $params['settings'] as $key => $value ) {
-			if ( ! in_array( $key, $allowed, true ) ) {
-				continue;
-			}
-			update_option( sanitize_key( $key ), sanitize_text_field( (string) $value ) );
-			++$imported;
-		}
-
-		return rest_ensure_response(
-			array(
-				'success'  => true,
-				'imported' => $imported,
-				'message'  => "Imported {$imported} settings successfully. API keys and credentials are excluded from import for security.",
-			)
-		);
+		return rest_ensure_response( $result );
 	}
 
 	// ══════════════════════════════════════════════════════════════════════════
@@ -1607,50 +1665,50 @@ class AdminModule {
 	// ══════════════════════════════════════════════════════════════════════════
 
 	/**
-	 * GET /ameverywhere/v1/html-sitemap
+	 * GET /holvek/v1/html-sitemap
 	 * Returns current HTML sitemap configuration.
 	 */
 	public function getHtmlSitemapSettings( \WP_REST_Request $request ): \WP_REST_Response {
 		return rest_ensure_response(
 			array(
-				'post_types'  => get_option( 'ameverywhere_html_sitemap_post_types', 'post,page' ),
-				'exclude_ids' => get_option( 'ameverywhere_html_sitemap_exclude_ids', '' ),
-				'depth'       => (int) get_option( 'ameverywhere_html_sitemap_depth', 0 ),
-				'order'       => get_option( 'ameverywhere_html_sitemap_order', 'menu_order' ),
-				'show_count'  => get_option( 'ameverywhere_html_sitemap_show_count', 'no' ) === 'yes',
-				'shortcode'   => '[ameverywhere_sitemap]',
+				'post_types'  => get_option( 'holvek_html_sitemap_post_types', 'post,page' ),
+				'exclude_ids' => get_option( 'holvek_html_sitemap_exclude_ids', '' ),
+				'depth'       => (int) get_option( 'holvek_html_sitemap_depth', 0 ),
+				'order'       => get_option( 'holvek_html_sitemap_order', 'menu_order' ),
+				'show_count'  => get_option( 'holvek_html_sitemap_show_count', 'no' ) === 'yes',
+				'shortcode'   => '[holvek_sitemap]',
 			)
 		);
 	}
 
 	/**
-	 * POST /ameverywhere/v1/html-sitemap
+	 * POST /holvek/v1/html-sitemap
 	 * Save HTML sitemap configuration.
 	 */
 	public function saveHtmlSitemapSettings( \WP_REST_Request $request ): \WP_REST_Response {
 		$params = $request->get_json_params();
 
-		update_option( 'ameverywhere_html_sitemap_post_types', sanitize_text_field( $params['post_types'] ?? 'post,page' ) );
-		update_option( 'ameverywhere_html_sitemap_exclude_ids', sanitize_text_field( $params['exclude_ids'] ?? '' ) );
-		update_option( 'ameverywhere_html_sitemap_depth', absint( $params['depth'] ?? 0 ) );
-		update_option( 'ameverywhere_html_sitemap_order', sanitize_key( $params['order'] ?? 'menu_order' ) );
-		update_option( 'ameverywhere_html_sitemap_show_count', ! empty( $params['show_count'] ) ? 'yes' : 'no' );
+		update_option( 'holvek_html_sitemap_post_types', sanitize_text_field( $params['post_types'] ?? 'post,page' ) );
+		update_option( 'holvek_html_sitemap_exclude_ids', sanitize_text_field( $params['exclude_ids'] ?? '' ) );
+		update_option( 'holvek_html_sitemap_depth', absint( $params['depth'] ?? 0 ) );
+		update_option( 'holvek_html_sitemap_order', sanitize_key( $params['order'] ?? 'menu_order' ) );
+		update_option( 'holvek_html_sitemap_show_count', ! empty( $params['show_count'] ) ? 'yes' : 'no' );
 
 		return rest_ensure_response( array( 'success' => true ) );
 	}
 
 	/**
-	 * GET /ameverywhere/v1/html-sitemap/preview
+	 * GET /holvek/v1/html-sitemap/preview
 	 *
 	 * Returns a structured tree of published posts grouped by post type
 	 * according to the current HTML sitemap configuration.
-	 * Used by the admin UI preview and also powers the [ameverywhere_sitemap] shortcode.
+	 * Used by the admin UI preview and also powers the [holvek_sitemap] shortcode.
 	 */
 	public function previewHtmlSitemap( \WP_REST_Request $request ): \WP_REST_Response {
-		$postTypesRaw = get_option( 'ameverywhere_html_sitemap_post_types', 'post,page' );
-		$excludeIds   = array_filter( array_map( 'absint', explode( ',', get_option( 'ameverywhere_html_sitemap_exclude_ids', '' ) ) ) );
-		$order        = get_option( 'ameverywhere_html_sitemap_order', 'menu_order' );
-		$showCount    = get_option( 'ameverywhere_html_sitemap_show_count', 'no' ) === 'yes';
+		$postTypesRaw = get_option( 'holvek_html_sitemap_post_types', 'post,page' );
+		$excludeIds   = array_filter( array_map( 'absint', explode( ',', get_option( 'holvek_html_sitemap_exclude_ids', '' ) ) ) );
+		$order        = get_option( 'holvek_html_sitemap_order', 'menu_order' );
+		$showCount    = get_option( 'holvek_html_sitemap_show_count', 'no' ) === 'yes';
 
 		$postTypes = array_filter( array_map( 'trim', explode( ',', $postTypesRaw ) ) );
 		if ( empty( $postTypes ) ) {

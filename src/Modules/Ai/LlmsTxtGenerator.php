@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Ai;
+namespace Holvek\WordPress\Modules\Ai;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -22,10 +22,10 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class LlmsTxtGenerator {
 
-	private const CACHE_TRANSIENT  = 'ameverywhere_llms_txt_content';
-	private const CONFIG_OPTION    = 'ameverywhere_llms_txt_config';
-	private const OVERRIDE_OPTION  = 'ameverywhere_llms_txt_manual_override';
-	private const OVERRIDE_CONTENT = 'ameverywhere_llms_txt_manual_content';
+	private const CACHE_TRANSIENT  = 'holvek_llms_txt_content';
+	private const CONFIG_OPTION    = 'holvek_llms_txt_config';
+	private const OVERRIDE_OPTION  = 'holvek_llms_txt_manual_override';
+	private const OVERRIDE_CONTENT = 'holvek_llms_txt_manual_content';
 
 	public function boot(): void {
 		add_action( 'init', array( $this, 'registerRewriteRule' ) );
@@ -34,7 +34,7 @@ class LlmsTxtGenerator {
 
 		// BL-033: Cache invalidation hooks
 		add_action( 'save_post', array( $this, 'invalidateCache' ) );
-		add_action( 'update_option_ameverywhere_llms_txt_config', array( $this, 'invalidateCache' ) );
+		add_action( 'update_option_holvek_llms_txt_config', array( $this, 'invalidateCache' ) );
 	}
 
 	public function invalidateCache(): void {
@@ -42,16 +42,16 @@ class LlmsTxtGenerator {
 	}
 
 	public function registerRewriteRule(): void {
-		add_rewrite_rule( '^llms\\.txt$', 'index.php?ameverywhere_llms_txt=1', 'top' );
+		add_rewrite_rule( '^llms\\.txt$', 'index.php?holvek_llms_txt=1', 'top' );
 	}
 
 	public function registerQueryVar( array $vars ): array {
-		$vars[] = 'ameverywhere_llms_txt';
+		$vars[] = 'holvek_llms_txt';
 		return $vars;
 	}
 
 	public function serveFile(): void {
-		if ( ! get_query_var( 'ameverywhere_llms_txt' ) ) {
+		if ( ! get_query_var( 'holvek_llms_txt' ) ) {
 			return;
 		}
 
@@ -60,6 +60,7 @@ class LlmsTxtGenerator {
 
 		// BL-033: manual override mode
 		if ( get_option( self::OVERRIDE_OPTION, false ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- llms.txt is a text/plain document.
 			echo (string) get_option( self::OVERRIDE_CONTENT, '' );
 			exit;
 		}
@@ -67,6 +68,7 @@ class LlmsTxtGenerator {
 		// Try cache
 		$cached = get_transient( self::CACHE_TRANSIENT );
 		if ( $cached !== false ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- llms.txt is a text/plain document.
 			echo $cached;
 			exit;
 		}
@@ -75,6 +77,7 @@ class LlmsTxtGenerator {
 		$content = $this->buildContent( $config );
 
 		set_transient( self::CACHE_TRANSIENT, $content, 12 * HOUR_IN_SECONDS );
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- llms.txt is a text/plain document.
 		echo $content;
 		exit;
 	}
@@ -119,7 +122,7 @@ class LlmsTxtGenerator {
 
 		// Structured data link
 		$output .= "## Structured Data\n\n";
-		$output .= "- Schema Map: {$siteUrl}/wp-json/ameverywhere/v1/schemamap\n\n";
+		$output .= "- Schema Map: {$siteUrl}/wp-json/holvek/v1/schemamap\n\n";
 
 		// BL-033: Cornerstone content (auto-populated)
 		$output      .= "## Cornerstone Content\n\n";
@@ -132,7 +135,7 @@ class LlmsTxtGenerator {
 				'order'          => 'DESC',
 				'meta_query'     => array(
 					array(
-						'key'   => '_ameverywhere_is_cornerstone',
+						'key'   => '_holvek_is_cornerstone',
 						'value' => 'yes',
 					),
 				),
@@ -168,7 +171,7 @@ class LlmsTxtGenerator {
 				'posts_per_page' => -1,
 				'meta_query'     => array(
 					array(
-						'key'   => '_ameverywhere_ai_training_allow',
+						'key'   => '_holvek_ai_training_allow',
 						'value' => 'no',
 					),
 				),
@@ -192,7 +195,7 @@ class LlmsTxtGenerator {
 				'posts_per_page' => -1,
 				'meta_query'     => array(
 					array(
-						'key'   => '_ameverywhere_ai_training_allow',
+						'key'   => '_holvek_ai_training_allow',
 						'value' => 'yes',
 					),
 				),
@@ -220,7 +223,7 @@ class LlmsTxtGenerator {
 		$adminCap = fn() => current_user_can( 'manage_seo' ) || current_user_can( 'manage_options' );
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/llms-txt/config',
 			array(
 				array(
@@ -238,7 +241,7 @@ class LlmsTxtGenerator {
 
 		// BL-033: preview endpoint
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/ai/llms-preview',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,

@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Seo;
+namespace Holvek\WordPress\Modules\Seo;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -28,8 +28,8 @@ class RssOptimizations {
 			return $content;
 		}
 
-		$before = get_option( 'ameverywhere_rss_before_content', '' );
-		$after  = get_option( 'ameverywhere_rss_after_content', '' );
+		$before = get_option( 'holvek_rss_before_content', '' );
+		$after  = get_option( 'holvek_rss_after_content', '' );
 
 		// If both are empty, apply premium default attribution to prevent site scraping
 		if ( empty( $before ) && empty( $after ) ) {

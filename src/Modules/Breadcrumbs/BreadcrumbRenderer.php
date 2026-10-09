@@ -1,15 +1,17 @@
 <?php
 
-namespace AmEveryWhere\Modules\Breadcrumbs;
+namespace Holvek\WordPress\Modules\Breadcrumbs;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+use Holvek\WordPress\Modules\Schema\JsonLd;
+
 /**
  * Renders front-end breadcrumb navigation and registers:
- * - Shortcode: [ameverywhere_breadcrumbs]
- * - PHP function: ameverywhere_breadcrumbs()
+ * - Shortcode: [holvek_breadcrumbs]
+ * - PHP function: holvek_breadcrumbs()
  *
  * Also outputs BreadcrumbList JSON-LD schema automatically.
  */
@@ -19,18 +21,18 @@ class BreadcrumbRenderer {
 	private string $homeLabel;
 
 	public function __construct() {
-		$this->separator = get_option( 'ameverywhere_breadcrumb_separator', '›' );
-		$this->homeLabel = get_option( 'ameverywhere_breadcrumb_home_label', 'Home' );
+		$this->separator = get_option( 'holvek_breadcrumb_separator', '›' );
+		$this->homeLabel = get_option( 'holvek_breadcrumb_home_label', 'Home' );
 	}
 
 	/**
 	 * Register WordPress hooks.
 	 */
 	public function register(): void {
-		add_shortcode( 'ameverywhere_breadcrumbs', array( $this, 'renderShortcode' ) );
+		add_shortcode( 'holvek_breadcrumbs', array( $this, 'renderShortcode' ) );
 		add_action( 'wp_footer', array( $this, 'outputSchema' ) );
 
-		$autoInsert = get_option( 'ameverywhere_breadcrumb_auto_insert', 'none' );
+		$autoInsert = get_option( 'holvek_breadcrumb_auto_insert', 'none' );
 		if ( $autoInsert === 'before_content' ) {
 			add_filter( 'the_content', array( $this, 'autoInsertBeforeContent' ), 9 );
 		}
@@ -61,85 +63,79 @@ class BreadcrumbRenderer {
 			return '';
 		}
 
-		$items = $this->buildTrail();
+		$items = $this->items();
 		if ( empty( $items ) ) {
 			return '';
 		}
 
-		$sep   = '<span class="ameverywhere-breadcrumb-sep" aria-hidden="true"> ' . esc_html( $this->separator ) . ' </span>';
+		$sep   = '<span class="holvek-breadcrumb-sep" aria-hidden="true"> ' . esc_html( $this->separator ) . ' </span>';
 		$parts = array();
 
 		foreach ( $items as $i => $item ) {
 			$isLast = ( $i === count( $items ) - 1 );
 
 			if ( $isLast ) {
-				$parts[] = '<span class="ameverywhere-breadcrumb-current" aria-current="page">' . esc_html( $item['name'] ) . '</span>';
+				$parts[] = '<span class="holvek-breadcrumb-current" aria-current="page">' . esc_html( $item['name'] ) . '</span>';
 			} else {
-				$parts[] = '<a href="' . esc_url( $item['url'] ) . '" class="ameverywhere-breadcrumb-link">' . esc_html( $item['name'] ) . '</a>';
+				$parts[] = '<a href="' . esc_url( $item['url'] ) . '" class="holvek-breadcrumb-link">' . esc_html( $item['name'] ) . '</a>';
 			}
 		}
 
-		$html  = '<nav class="ameverywhere-breadcrumbs" aria-label="Breadcrumb">';
-		$html .= '<ol class="ameverywhere-breadcrumb-list">';
+		$html  = '<nav class="holvek-breadcrumbs" aria-label="Breadcrumb">';
+		$html .= '<ol class="holvek-breadcrumb-list">';
 		$html .= '<li>' . implode( '</li><li>' . $sep, $parts ) . '</li>';
 		$html .= '</ol>';
 		$html .= '</nav>';
 
 		// Inline minimal styles
-		$html .= '<style>.ameverywhere-breadcrumbs{font-size:14px;line-height:1.4;margin:8px 0 16px;color:#64748b}.ameverywhere-breadcrumb-list{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:0}.ameverywhere-breadcrumb-list li{display:inline-flex;align-items:center}.ameverywhere-breadcrumb-link{color:#3b82f6;text-decoration:none}.ameverywhere-breadcrumb-link:hover{text-decoration:underline}.ameverywhere-breadcrumb-sep{margin:0 6px;color:#94a3b8}.ameverywhere-breadcrumb-current{color:#334155;font-weight:500}</style>';
+		$html .= '<style>.holvek-breadcrumbs{font-size:14px;line-height:1.4;margin:8px 0 16px;color:#64748b}.holvek-breadcrumb-list{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:0}.holvek-breadcrumb-list li{display:inline-flex;align-items:center}.holvek-breadcrumb-link{color:#3b82f6;text-decoration:none}.holvek-breadcrumb-link:hover{text-decoration:underline}.holvek-breadcrumb-sep{margin:0 6px;color:#94a3b8}.holvek-breadcrumb-current{color:#334155;font-weight:500}</style>';
 
 		return $html;
 	}
 
 	/**
+	 * Visible trail for the current request.
+	 *
+	 * @return array<int, array{name:string,url:string}>
+	 */
+	public function items(): array {
+		return $this->buildTrail();
+	}
+
+	/**
+	 * Visible trail for one post. Schema uses this same list.
+	 *
+	 * @return array<int, array{name:string,url:string}>
+	 */
+	public function itemsForPost( int $postId ): array {
+		$post = get_post( $postId );
+		if ( ! $post instanceof \WP_Post ) {
+			return array();
+		}
+		return $this->trailForPost( $post );
+	}
+
+	/**
 	 * Build the breadcrumb trail as an array of ['name' => ..., 'url' => ...].
+	 *
+	 * @return array<int, array{name:string,url:string}>
 	 */
 	private function buildTrail(): array {
-		$trail = array();
-
-		// Home
-		$trail[] = array(
-			'name' => $this->homeLabel,
-			'url'  => home_url( '/' ),
-		);
-
 		if ( is_singular() ) {
 			$post = get_queried_object();
-
-			// Add category for posts
-			if ( $post->post_type === 'post' ) {
-				$categories = get_the_category( $post->ID );
-				if ( ! empty( $categories ) ) {
-					$cat = $categories[0];
-					// Add parent categories
-					$parents = $this->getCategoryParents( $cat );
-					$trail   = array_merge( $trail, $parents );
-
-					$trail[] = array(
-						'name' => $cat->name,
-						'url'  => get_category_link( $cat->term_id ),
-					);
-				}
+			if ( $post instanceof \WP_Post ) {
+				return $this->trailForPost( $post );
 			}
+		}
 
-			// For hierarchical post types (pages), add ancestors
-			if ( is_post_type_hierarchical( $post->post_type ) ) {
-				$ancestors = get_post_ancestors( $post->ID );
-				$ancestors = array_reverse( $ancestors );
-				foreach ( $ancestors as $ancestorId ) {
-					$trail[] = array(
-						'name' => get_the_title( $ancestorId ),
-						'url'  => get_permalink( $ancestorId ),
-					);
-				}
-			}
+		$trail = array(
+			array(
+				'name' => $this->homeLabel,
+				'url'  => home_url( '/' ),
+			),
+		);
 
-			// Current item
-			$trail[] = array(
-				'name' => get_the_title( $post->ID ),
-				'url'  => get_permalink( $post->ID ),
-			);
-		} elseif ( is_category() || is_tag() || is_tax() ) {
+		if ( is_category() || is_tag() || is_tax() ) {
 			$term = get_queried_object();
 
 			if ( is_category() ) {
@@ -172,6 +168,48 @@ class BreadcrumbRenderer {
 	}
 
 	/**
+	 * @return array<int, array{name:string,url:string}>
+	 */
+	private function trailForPost( \WP_Post $post ): array {
+		$trail = array(
+			array(
+				'name' => $this->homeLabel,
+				'url'  => home_url( '/' ),
+			),
+		);
+
+		if ( $post->post_type === 'post' ) {
+			$categories = get_the_category( $post->ID );
+			if ( ! empty( $categories ) ) {
+				$cat     = $categories[0];
+				$parents = $this->getCategoryParents( $cat );
+				$trail   = array_merge( $trail, $parents );
+				$trail[] = array(
+					'name' => $cat->name,
+					'url'  => get_category_link( $cat->term_id ),
+				);
+			}
+		}
+
+		if ( function_exists( 'is_post_type_hierarchical' ) && is_post_type_hierarchical( $post->post_type ) && function_exists( 'get_post_ancestors' ) ) {
+			$ancestors = array_reverse( get_post_ancestors( $post->ID ) );
+			foreach ( $ancestors as $ancestorId ) {
+				$trail[] = array(
+					'name' => get_the_title( $ancestorId ),
+					'url'  => get_permalink( $ancestorId ),
+				);
+			}
+		}
+
+		$trail[] = array(
+			'name' => get_the_title( $post->ID ),
+			'url'  => get_permalink( $post->ID ),
+		);
+
+		return $trail;
+	}
+
+	/**
 	 * Get parent categories recursively.
 	 */
 	private function getCategoryParents( $category ): array {
@@ -199,7 +237,7 @@ class BreadcrumbRenderer {
 			return;
 		}
 
-		$trail = $this->buildTrail();
+		$trail = $this->items();
 		if ( count( $trail ) < 2 ) {
 			return;
 		}
@@ -220,6 +258,6 @@ class BreadcrumbRenderer {
 			'itemListElement' => $items,
 		);
 
-		echo '<script type="application/ld+json">' . wp_json_encode( $schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) . '</script>' . "\n";
+		JsonLd::printScript( $schema );
 	}
 }

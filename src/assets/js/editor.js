@@ -1,10 +1,10 @@
-const amEveryWhereEditorConfig = (typeof window !== 'undefined' && window.amEveryWhereEditorConfig) || {};
+const holvekEditorConfig = (typeof window !== 'undefined' && window.holvekEditorConfig) || {};
 import { registerPlugin } from '@wordpress/plugins';
 import { PluginSidebar, PluginSidebarMoreMenuItem } from '@wordpress/edit-post';
 import { PanelBody, TextControl, TextareaControl, ToggleControl, SelectControl, Button, Notice, Spinner } from '@wordpress/components';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useState, useMemo, useEffect, useCallback } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf, _n } from '@wordpress/i18n';
 import { analyzeReadability, stripHtml } from './lib/readability';
 import { calculateSeoScore } from './lib/seo-score';
 
@@ -42,19 +42,19 @@ const FaqEditor = ({ value, onChange }) => {
                         type="button"
                         onClick={() => removeItem(idx)}
                         style={{ position: 'absolute', top: '4px', right: '4px', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold' }}
-                        title="Remove question"
+                        title={__('Remove question', 'holvek')}
                     >
                         ×
                     </button>
                     <div style={{ marginBottom: '6px', marginRight: '16px' }}>
                         <TextControl
-                            label={`Question ${idx + 1}`}
+                            label={sprintf(__('Question %d', 'holvek'), idx + 1)}
                             value={item.question}
                             onChange={(val) => updateItem(idx, 'question', val)}
                         />
                     </div>
                     <TextareaControl
-                        label="Answer"
+                        label={__('Answer', 'holvek')}
                         value={item.answer}
                         onChange={(val) => updateItem(idx, 'answer', val)}
                         rows={2}
@@ -62,7 +62,7 @@ const FaqEditor = ({ value, onChange }) => {
                 </div>
             ))}
             <Button isSecondary onClick={addItem} style={{ alignSelf: 'start' }}>
-                + Add FAQ Question
+                {__('+ Add FAQ Question', 'holvek')}
             </Button>
         </div>
     );
@@ -96,27 +96,27 @@ const HowToStepsEditor = ({ value, onChange }) => {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
-            <strong>HowTo Steps</strong>
+            <strong>{__('HowTo Steps', 'holvek')}</strong>
             {list.map((item, idx) => (
                 <div key={idx} style={{ padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px', background: '#fff', position: 'relative' }}>
                     <button
                         type="button"
                         onClick={() => removeItem(idx)}
                         style={{ position: 'absolute', top: '4px', right: '4px', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold' }}
-                        title="Remove step"
+                        title={__('Remove step', 'holvek')}
                     >
                         ×
                     </button>
                     <div style={{ marginBottom: '6px', marginRight: '16px' }}>
                         <TextControl
-                            label={`Step ${idx + 1} Name`}
+                            label={sprintf(__('Step %d Name', 'holvek'), idx + 1)}
                             value={item.name}
-                            placeholder="e.g. Prep the soil"
+                            placeholder={__('e.g. Prep the soil', 'holvek')}
                             onChange={(val) => updateItem(idx, 'name', val)}
                         />
                     </div>
                     <TextareaControl
-                        label="Step Instructions"
+                        label={__('Step Instructions', 'holvek')}
                         value={item.text}
                         onChange={(val) => updateItem(idx, 'text', val)}
                         rows={2}
@@ -124,7 +124,7 @@ const HowToStepsEditor = ({ value, onChange }) => {
                 </div>
             ))}
             <Button isSecondary onClick={addItem} style={{ alignSelf: 'start' }}>
-                + Add HowTo Step
+                {__('+ Add HowTo Step', 'holvek')}
             </Button>
         </div>
     );
@@ -159,7 +159,7 @@ const CustomPropertyTreeBuilder = ({ value, onChange }) => {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>
-                Add custom key-value pairs to extend your schema output. Key names should follow schema.org vocabulary (e.g., "brand", "color", "isbn").
+                {__('Add custom key-value pairs to extend your schema output. Key names should follow schema.org vocabulary (e.g., "brand", "color", "isbn").', 'holvek')}
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -168,7 +168,7 @@ const CustomPropertyTreeBuilder = ({ value, onChange }) => {
                         <div style={{ flex: 1 }}>
                             <input
                                 type="text"
-                                placeholder="Key (e.g. brand)"
+                                placeholder={__('Key (e.g. brand)', 'holvek')}
                                 value={item.key}
                                 onChange={(e) => updateItem(idx, 'key', e.target.value)}
                                 style={{ width: '100%', fontSize: '12px', padding: '4px 6px', border: '1px solid #e2e8f0', borderRadius: '3px' }}
@@ -177,7 +177,7 @@ const CustomPropertyTreeBuilder = ({ value, onChange }) => {
                         <div style={{ flex: 1 }}>
                             <input
                                 type="text"
-                                placeholder="Value (e.g. Nike)"
+                                placeholder={__('Value (e.g. Nike)', 'holvek')}
                                 value={item.value}
                                 onChange={(e) => updateItem(idx, 'value', e.target.value)}
                                 style={{ width: '100%', fontSize: '12px', padding: '4px 6px', border: '1px solid #e2e8f0', borderRadius: '3px' }}
@@ -187,7 +187,7 @@ const CustomPropertyTreeBuilder = ({ value, onChange }) => {
                             type="button"
                             onClick={() => removeItem(idx)}
                             style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', padding: '0 4px' }}
-                            title="Remove property"
+                            title={__('Remove property', 'holvek')}
                         >
                             ×
                         </button>
@@ -196,13 +196,13 @@ const CustomPropertyTreeBuilder = ({ value, onChange }) => {
             </div>
 
             <Button isSecondary onClick={addItem} style={{ alignSelf: 'start', fontSize: '12px' }}>
-                + Add Custom Property
+                {__('+ Add Custom Property', 'holvek')}
             </Button>
 
             {/* Visual Custom Property Tree Graph Preview */}
             <div style={{ marginTop: '12px', background: '#0f172a', borderRadius: '6px', padding: '12px', color: '#38bdf8', fontFamily: 'monospace', fontSize: '11px', border: '1px solid #1e293b' }}>
                 <div style={{ color: '#94a3b8', fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '8px', borderBottom: '1px solid #334155', paddingBottom: '4px' }}>
-                    Visual Schema Property Graph
+                    {__('Visual Schema Property Graph', 'holvek')}
                 </div>
                 <div>
                     <span style={{ color: '#f43f5e' }}>{"{"}</span>
@@ -262,27 +262,27 @@ const RecipeInstructionsEditor = ({ value, onChange }) => {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
-            <strong>Recipe Instructions</strong>
+            <strong>{__('Recipe Instructions', 'holvek')}</strong>
             {list.map((item, idx) => (
                 <div key={idx} style={{ padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px', background: '#fff', position: 'relative' }}>
                     <button
                         type="button"
                         onClick={() => removeItem(idx)}
                         style={{ position: 'absolute', top: '4px', right: '4px', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold' }}
-                        title="Remove step"
+                        title={__('Remove step', 'holvek')}
                     >
                         ×
                     </button>
                     <div style={{ marginBottom: '6px', marginRight: '16px' }}>
                         <TextControl
-                            label={`Step ${idx + 1} Name`}
+                            label={sprintf(__('Step %d Name', 'holvek'), idx + 1)}
                             value={item.name}
-                            placeholder="e.g. Mix the ingredients"
+                            placeholder={__('e.g. Mix the ingredients', 'holvek')}
                             onChange={(val) => updateItem(idx, 'name', val)}
                         />
                     </div>
                     <TextareaControl
-                        label="Step Instructions"
+                        label={__('Step Instructions', 'holvek')}
                         value={item.text}
                         onChange={(val) => updateItem(idx, 'text', val)}
                         rows={2}
@@ -290,7 +290,7 @@ const RecipeInstructionsEditor = ({ value, onChange }) => {
                 </div>
             ))}
             <Button isSecondary onClick={addItem} style={{ alignSelf: 'start' }}>
-                + Add Recipe Step
+                {__('+ Add Recipe Step', 'holvek')}
             </Button>
         </div>
     );
@@ -328,7 +328,7 @@ const RecipeSerpPreview = ({ name, url, image, calories, prepTime, cookTime, ing
                         WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
                         cursor: 'pointer', marginBottom: '8px'
                     }}>
-                        {name || 'Your Delicious Recipe Name'}
+                        {name || __('Your Delicious Recipe Name', 'holvek')}
                     </div>
                     
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px' }}>
@@ -390,7 +390,7 @@ const EventSerpPreview = ({ name, url, startDate, venue, address, performer, pri
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         cursor: 'pointer', marginBottom: '4px'
                     }}>
-                        {name || 'Amazing Live Event'}
+                        {name || __('Amazing Live Event', 'holvek')}
                     </div>
                     
                     <div style={{ fontSize: '13px', color: '#4d5156', lineHeight: '1.4' }}>
@@ -430,7 +430,7 @@ const ScoreRing = ({ score, color, label, size = 72 }) => {
                 </text>
             </svg>
             <div>
-                <div style={{ fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>SEO Score</div>
+                <div style={{ fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>{__('SEO Score', 'holvek')}</div>
                 <div style={{ fontSize: '12px', color: color, fontWeight: '500' }}>{label}</div>
             </div>
         </div>
@@ -451,11 +451,11 @@ const SerpPreview = ({ title, url, description }) => (
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             cursor: 'pointer', marginBottom: '4px'
         }}>
-            {title || 'Your Page Title'}
+            {title || __('Your Page Title', 'holvek')}
         </div>
         <div style={{ fontSize: '13px', color: '#4d5156', lineHeight: '1.4', 
             display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-            {description || 'Add a meta description to control how this page appears in search results...'}
+            {description || __('Add a meta description to control how this page appears in search results...', 'holvek')}
         </div>
     </div>
 );
@@ -492,7 +492,7 @@ const SocialCardPreview = ({ title, description, image, domain }) => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
             {/* Facebook Card */}
             <div>
-                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '6px' }}>Facebook Preview</div>
+                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '6px' }}>{__('Facebook Preview', 'holvek')}</div>
                 <div style={{
                     border: '1px solid #ced0d4',
                     borderRadius: '8px',
@@ -515,7 +515,7 @@ const SocialCardPreview = ({ title, description, image, domain }) => {
                     <div style={{ position: 'relative', width: '100%', paddingTop: '52.35%' /* 1.91:1 */, background: '#e9ebee' }}>
                         <img 
                             src={displayImage} 
-                            alt="Facebook Preview" 
+                            alt={__('Facebook Preview', 'holvek')} 
                             style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }} 
                         />
                     </div>
@@ -524,10 +524,10 @@ const SocialCardPreview = ({ title, description, image, domain }) => {
                             {domain || 'example.com'}
                         </div>
                         <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#1d2129', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: '20px', height: '40px' }}>
-                            {title || 'Your Sharing Title'}
+                            {title || __('Your Sharing Title', 'holvek')}
                         </div>
                         <div style={{ fontSize: '13px', color: '#606770', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: '18px', height: '36px' }}>
-                            {description || 'This is the description that will display when you share your link.'}
+                            {description || __('This is the description that will display when you share your link.', 'holvek')}
                         </div>
                     </div>
                 </div>
@@ -535,7 +535,7 @@ const SocialCardPreview = ({ title, description, image, domain }) => {
 
             {/* Twitter/X Card */}
             <div>
-                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '6px' }}>Twitter / X Preview</div>
+                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '6px' }}>{__('Twitter / X Preview', 'holvek')}</div>
                 <div style={{
                     border: '1px solid #e1e8ed',
                     borderRadius: '16px',
@@ -557,10 +557,10 @@ const SocialCardPreview = ({ title, description, image, domain }) => {
                             <span style={{ fontSize: '10px' }}>↗</span>
                         </div>
                         <div style={{ fontSize: '15px', fontWeight: '700', color: '#0f1419', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {title || 'Your Sharing Title'}
+                            {title || __('Your Sharing Title', 'holvek')}
                         </div>
                         <div style={{ fontSize: '14px', color: '#536471', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: '18px', height: '36px' }}>
-                            {description || 'This is the description that will display when you share your link.'}
+                            {description || __('This is the description that will display when you share your link.', 'holvek')}
                         </div>
                     </div>
                 </div>
@@ -569,7 +569,7 @@ const SocialCardPreview = ({ title, description, image, domain }) => {
     );
 };
 
-// ── AmEveryWhere AI Assistant Component ──────────────────────────────────
+// ── Holvek AI Assistant Component ──────────────────────────────────
 const AiAssistantPanel = ({ title, content, focusKeyword, updateMeta, meta }) => {
     const [action, setAction] = useState('generate_titles_metas');
     const [isGenerating, setIsGenerating] = useState(false);
@@ -586,11 +586,11 @@ const AiAssistantPanel = ({ title, content, focusKeyword, updateMeta, meta }) =>
         setIsDebouncingSuggestion(true);
         const delayDebounceFn = setTimeout(async () => {
             try {
-                const response = await fetch(`${amEveryWhereEditorConfig.apiUrl}/ai/generate`, {
+                const response = await fetch(`${holvekEditorConfig.apiUrl}/ai/generate`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-WP-Nonce': amEveryWhereEditorConfig.nonce,
+                        'X-WP-Nonce': holvekEditorConfig.nonce,
                     },
                     body: JSON.stringify({
                         action: 'writing_assistant',
@@ -618,11 +618,11 @@ const AiAssistantPanel = ({ title, content, focusKeyword, updateMeta, meta }) =>
         setErrorMsg('');
         setAiResult('');
         try {
-            const response = await fetch(`${amEveryWhereEditorConfig.apiUrl}/ai/generate`, {
+            const response = await fetch(`${holvekEditorConfig.apiUrl}/ai/generate`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-WP-Nonce': amEveryWhereEditorConfig.nonce,
+                    'X-WP-Nonce': holvekEditorConfig.nonce,
                 },
                 body: JSON.stringify({
                     action,
@@ -635,10 +635,10 @@ const AiAssistantPanel = ({ title, content, focusKeyword, updateMeta, meta }) =>
             if (response.ok && data.success) {
                 setAiResult(data.result);
             } else {
-                setErrorMsg(data.message || 'AI Generation failed. Make sure your API Key is verified under AmEveryWhere Settings.');
+                setErrorMsg(data.message || __('AI Generation failed. Make sure your API Key is verified under Holvek Settings.', 'holvek'));
             }
         } catch (error) {
-            setErrorMsg('Network error occurred during generation.');
+            setErrorMsg(__('Network error occurred during generation.', 'holvek'));
         } finally {
             setIsGenerating(false);
         }
@@ -654,16 +654,16 @@ const AiAssistantPanel = ({ title, content, focusKeyword, updateMeta, meta }) =>
     }, [aiResult]);
 
     return (
-        <PanelBody title={__('AmEveryWhere AI Assistant', 'ameverywhere')} initialOpen={false}>
+        <PanelBody title={__('Holvek AI Assistant', 'holvek')} initialOpen={false}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <SelectControl
-                    label={__('AI Optimization Goal', 'ameverywhere')}
+                    label={__('AI Optimization Goal', 'holvek')}
                     value={action}
                     options={[
-                        { label: 'Generate CTR Titles & Metas', value: 'generate_titles_metas' },
-                        { label: 'Generate Structured FAQs', value: 'generate_faqs' },
-                        { label: 'Generate SEO Outline & Summary', value: 'generate_outline_summary' },
-                        { label: 'SEO Writing Recommendations', value: 'writing_assistant' },
+                        { label: __('Generate CTR Titles & Metas', 'holvek'), value: 'generate_titles_metas' },
+                        { label: __('Generate Structured FAQs', 'holvek'), value: 'generate_faqs' },
+                        { label: __('Generate SEO Outline & Summary', 'holvek'), value: 'generate_outline_summary' },
+                        { label: __('SEO Writing Recommendations', 'holvek'), value: 'writing_assistant' },
                     ]}
                     onChange={(val) => { setAction(val); setAiResult(''); setErrorMsg(''); }}
                 />
@@ -675,7 +675,7 @@ const AiAssistantPanel = ({ title, content, focusKeyword, updateMeta, meta }) =>
                     className="w-full justify-center"
                     style={{ background: '#4f46e5', borderColor: '#4f46e5' }}
                 >
-                    {isGenerating ? 'Querying Agent Gateway...' : 'Get AI SEO Insights'}
+                    {isGenerating ? __('Querying Agent Gateway...', 'holvek') : __('Get AI SEO Insights', 'holvek')}
                 </Button>
 
                 {errorMsg && (
@@ -687,31 +687,31 @@ const AiAssistantPanel = ({ title, content, focusKeyword, updateMeta, meta }) =>
                 {isGenerating && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', padding: '24px 0', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                         <Spinner />
-                        <span style={{ fontSize: '12px', color: '#475569', fontWeight: '500' }}>Structuring targeted queries...</span>
+                        <span style={{ fontSize: '12px', color: '#475569', fontWeight: '500' }}>{__('Structuring targeted queries...', 'holvek')}</span>
                     </div>
                 )}
 
                 {aiResult && !isGenerating && (
                     <div style={{ marginTop: '12px', padding: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
-                        <h4 style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: '600', color: '#0f172a' }}>AI Gateway Response:</h4>
+                        <h4 style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: '600', color: '#0f172a' }}>{__('AI Gateway Response:', 'holvek')}</h4>
                         
                         {action === 'generate_titles_metas' && parsedResult && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                 <div style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' }}>
-                                    <strong style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b' }}>Suggested Titles</strong>
+                                    <strong style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b' }}>{__('Suggested Titles', 'holvek')}</strong>
                                     {parsedResult.titles?.map((t, i) => (
                                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '6px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '12px', marginTop: '4px' }}>
                                             <span style={{ fontWeight: '500', color: '#1e293b' }}>{t}</span>
-                                            <Button isLink isSmall onClick={() => updateMeta('_ameverywhere_meta_title', t)}>Apply</Button>
+                                            <Button isLink isSmall onClick={() => updateMeta('_holvek_meta_title', t)}>{__('Apply', 'holvek')}</Button>
                                         </div>
                                     ))}
                                 </div>
                                 <div>
-                                    <strong style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b' }}>Suggested Descriptions</strong>
+                                    <strong style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748b' }}>{__('Suggested Descriptions', 'holvek')}</strong>
                                     {parsedResult.descriptions?.map((d, i) => (
                                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', background: '#fff', padding: '6px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '12px', marginTop: '4px', gap: '8px' }}>
                                             <span style={{ color: '#334155' }}>{d}</span>
-                                            <Button isLink isSmall onClick={() => updateMeta('_ameverywhere_meta_description', d)}>Apply</Button>
+                                            <Button isLink isSmall onClick={() => updateMeta('_holvek_meta_description', d)}>{__('Apply', 'holvek')}</Button>
                                         </div>
                                     ))}
                                 </div>
@@ -730,12 +730,12 @@ const AiAssistantPanel = ({ title, content, focusKeyword, updateMeta, meta }) =>
                                     isSecondary 
                                     isSmall 
                                     onClick={() => {
-                                        updateMeta('_ameverywhere_primary_schema', 'faq');
-                                        updateMeta('_ameverywhere_schema_faq_questions', JSON.stringify(parsedResult));
+                                        updateMeta('_holvek_primary_schema', 'faq');
+                                        updateMeta('_holvek_schema_faq_questions', JSON.stringify(parsedResult));
                                     }}
                                     style={{ marginTop: '4px' }}
                                 >
-                                    Apply as FAQ Schema
+                                    {__('Apply as FAQ Schema', 'holvek')}
                                 </Button>
                             </div>
                         )}
@@ -751,11 +751,11 @@ const AiAssistantPanel = ({ title, content, focusKeyword, updateMeta, meta }) =>
                 {focusKeyword && (
                     <div style={{ marginTop: '12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '6px', padding: '10px' }}>
                         <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#16a34a', textTransform: 'uppercase', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>Real-time SEO Copilot</span>
-                            {isDebouncingSuggestion && <span style={{ fontSize: '10px', color: '#65a30d', fontStyle: 'italic' }}>(Analyzing...)</span>}
+                            <span>{__('Real-time SEO Copilot', 'holvek')}</span>
+                            {isDebouncingSuggestion && <span style={{ fontSize: '10px', color: '#65a30d', fontStyle: 'italic' }}>{__('(Analyzing...)', 'holvek')}</span>}
                         </div>
                         <div style={{ fontSize: '12px', color: '#166534', marginTop: '6px', lineHeight: '1.5' }}>
-                            {realtimeSuggestion || 'Start writing to receive real-time keyword placement and density tips.'}
+                            {realtimeSuggestion || __('Start writing to receive real-time keyword placement and density tips.', 'holvek')}
                         </div>
                     </div>
                 )}
@@ -772,11 +772,11 @@ const InternalLinkPanel = ({ postId, content }) => {
     const scanInternalLinks = async () => {
         setIsLoading(true);
         try {
-            const response = await fetch(`${amEveryWhereEditorConfig.apiUrl}/content/internal-links`, {
+            const response = await fetch(`${holvekEditorConfig.apiUrl}/content/internal-links`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-WP-Nonce': amEveryWhereEditorConfig.nonce,
+                    'X-WP-Nonce': holvekEditorConfig.nonce,
                 },
                 body: JSON.stringify({
                     post_id: postId,
@@ -802,7 +802,7 @@ const InternalLinkPanel = ({ postId, content }) => {
     const recommendations = linksData?.recommendations || [];
 
     return (
-        <PanelBody title={__('Internal Links & Orphan Finder', 'ameverywhere')} initialOpen={false}>
+        <PanelBody title={__('Internal Links & Orphan Finder', 'holvek')} initialOpen={false}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {/* Orphan finder badge */}
                 {orphanStatus && (
@@ -818,7 +818,7 @@ const InternalLinkPanel = ({ postId, content }) => {
                     }}>
                         <div>
                             <div style={{ fontSize: '13px', fontWeight: 'bold', color: orphanStatus.is_orphan ? '#991b1b' : '#166534' }}>
-                                {orphanStatus.is_orphan ? 'Orphan Post Alert' : 'Incoming Links OK'}
+                                {orphanStatus.is_orphan ? __('Orphan Post Alert', 'holvek') : __('Incoming Links OK', 'holvek')}
                             </div>
                             <div style={{ fontSize: '11px', color: orphanStatus.is_orphan ? '#b91c1c' : '#15803d', marginTop: '2px' }}>
                                 {orphanStatus.is_orphan 
@@ -833,9 +833,9 @@ const InternalLinkPanel = ({ postId, content }) => {
                 )}
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Suggestions (Max 5)</span>
+                    <span style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>{__('Suggestions (Max 5)', 'holvek')}</span>
                     <Button isSmall isSecondary isBusy={isLoading} onClick={scanInternalLinks}>
-                        Re-Scan
+                        {__('Re-Scan', 'holvek')}
                     </Button>
                 </div>
 
@@ -843,7 +843,7 @@ const InternalLinkPanel = ({ postId, content }) => {
 
                 {!isLoading && recommendations.length === 0 && (
                     <p style={{ fontSize: '12px', color: '#64748b', fontStyle: 'italic', margin: 0 }}>
-                        No link suggestions available. Try adding some relevant categories/tags or writing more content.
+                        {__('No link suggestions available. Try adding some relevant categories/tags or writing more content.', 'holvek')}
                     </p>
                 )}
 
@@ -860,7 +860,7 @@ const InternalLinkPanel = ({ postId, content }) => {
                                 {rec.title}
                             </strong>
                             <a href={rec.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '10px', color: '#4f46e5', fontWeight: '600', textDecoration: 'none' }}>
-                                View ↗
+                                {__('View ↗', 'holvek')}
                             </a>
                         </div>
                         
@@ -914,7 +914,7 @@ const convertToIsoDuration = (time) => {
 
 const mergeCustomProperties = (meta, schemaObj) => {
     if (!schemaObj) return schemaObj;
-    const customPropsJson = meta._ameverywhere_custom_schema_properties;
+    const customPropsJson = meta._holvek_custom_schema_properties;
     if (customPropsJson) {
         try {
             const customProps = JSON.parse(customPropsJson);
@@ -939,7 +939,7 @@ const generateLdJson = (schemaType, meta, title, content, featuredMediaUrl, perm
     const graphs = [];
 
     // 1. Article / NewsArticle Schema
-    const isNews = meta._ameverywhere_is_news === 'yes';
+    const isNews = meta._holvek_is_news === 'yes';
     const article = {
         "@type": isNews ? "NewsArticle" : "Article",
         "@id": `${baseId}#article`,
@@ -973,12 +973,12 @@ const generateLdJson = (schemaType, meta, title, content, featuredMediaUrl, perm
 
     // 3. Custom point-and-click schemas
     if (schemaType === 'product') {
-        const name = meta._ameverywhere_schema_product_name || title || 'Product Name';
-        const description = meta._ameverywhere_schema_product_description || '';
-        const price = meta._ameverywhere_schema_product_price || '';
-        const currency = meta._ameverywhere_schema_product_currency || 'USD';
-        const rating = meta._ameverywhere_schema_product_rating || '';
-        const availability = meta._ameverywhere_schema_product_availability || 'InStock';
+        const name = meta._holvek_schema_product_name || title || __('Product Name', 'holvek');
+        const description = meta._holvek_schema_product_description || '';
+        const price = meta._holvek_schema_product_price || '';
+        const currency = meta._holvek_schema_product_currency || 'USD';
+        const rating = meta._holvek_schema_product_rating || '';
+        const availability = meta._holvek_schema_product_availability || 'InStock';
 
         const product = {
             "@type": "Product",
@@ -1011,7 +1011,7 @@ const generateLdJson = (schemaType, meta, title, content, featuredMediaUrl, perm
     } else if (schemaType === 'faq') {
         let faqs = [];
         try {
-            faqs = JSON.parse(meta._ameverywhere_schema_faq_questions || '[]');
+            faqs = JSON.parse(meta._holvek_schema_faq_questions || '[]');
         } catch (e) {
             faqs = [];
         }
@@ -1034,16 +1034,16 @@ const generateLdJson = (schemaType, meta, title, content, featuredMediaUrl, perm
             }));
         }
     } else if (schemaType === 'howto') {
-        const name = meta._ameverywhere_schema_howto_name || title || 'How-to Name';
-        const description = meta._ameverywhere_schema_howto_description || '';
+        const name = meta._holvek_schema_howto_name || title || __('How-to Name', 'holvek');
+        const description = meta._holvek_schema_howto_description || '';
         let steps = [];
         try {
-            steps = JSON.parse(meta._ameverywhere_schema_howto_steps || '[]');
+            steps = JSON.parse(meta._holvek_schema_howto_steps || '[]');
         } catch (e) {
             steps = [];
         }
-        const suppliesText = meta._ameverywhere_schema_howto_supplies || '';
-        const toolsText = meta._ameverywhere_schema_howto_tools || '';
+        const suppliesText = meta._holvek_schema_howto_supplies || '';
+        const toolsText = meta._holvek_schema_howto_tools || '';
 
         const howto = {
             "@type": "HowTo",
@@ -1080,12 +1080,12 @@ const generateLdJson = (schemaType, meta, title, content, featuredMediaUrl, perm
 
         graphs.push(mergeCustomProperties(meta, howto));
     } else if (schemaType === 'localbusiness') {
-        const name = meta._ameverywhere_schema_localbusiness_name || domain || 'Local Business';
-        const telephone = meta._ameverywhere_schema_localbusiness_telephone || '';
-        const street = meta._ameverywhere_schema_localbusiness_street || '';
-        const city = meta._ameverywhere_schema_localbusiness_city || '';
-        const postal = meta._ameverywhere_schema_localbusiness_postal || '';
-        const country = meta._ameverywhere_schema_localbusiness_country || 'US';
+        const name = meta._holvek_schema_localbusiness_name || domain || __('Local Business', 'holvek');
+        const telephone = meta._holvek_schema_localbusiness_telephone || '';
+        const street = meta._holvek_schema_localbusiness_street || '';
+        const city = meta._holvek_schema_localbusiness_city || '';
+        const postal = meta._holvek_schema_localbusiness_postal || '';
+        const country = meta._holvek_schema_localbusiness_country || 'US';
 
         const localbusiness = {
             "@type": "LocalBusiness",
@@ -1108,9 +1108,9 @@ const generateLdJson = (schemaType, meta, title, content, featuredMediaUrl, perm
         }
         graphs.push(mergeCustomProperties(meta, localbusiness));
     } else if (schemaType === 'recipe') {
-        const name = meta._ameverywhere_schema_recipe_name || title || 'Recipe Name';
-        const description = meta._ameverywhere_schema_recipe_description || '';
-        const ingredientsText = meta._ameverywhere_schema_recipe_ingredients || '';
+        const name = meta._holvek_schema_recipe_name || title || __('Recipe Name', 'holvek');
+        const description = meta._holvek_schema_recipe_description || '';
+        const ingredientsText = meta._holvek_schema_recipe_ingredients || '';
         let ingredients = [];
         if (ingredientsText) {
             try {
@@ -1127,14 +1127,14 @@ const generateLdJson = (schemaType, meta, title, content, featuredMediaUrl, perm
 
         let instructions = [];
         try {
-            instructions = JSON.parse(meta._ameverywhere_schema_recipe_instructions || '[]');
+            instructions = JSON.parse(meta._holvek_schema_recipe_instructions || '[]');
         } catch (e) {
             instructions = [];
         }
 
-        const prepTimeRaw = meta._ameverywhere_schema_recipe_prep_time || '';
-        const cookTimeRaw = meta._ameverywhere_schema_recipe_cook_time || '';
-        const calories = meta._ameverywhere_schema_recipe_calories || '';
+        const prepTimeRaw = meta._holvek_schema_recipe_prep_time || '';
+        const cookTimeRaw = meta._holvek_schema_recipe_cook_time || '';
+        const calories = meta._holvek_schema_recipe_calories || '';
 
         const recipe = {
             "@type": "Recipe",
@@ -1182,14 +1182,14 @@ const generateLdJson = (schemaType, meta, title, content, featuredMediaUrl, perm
 
         graphs.push(mergeCustomProperties(meta, recipe));
     } else if (schemaType === 'event') {
-        const name = meta._ameverywhere_schema_event_name || title || 'Event Name';
-        const startDate = meta._ameverywhere_schema_event_start_date || '';
-        const endDate = meta._ameverywhere_schema_event_end_date || '';
-        const venue = meta._ameverywhere_schema_event_venue || 'Online';
-        const address = meta._ameverywhere_schema_event_address || '';
-        const performerName = meta._ameverywhere_schema_event_performer || '';
-        const price = meta._ameverywhere_schema_event_price || '';
-        const currency = meta._ameverywhere_schema_event_currency || 'USD';
+        const name = meta._holvek_schema_event_name || title || __('Event Name', 'holvek');
+        const startDate = meta._holvek_schema_event_start_date || '';
+        const endDate = meta._holvek_schema_event_end_date || '';
+        const venue = meta._holvek_schema_event_venue || 'Online';
+        const address = meta._holvek_schema_event_address || '';
+        const performerName = meta._holvek_schema_event_performer || '';
+        const price = meta._holvek_schema_event_price || '';
+        const currency = meta._holvek_schema_event_currency || 'USD';
 
         const event = {
             "@type": "Event",
@@ -1256,7 +1256,7 @@ const generateLdJson = (schemaType, meta, title, content, featuredMediaUrl, perm
         graphs.push(mergeCustomProperties(meta, event));
     } else if (schemaType === 'custom') {
         const custom = {
-            "@type": meta._ameverywhere_schema_custom_type || 'Thing',
+            "@type": meta._holvek_schema_custom_type || 'Thing',
             "@id": `${baseId}#custom`
         };
         graphs.push(mergeCustomProperties(meta, custom));
@@ -1277,157 +1277,162 @@ const auditSchema = (schemaType, meta, title, featuredMediaUrl) => {
     }
 
     if (schemaType === 'product') {
-        const hasName = !!meta._ameverywhere_schema_product_name || !!title;
-        checks.push({ label: 'Product Name', pass: hasName, required: true });
+        const hasName = !!meta._holvek_schema_product_name || !!title;
+        checks.push({ label: __('Product Name', 'holvek'), pass: hasName, required: true });
         if (!hasName) score -= 30;
 
-        const hasPrice = !!meta._ameverywhere_schema_product_price;
-        checks.push({ label: 'Offer Price', pass: hasPrice, required: true });
+        const hasPrice = !!meta._holvek_schema_product_price;
+        checks.push({ label: __('Offer Price', 'holvek'), pass: hasPrice, required: true });
         if (!hasPrice) score -= 30;
 
-        const hasCurrency = !!meta._ameverywhere_schema_product_currency;
-        checks.push({ label: 'Currency', pass: hasCurrency, required: true });
+        const hasCurrency = !!meta._holvek_schema_product_currency;
+        checks.push({ label: __('Currency', 'holvek'), pass: hasCurrency, required: true });
         if (!hasCurrency) score -= 10;
 
-        const hasRating = !!meta._ameverywhere_schema_product_rating;
-        checks.push({ label: 'Aggregate Rating', pass: hasRating, required: false });
+        const hasRating = !!meta._holvek_schema_product_rating;
+        checks.push({ label: __('Aggregate Rating', 'holvek'), pass: hasRating, required: false });
         if (!hasRating) score -= 15;
 
         const hasImage = !!featuredMediaUrl;
-        checks.push({ label: 'Product Image', pass: hasImage, required: false });
+        checks.push({ label: __('Product Image', 'holvek'), pass: hasImage, required: false });
         if (!hasImage) score -= 15;
     } else if (schemaType === 'faq') {
         let faqs = [];
         try {
-            faqs = JSON.parse(meta._ameverywhere_schema_faq_questions || '[]');
+            faqs = JSON.parse(meta._holvek_schema_faq_questions || '[]');
         } catch (e) {
             faqs = [];
         }
         const hasEntries = faqs.length > 0;
-        checks.push({ label: 'FAQ Entries added', pass: hasEntries, required: true });
+        checks.push({ label: __('FAQ Entries added', 'holvek'), pass: hasEntries, required: true });
         if (!hasEntries) {
             score -= 50;
         } else {
             const hasCompleteFaqs = faqs.every(f => f.question && f.answer);
-            checks.push({ label: 'All FAQ entries fully filled', pass: hasCompleteFaqs, required: true });
+            checks.push({ label: __('All FAQ entries fully filled', 'holvek'), pass: hasCompleteFaqs, required: true });
             if (!hasCompleteFaqs) score -= 50;
         }
     } else if (schemaType === 'howto') {
-        const hasName = !!meta._ameverywhere_schema_howto_name || !!title;
-        checks.push({ label: 'HowTo Name', pass: hasName, required: true });
+        const hasName = !!meta._holvek_schema_howto_name || !!title;
+        checks.push({ label: __('HowTo Name', 'holvek'), pass: hasName, required: true });
         if (!hasName) score -= 25;
 
-        const hasDesc = !!meta._ameverywhere_schema_howto_description;
-        checks.push({ label: 'HowTo Description', pass: hasDesc, required: false });
+        const hasDesc = !!meta._holvek_schema_howto_description;
+        checks.push({ label: __('HowTo Description', 'holvek'), pass: hasDesc, required: false });
         if (!hasDesc) score -= 20;
 
         let steps = [];
         try {
-            steps = JSON.parse(meta._ameverywhere_schema_howto_steps || '[]');
+            steps = JSON.parse(meta._holvek_schema_howto_steps || '[]');
         } catch (e) {
             steps = [];
         }
         const hasSteps = steps.length > 0;
-        checks.push({ label: 'At least one HowTo step added', pass: hasSteps, required: true });
+        checks.push({ label: __('At least one HowTo step added', 'holvek'), pass: hasSteps, required: true });
         if (!hasSteps) {
             score -= 25;
         } else {
             const hasCompleteSteps = steps.every(s => s.text);
-            checks.push({ label: 'All HowTo steps have instructions', pass: hasCompleteSteps, required: true });
+            checks.push({ label: __('All HowTo steps have instructions', 'holvek'), pass: hasCompleteSteps, required: true });
             if (!hasCompleteSteps) score -= 25;
         }
 
-        const hasTools = !!meta._ameverywhere_schema_howto_tools;
-        checks.push({ label: 'Recommended Tools configured', pass: hasTools, required: false });
+        const hasTools = !!meta._holvek_schema_howto_tools;
+        checks.push({ label: __('Recommended Tools configured', 'holvek'), pass: hasTools, required: false });
         if (!hasTools) score -= 15;
 
-        const hasSupplies = !!meta._ameverywhere_schema_howto_supplies;
-        checks.push({ label: 'Recommended Supplies configured', pass: hasSupplies, required: false });
+        const hasSupplies = !!meta._holvek_schema_howto_supplies;
+        checks.push({ label: __('Recommended Supplies configured', 'holvek'), pass: hasSupplies, required: false });
         if (!hasSupplies) score -= 15;
     } else if (schemaType === 'localbusiness') {
-        const hasName = !!meta._ameverywhere_schema_localbusiness_name;
-        checks.push({ label: 'Business Name', pass: hasName, required: true });
+        const hasName = !!meta._holvek_schema_localbusiness_name;
+        checks.push({ label: __('Business Name', 'holvek'), pass: hasName, required: true });
         if (!hasName) score -= 30;
 
-        const hasPhone = !!meta._ameverywhere_schema_localbusiness_telephone;
-        checks.push({ label: 'Telephone Contact', pass: hasPhone, required: false });
+        const hasPhone = !!meta._holvek_schema_localbusiness_telephone;
+        checks.push({ label: __('Telephone Contact', 'holvek'), pass: hasPhone, required: false });
         if (!hasPhone) score -= 20;
 
-        const hasStreet = !!meta._ameverywhere_schema_localbusiness_street;
-        checks.push({ label: 'Street Address', pass: hasStreet, required: true });
+        const hasStreet = !!meta._holvek_schema_localbusiness_street;
+        checks.push({ label: __('Street Address', 'holvek'), pass: hasStreet, required: true });
         if (!hasStreet) score -= 20;
 
-        const hasCity = !!meta._ameverywhere_schema_localbusiness_city;
-        checks.push({ label: 'Address City', pass: hasCity, required: true });
+        const hasCity = !!meta._holvek_schema_localbusiness_city;
+        checks.push({ label: __('Address City', 'holvek'), pass: hasCity, required: true });
         if (!hasCity) score -= 15;
 
-        const hasZip = !!meta._ameverywhere_schema_localbusiness_postal;
-        checks.push({ label: 'Postal/Zip Code', pass: hasZip, required: true });
+        const hasZip = !!meta._holvek_schema_localbusiness_postal;
+        checks.push({ label: __('Postal/Zip Code', 'holvek'), pass: hasZip, required: true });
         if (!hasZip) score -= 15;
     } else if (schemaType === 'recipe') {
-        const hasName = !!meta._ameverywhere_schema_recipe_name || !!title;
-        checks.push({ label: 'Recipe Name', pass: hasName, required: true });
+        const hasName = !!meta._holvek_schema_recipe_name || !!title;
+        checks.push({ label: __('Recipe Name', 'holvek'), pass: hasName, required: true });
         if (!hasName) score -= 25;
 
-        const hasIngredients = !!meta._ameverywhere_schema_recipe_ingredients;
-        checks.push({ label: 'Ingredients', pass: hasIngredients, required: true });
+        const hasIngredients = !!meta._holvek_schema_recipe_ingredients;
+        checks.push({ label: __('Ingredients', 'holvek'), pass: hasIngredients, required: true });
         if (!hasIngredients) score -= 25;
 
         let instructions = [];
         try {
-            instructions = JSON.parse(meta._ameverywhere_schema_recipe_instructions || '[]');
+            instructions = JSON.parse(meta._holvek_schema_recipe_instructions || '[]');
         } catch (e) {}
         const hasInstructions = instructions.length > 0;
-        checks.push({ label: 'Instructions', pass: hasInstructions, required: true });
+        checks.push({ label: __('Instructions', 'holvek'), pass: hasInstructions, required: true });
         if (!hasInstructions) score -= 25;
 
-        const hasPrepTime = !!meta._ameverywhere_schema_recipe_prep_time;
-        checks.push({ label: 'Prep Time', pass: hasPrepTime, required: false });
+        const hasPrepTime = !!meta._holvek_schema_recipe_prep_time;
+        checks.push({ label: __('Prep Time', 'holvek'), pass: hasPrepTime, required: false });
         if (!hasPrepTime) score -= 10;
         
-        const hasCookTime = !!meta._ameverywhere_schema_recipe_cook_time;
-        checks.push({ label: 'Cook Time', pass: hasCookTime, required: false });
+        const hasCookTime = !!meta._holvek_schema_recipe_cook_time;
+        checks.push({ label: __('Cook Time', 'holvek'), pass: hasCookTime, required: false });
         if (!hasCookTime) score -= 10;
 
         const hasImage = !!featuredMediaUrl;
-        checks.push({ label: 'Cover Image', pass: hasImage, required: true });
+        checks.push({ label: __('Cover Image', 'holvek'), pass: hasImage, required: true });
         if (!hasImage) score -= 15;
     } else if (schemaType === 'event') {
-        const hasName = !!meta._ameverywhere_schema_event_name || !!title;
-        checks.push({ label: 'Event Name', pass: hasName, required: true });
+        const hasName = !!meta._holvek_schema_event_name || !!title;
+        checks.push({ label: __('Event Name', 'holvek'), pass: hasName, required: true });
         if (!hasName) score -= 20;
 
-        const hasStartDate = !!meta._ameverywhere_schema_event_start_date;
-        checks.push({ label: 'Start Date', pass: hasStartDate, required: true });
+        const hasStartDate = !!meta._holvek_schema_event_start_date;
+        checks.push({ label: __('Start Date', 'holvek'), pass: hasStartDate, required: true });
         if (!hasStartDate) score -= 30;
 
-        const hasVenue = !!meta._ameverywhere_schema_event_venue;
-        checks.push({ label: 'Venue Name', pass: hasVenue, required: true });
+        const hasVenue = !!meta._holvek_schema_event_venue;
+        checks.push({ label: __('Venue Name', 'holvek'), pass: hasVenue, required: true });
         if (!hasVenue) score -= 20;
 
-        const hasAddress = !!meta._ameverywhere_schema_event_address;
-        checks.push({ label: 'Location Address', pass: hasAddress, required: true });
+        const hasAddress = !!meta._holvek_schema_event_address;
+        checks.push({ label: __('Location Address', 'holvek'), pass: hasAddress, required: true });
         if (!hasAddress) score -= 15;
 
-        const hasPrice = !!meta._ameverywhere_schema_event_price;
-        checks.push({ label: 'Ticket Price', pass: hasPrice, required: false });
+        const hasPrice = !!meta._holvek_schema_event_price;
+        checks.push({ label: __('Ticket Price', 'holvek'), pass: hasPrice, required: false });
         if (!hasPrice) score -= 15;
     } else if (schemaType === 'custom') {
-        const hasType = !!meta._ameverywhere_schema_custom_type;
-        checks.push({ label: 'Schema Type', pass: hasType, required: true });
+        const hasType = !!meta._holvek_schema_custom_type;
+        checks.push({ label: __('Schema Type', 'holvek'), pass: hasType, required: true });
         if (!hasType) score -= 40;
 
         let props = [];
         try {
-            props = JSON.parse(meta._ameverywhere_custom_schema_properties || '[]');
+            props = JSON.parse(meta._holvek_custom_schema_properties || '[]');
         } catch(e){}
         const hasProps = props.length > 0 && props.some(p => p.key && p.value);
-        checks.push({ label: 'Custom Properties', pass: hasProps, required: true });
+        checks.push({ label: __('Custom Properties', 'holvek'), pass: hasProps, required: true });
         if (!hasProps) score -= 60;
     }
 
     score = Math.max(0, score);
-    const warnings = checks.filter(c => !c.pass).map(c => `${c.required ? 'Required' : 'Recommended'} field "${c.label}" is missing.`);
+    const warnings = checks.filter(c => !c.pass).map(c => sprintf(
+        c.required
+            ? __('Required field "%s" is missing.', 'holvek')
+            : __('Recommended field "%s" is missing.', 'holvek'),
+        c.label
+    ));
 
     return {
         score,
@@ -1463,7 +1468,7 @@ const SchemaValidator = ({ schemaType, meta, title, content, featuredMediaUrl, p
 
     const handleTest = () => {
         navigator.clipboard.writeText(jsonString);
-        alert('Schema JSON-LD code copied to clipboard! Opening Google Rich Results Test in a new tab. Paste your code in the "Code" tab to validate.');
+        alert(__('Schema JSON-LD code copied to clipboard! Opening Google Rich Results Test in a new tab. Paste your code in the "Code" tab to validate.', 'holvek'));
         window.open('https://search.google.com/test/rich-results', '_blank');
     };
 
@@ -1475,7 +1480,7 @@ const SchemaValidator = ({ schemaType, meta, title, content, featuredMediaUrl, p
         <div style={{ marginTop: '16px', borderTop: '1px solid #e2e8f0', paddingTop: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>
-                    Schema Validator & Health
+                    {__('Schema Validator & Health', 'holvek')}
                 </div>
                 <div style={{ fontSize: '12px', fontWeight: '600', color: healthColor }}>
                     Health: {audit.score}%
@@ -1484,7 +1489,7 @@ const SchemaValidator = ({ schemaType, meta, title, content, featuredMediaUrl, p
 
             {audit.warnings.length > 0 ? (
                 <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '6px', padding: '8px 10px', fontSize: '12px', color: '#991b1b', marginBottom: '10px' }}>
-                    <div style={{ fontWeight: '600', marginBottom: '4px' }}>Schema Recommendations:</div>
+                    <div style={{ fontWeight: '600', marginBottom: '4px' }}>{__('Schema Recommendations:', 'holvek')}</div>
                     <ul style={{ margin: 0, paddingLeft: '14px', listStyleType: 'disc' }}>
                         {audit.warnings.map((w, idx) => (
                             <li key={idx} style={{ marginBottom: '2px' }}>{w}</li>
@@ -1502,7 +1507,7 @@ const SchemaValidator = ({ schemaType, meta, title, content, featuredMediaUrl, p
                     {copied ? '✓ Copied!' : 'Copy Schema'}
                 </Button>
                 <Button isPrimary onClick={handleTest} style={{ fontSize: '12px', padding: '6px 8px', justifyContent: 'center' }}>
-                    Test on Google
+                    {__('Test on Google', 'holvek')}
                 </Button>
             </div>
 
@@ -1545,17 +1550,17 @@ const UnlimitedKeywordsEditor = ({ primaryKeyword, additionalKeywordsJson, conte
     }, [additionalKeywordsJson]);
 
     const addKeyword = () => {
-        updateMeta('_ameverywhere_additional_keywords', JSON.stringify([...additional, '']));
+        updateMeta('_holvek_additional_keywords', JSON.stringify([...additional, '']));
     };
 
     const updateKeyword = (index, value) => {
         const next = [...additional];
         next[index] = value;
-        updateMeta('_ameverywhere_additional_keywords', JSON.stringify(next));
+        updateMeta('_holvek_additional_keywords', JSON.stringify(next));
     };
 
     const removeKeyword = (index) => {
-        updateMeta('_ameverywhere_additional_keywords', JSON.stringify(additional.filter((_, i) => i !== index)));
+        updateMeta('_holvek_additional_keywords', JSON.stringify(additional.filter((_, i) => i !== index)));
     };
 
     // Mini-analysis for each additional keyword
@@ -1578,7 +1583,7 @@ const UnlimitedKeywordsEditor = ({ primaryKeyword, additionalKeywordsJson, conte
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px' }}>
             <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Additional Focus Keywords
+                {__('Additional Focus Keywords', 'holvek')}
             </div>
 
             {additional.map((kw, idx) => {
@@ -1597,7 +1602,7 @@ const UnlimitedKeywordsEditor = ({ primaryKeyword, additionalKeywordsJson, conte
                                 type="button"
                                 onClick={() => removeKeyword(idx)}
                                 style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: '0 4px' }}
-                                title="Remove"
+                                title={__('Remove', 'holvek')}
                             >×</button>
                         </div>
                         {kw && analysis && (
@@ -1628,7 +1633,7 @@ const UnlimitedKeywordsEditor = ({ primaryKeyword, additionalKeywordsJson, conte
                 onClick={addKeyword}
                 style={{ alignSelf: 'flex-start', fontSize: '12px' }}
             >
-                + Add Keyword
+                {__('+ Add Keyword', 'holvek')}
             </Button>
         </div>
     );
@@ -1649,17 +1654,17 @@ const PageSpeedBadge = ({ postId, cachedJson, updateMeta }) => {
         setIsLoading(true);
         setError(null);
         try {
-            const res = await fetch(`${amEveryWhereEditorConfig.apiUrl}/pagespeed?post_id=${postId}`, {
-                headers: { 'X-WP-Nonce': amEveryWhereEditorConfig.nonce }
+            const res = await fetch(`${holvekEditorConfig.apiUrl}/pagespeed?post_id=${postId}`, {
+                headers: { 'X-WP-Nonce': holvekEditorConfig.nonce }
             });
             const data = await res.json();
             if (res.ok && data.success) {
-                updateMeta('_ameverywhere_pagespeed_cache', JSON.stringify(data.scores));
+                updateMeta('_holvek_pagespeed_cache', JSON.stringify(data.scores));
             } else {
-                setError(data.message || 'Failed to fetch PageSpeed data.');
+                setError(data.message || __('Failed to fetch PageSpeed data.', 'holvek'));
             }
         } catch (e) {
-            setError('Network error.');
+            setError(__('Network error.', 'holvek'));
         } finally {
             setIsLoading(false);
         }
@@ -1682,12 +1687,17 @@ const PageSpeedBadge = ({ postId, cachedJson, updateMeta }) => {
     };
 
     return (
-        <PanelBody title={__('PageSpeed Performance', 'ameverywhere')} initialOpen={false}>
+        <PanelBody title={__('PageSpeed Performance', 'holvek')} initialOpen={false}>
+            {holvekEditorConfig.cloudConfigured !== '1' && (
+                <Notice status="info" isDismissible={false}>
+                    {__('This site is not connected to Holvek, so PageSpeed through Holvek is unavailable. You can keep using Holvek on this site.', 'holvek')}
+                </Notice>
+            )}
             {cached ? (
                 <div>
                     <div style={{ display: 'flex', justifyContent: 'space-around', marginBottom: '12px' }}>
-                        <ScoreCircle label="Mobile" score={cached.mobile ?? '—'} />
-                        <ScoreCircle label="Desktop" score={cached.desktop ?? '—'} />
+                        <ScoreCircle label={__('Mobile', 'holvek')} score={cached.mobile ?? '—'} />
+                        <ScoreCircle label={__('Desktop', 'holvek')} score={cached.desktop ?? '—'} />
                     </div>
                     {cached.fetched_at && (
                         <div style={{ fontSize: '10px', color: '#94a3b8', textAlign: 'center', marginBottom: '10px' }}>
@@ -1697,7 +1707,7 @@ const PageSpeedBadge = ({ postId, cachedJson, updateMeta }) => {
                 </div>
             ) : (
                 <p style={{ fontSize: '12px', color: '#64748b', marginTop: 0 }}>
-                    No PageSpeed data cached yet. Click below to run an analysis.
+                    {__('No PageSpeed data cached yet. Click below to run an analysis.', 'holvek')}
                 </p>
             )}
             {error && <Notice status="error" isDismissible={false}>{error}</Notice>}
@@ -1723,18 +1733,18 @@ const RankingKeywordsPanel = ({ postId, cachedJson, cachedAt, updateMeta }) => {
         setIsLoading(true);
         setError(null);
         try {
-            const res = await fetch(`${amEveryWhereEditorConfig.apiUrl}/gsc/keywords?post_id=${postId}`, {
-                headers: { 'X-WP-Nonce': amEveryWhereEditorConfig.nonce }
+            const res = await fetch(`${holvekEditorConfig.apiUrl}/gsc/keywords?post_id=${postId}`, {
+                headers: { 'X-WP-Nonce': holvekEditorConfig.nonce }
             });
             const data = await res.json();
             if (res.ok && data.success) {
-                updateMeta('_ameverywhere_ranking_keywords', JSON.stringify(data.keywords));
-                updateMeta('_ameverywhere_ranking_keywords_at', String(Math.floor(Date.now() / 1000)));
+                updateMeta('_holvek_ranking_keywords', JSON.stringify(data.keywords));
+                updateMeta('_holvek_ranking_keywords_at', String(Math.floor(Date.now() / 1000)));
             } else {
-                setError(data.message || 'Failed to fetch keyword data. Connect GSC under AmEveryWhere Settings.');
+                setError(data.message || __('Failed to fetch keyword data. Connect GSC under Holvek Settings.', 'holvek'));
             }
         } catch (e) {
-            setError('Network error.');
+            setError(__('Network error.', 'holvek'));
         } finally {
             setIsLoading(false);
         }
@@ -1743,11 +1753,11 @@ const RankingKeywordsPanel = ({ postId, cachedJson, cachedAt, updateMeta }) => {
     const positionColor = (pos) => pos <= 3 ? '#22c55e' : pos <= 10 ? '#f59e0b' : '#ef4444';
 
     return (
-        <PanelBody title={__('Ranking Keywords (GSC)', 'ameverywhere')} initialOpen={false}>
+        <PanelBody title={__('Ranking Keywords (GSC)', 'holvek')} initialOpen={false}>
             {keywords.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 40px 60px 40px', gap: '4px', fontSize: '10px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', paddingBottom: '4px', borderBottom: '1px solid #e2e8f0' }}>
-                        <span>Query</span><span style={{textAlign:'center'}}>Pos</span><span style={{textAlign:'center'}}>Impr.</span><span style={{textAlign:'center'}}>Clicks</span>
+                        <span>{__('Query', 'holvek')}</span><span style={{textAlign:'center'}}>{__('Pos', 'holvek')}</span><span style={{textAlign:'center'}}>{__('Impr.', 'holvek')}</span><span style={{textAlign:'center'}}>{__('Clicks', 'holvek')}</span>
                     </div>
                     {keywords.slice(0, 10).map((kw, i) => (
                         <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 40px 60px 40px', gap: '4px', alignItems: 'center', fontSize: '12px', padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
@@ -1765,12 +1775,12 @@ const RankingKeywordsPanel = ({ postId, cachedJson, cachedAt, updateMeta }) => {
                 </div>
             ) : (
                 <p style={{ fontSize: '12px', color: '#64748b', marginTop: 0 }}>
-                    No ranking data yet. Connect Google Search Console under AmEveryWhere → Settings.
+                    {__('No ranking data yet. Connect Google Search Console under Holvek → Settings.', 'holvek')}
                 </p>
             )}
             {error && <Notice status="error" isDismissible={false} style={{ marginBottom: '10px' }}>{error}</Notice>}
             <Button isSecondary isBusy={isLoading} onClick={fetchKeywords} style={{ width: '100%', justifyContent: 'center' }}>
-                {isLoading ? 'Fetching from GSC…' : keywords.length > 0 ? 'Refresh Keywords' : 'Fetch Ranking Keywords'}
+                {isLoading ? __('Fetching from GSC…', 'holvek') : keywords.length > 0 ? __('Refresh Keywords', 'holvek') : __('Fetch Ranking Keywords', 'holvek')}
             </Button>
         </PanelBody>
     );
@@ -1785,49 +1795,49 @@ const SchemaStackEditor = ({ stackJson, updateMeta }) => {
     }, [stackJson]);
 
     const SCHEMA_OPTIONS = [
-        { value: 'faq', label: 'FAQ' },
-        { value: 'howto', label: 'HowTo' },
-        { value: 'product', label: 'Product' },
-        { value: 'localbusiness', label: 'Local Business' },
-        { value: 'recipe', label: 'Recipe' },
-        { value: 'event', label: 'Event' },
-        { value: 'article', label: 'Article' },
-        { value: 'newsarticle', label: 'NewsArticle' },
-        { value: 'breadcrumb', label: 'BreadcrumbList' },
-        { value: 'video', label: 'VideoObject' },
-        { value: 'person', label: 'Person' },
-        { value: 'organization', label: 'Organization' },
+        { value: 'faq', storedLabel: 'FAQ', label: __('FAQ', 'holvek') },
+        { value: 'howto', storedLabel: 'HowTo', label: __('HowTo', 'holvek') },
+        { value: 'product', storedLabel: 'Product', label: __('Product', 'holvek') },
+        { value: 'localbusiness', storedLabel: 'Local Business', label: __('Local Business', 'holvek') },
+        { value: 'recipe', storedLabel: 'Recipe', label: __('Recipe', 'holvek') },
+        { value: 'event', storedLabel: 'Event', label: __('Event', 'holvek') },
+        { value: 'article', storedLabel: 'Article', label: __('Article', 'holvek') },
+        { value: 'newsarticle', storedLabel: 'NewsArticle', label: __('NewsArticle', 'holvek') },
+        { value: 'breadcrumb', storedLabel: 'BreadcrumbList', label: __('BreadcrumbList', 'holvek') },
+        { value: 'video', storedLabel: 'VideoObject', label: __('VideoObject', 'holvek') },
+        { value: 'person', storedLabel: 'Person', label: __('Person', 'holvek') },
+        { value: 'organization', storedLabel: 'Organization', label: __('Organization', 'holvek') },
     ];
 
     const addSchema = () => {
-        updateMeta('_ameverywhere_schema_stack', JSON.stringify([...stack, { type: 'faq', label: 'FAQ' }]));
+        updateMeta('_holvek_schema_stack', JSON.stringify([...stack, { type: 'faq', label: 'FAQ' }]));
     };
 
     const updateType = (index, type) => {
         const next = [...stack];
         const option = SCHEMA_OPTIONS.find(o => o.value === type);
-        next[index] = { type, label: option?.label || type };
-        updateMeta('_ameverywhere_schema_stack', JSON.stringify(next));
+        next[index] = { type, label: option?.storedLabel || type };
+        updateMeta('_holvek_schema_stack', JSON.stringify(next));
     };
 
     const removeSchema = (index) => {
-        updateMeta('_ameverywhere_schema_stack', JSON.stringify(stack.filter((_, i) => i !== index)));
+        updateMeta('_holvek_schema_stack', JSON.stringify(stack.filter((_, i) => i !== index)));
     };
 
     return (
         <div style={{ marginTop: '16px', borderTop: '1px solid #e2e8f0', paddingTop: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase' }}>
-                    Additional Schema Layers
+                    {__('Additional Schema Layers', 'holvek')}
                 </div>
                 <span style={{ fontSize: '10px', background: '#4f46e5', color: '#fff', padding: '2px 8px', borderRadius: '99px' }}>
-                    {stack.length + 1} schema{stack.length !== 0 ? 's' : ''}
+                    {sprintf(_n('%d schema', '%d schemas', stack.length + 1, 'holvek'), stack.length + 1)}
                 </span>
             </div>
 
             {stack.length === 0 && (
                 <p style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 8px' }}>
-                    Stack additional schema types on top of the primary schema above.
+                    {__('Stack additional schema types on top of the primary schema above.', 'holvek')}
                 </p>
             )}
 
@@ -1848,7 +1858,7 @@ const SchemaStackEditor = ({ stackJson, updateMeta }) => {
             ))}
 
             <Button isSecondary onClick={addSchema} style={{ fontSize: '12px', marginTop: '4px' }}>
-                + Add Schema Layer
+                {__('+ Add Schema Layer', 'holvek')}
             </Button>
         </div>
     );
@@ -1859,19 +1869,19 @@ const SchemaStackEditor = ({ stackJson, updateMeta }) => {
 const PerformanceBadges = ({ seoScore, readabilityScore, hasKeyword, isPillar, isCornerstone, rankingCount, pagespeedMobile }) => {
     const badges = [];
 
-    if (seoScore >= 80) badges.push({ label: '🏆 SEO Champion', color: '#166534', bg: '#dcfce7' });
-    else if (seoScore >= 50) badges.push({ label: '📈 SEO Improving', color: '#854d0e', bg: '#fef9c3' });
-    else if (seoScore > 0) badges.push({ label: '⚠ Needs SEO Work', color: '#991b1b', bg: '#fee2e2' });
+    if (seoScore >= 80) badges.push({ label: __('SEO Champion', 'holvek'), color: '#166534', bg: '#dcfce7' });
+    else if (seoScore >= 50) badges.push({ label: __('SEO Improving', 'holvek'), color: '#854d0e', bg: '#fef9c3' });
+    else if (seoScore > 0) badges.push({ label: __('Needs SEO Work', 'holvek'), color: '#991b1b', bg: '#fee2e2' });
 
-    if (readabilityScore >= 60) badges.push({ label: '✍ Easy to Read', color: '#1e40af', bg: '#dbeafe' });
+    if (readabilityScore >= 60) badges.push({ label: __('Easy to Read', 'holvek'), color: '#1e40af', bg: '#dbeafe' });
 
-    if (isPillar) badges.push({ label: '🏛 Pillar Content', color: '#6b21a8', bg: '#f3e8ff' });
-    else if (isCornerstone) badges.push({ label: '🔑 Cornerstone', color: '#0e7490', bg: '#cffafe' });
+    if (isPillar) badges.push({ label: __('Pillar Content', 'holvek'), color: '#6b21a8', bg: '#f3e8ff' });
+    else if (isCornerstone) badges.push({ label: __('Cornerstone', 'holvek'), color: '#0e7490', bg: '#cffafe' });
 
-    if (rankingCount > 0) badges.push({ label: `📊 ${rankingCount} Ranking KWs`, color: '#064e3b', bg: '#d1fae5' });
+    if (rankingCount > 0) badges.push({ label: sprintf(__('%d ranking keywords', 'holvek'), rankingCount), color: '#064e3b', bg: '#d1fae5' });
 
-    if (pagespeedMobile >= 90) badges.push({ label: '⚡ Fast Page', color: '#14532d', bg: '#dcfce7' });
-    else if (pagespeedMobile > 0 && pagespeedMobile < 50) badges.push({ label: '🐢 Slow Page', color: '#7c2d12', bg: '#fee2e2' });
+    if (pagespeedMobile >= 90) badges.push({ label: __('Fast Page', 'holvek'), color: '#14532d', bg: '#dcfce7' });
+    else if (pagespeedMobile > 0 && pagespeedMobile < 50) badges.push({ label: __('Slow Page', 'holvek'), color: '#7c2d12', bg: '#fee2e2' });
 
     if (badges.length === 0) return null;
 
@@ -1888,7 +1898,7 @@ const PerformanceBadges = ({ seoScore, readabilityScore, hasKeyword, isPillar, i
     );
 };
 
-const AmEveryWhereSidebar = () => {
+const HolvekSidebar = () => {
     const { meta, postType, title, content } = useSelect((select) => {
         const editor = select('core/editor');
         return {
@@ -1916,7 +1926,7 @@ const AmEveryWhereSidebar = () => {
     const featuredMediaId = useSelect((select) => select('core/editor').getEditedPostAttribute('featured_media'), []);
     const featuredMedia = useSelect((select) => featuredMediaId ? select('core').getMedia(featuredMediaId) : null, [featuredMediaId]);
     const featuredMediaUrl = featuredMedia?.source_url || '';
-    const defaultShareImage = (typeof amEveryWhereEditorConfig !== 'undefined' && amEveryWhereEditorConfig.defaultShareImage) || '';
+    const defaultShareImage = (typeof holvekEditorConfig !== 'undefined' && holvekEditorConfig.defaultShareImage) || '';
 
     const domain = useMemo(() => {
         if (!permalink) return 'yourdomain.com';
@@ -1932,12 +1942,12 @@ const AmEveryWhereSidebar = () => {
     };
 
     // ── Derived Analysis (memoized) ──────────────────────────
-    const focusKeyword = meta._ameverywhere_focus_keyword || '';
-    const metaTitle = meta._ameverywhere_meta_title || '';
-    const metaDescription = meta._ameverywhere_meta_description || '';
+    const focusKeyword = meta._holvek_focus_keyword || '';
+    const metaTitle = meta._holvek_meta_title || '';
+    const metaDescription = meta._holvek_meta_description || '';
     const effectiveTitle = metaTitle || title;
-    const isCornerstone = meta._ameverywhere_is_cornerstone === 'yes';
-    const isPillar = meta._ameverywhere_is_pillar === 'yes';
+    const isCornerstone = meta._holvek_is_cornerstone === 'yes';
+    const isPillar = meta._holvek_is_pillar === 'yes';
 
     const readability = useMemo(() => analyzeReadability(content), [content]);
 
@@ -1953,14 +1963,14 @@ const AmEveryWhereSidebar = () => {
 
     // Performance badge computed values
     const pagespeedCache = useMemo(() => {
-        try { return JSON.parse(meta._ameverywhere_pagespeed_cache || 'null'); } catch (e) { return null; }
-    }, [meta._ameverywhere_pagespeed_cache]);
+        try { return JSON.parse(meta._holvek_pagespeed_cache || 'null'); } catch (e) { return null; }
+    }, [meta._holvek_pagespeed_cache]);
     const rankingKeywords = useMemo(() => {
-        try { return JSON.parse(meta._ameverywhere_ranking_keywords || '[]'); } catch (e) { return []; }
-    }, [meta._ameverywhere_ranking_keywords]);
+        try { return JSON.parse(meta._holvek_ranking_keywords || '[]'); } catch (e) { return []; }
+    }, [meta._holvek_ranking_keywords]);
     const additionalKeywordsCount = useMemo(() => {
-        try { return JSON.parse(meta._ameverywhere_additional_keywords || '[]').length; } catch (e) { return 0; }
-    }, [meta._ameverywhere_additional_keywords]);
+        try { return JSON.parse(meta._holvek_additional_keywords || '[]').length; } catch (e) { return 0; }
+    }, [meta._holvek_additional_keywords]);
     const totalKeywords = (focusKeyword ? 1 : 0) + additionalKeywordsCount;
 
     // ── Actions ──────────────────────────────────────────────
@@ -1969,25 +1979,25 @@ const AmEveryWhereSidebar = () => {
         setIsScraping(true);
         setScrapeNotice(null);
         try {
-            const response = await fetch(`${amEveryWhereEditorConfig.apiUrl}/schema/scrape`, {
+            const response = await fetch(`${holvekEditorConfig.apiUrl}/schema/scrape`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereEditorConfig.nonce },
+                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekEditorConfig.nonce },
                 body: JSON.stringify({ url: competitorUrl })
             });
             const data = await response.json();
             if (response.ok && data.success && data.schema_type) {
-                updateMeta('_ameverywhere_primary_schema', data.schema_type);
+                updateMeta('_holvek_primary_schema', data.schema_type);
                 if (data.mapped_fields) {
                     Object.keys(data.mapped_fields).forEach(key => {
                         updateMeta(key, data.mapped_fields[key]);
                     });
                 }
-                setScrapeNotice({ type: 'success', message: `Successfully imported ${data.schema_type} schema.` });
+                setScrapeNotice({ type: 'success', message: sprintf(__('Successfully imported %s schema.', 'holvek'), data.schema_type) });
             } else {
-                setScrapeNotice({ type: 'error', message: data.message || 'Scraping failed.' });
+                setScrapeNotice({ type: 'error', message: data.message || __('Scraping failed.', 'holvek') });
             }
         } catch (e) {
-            setScrapeNotice({ type: 'error', message: 'Network error during scraping.' });
+            setScrapeNotice({ type: 'error', message: __('Network error during scraping.', 'holvek') });
         } finally {
             setIsScraping(false);
         }
@@ -1997,18 +2007,18 @@ const AmEveryWhereSidebar = () => {
         setIsSubmitting(true);
         setSubmitStatus(null);
         try {
-            const response = await fetch(`${amEveryWhereEditorConfig.apiUrl}/index-url`, {
+            const response = await fetch(`${holvekEditorConfig.apiUrl}/index-url`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereEditorConfig.nonce },
+                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekEditorConfig.nonce },
                 body: JSON.stringify({ post_id: postId })
             });
             const data = await response.json();
             setSubmitStatus(response.ok
-                ? { type: 'success', message: data.message || 'Submitted successfully!' }
-                : { type: 'error', message: data.message || 'Failed to submit.' }
+                ? { type: 'success', message: data.message || __('Submitted successfully!', 'holvek') }
+                : { type: 'error', message: data.message || __('Failed to submit.', 'holvek') }
             );
         } catch (error) {
-            setSubmitStatus({ type: 'error', message: 'An error occurred during submission.' });
+            setSubmitStatus({ type: 'error', message: __('An error occurred during submission.', 'holvek') });
         } finally {
             setIsSubmitting(false);
         }
@@ -2017,21 +2027,21 @@ const AmEveryWhereSidebar = () => {
     // FAQ items parsed for preview
     const parsedFaqs = useMemo(() => {
         try {
-            const parsed = JSON.parse(meta._ameverywhere_schema_faq_questions || '[]');
+            const parsed = JSON.parse(meta._holvek_schema_faq_questions || '[]');
             return Array.isArray(parsed) ? parsed : [];
         } catch (e) {
             return [];
         }
-    }, [meta._ameverywhere_schema_faq_questions]);
+    }, [meta._holvek_schema_faq_questions]);
 
     // ── Render ──────────────────────────────────────────────
     return (
         <>
-            <PluginSidebarMoreMenuItem target="ameverywhere-sidebar">
-                {__('AmEveryWhere SEO', 'ameverywhere')}
+            <PluginSidebarMoreMenuItem target="holvek-sidebar">
+                {__('Holvek SEO', 'holvek')}
             </PluginSidebarMoreMenuItem>
-            <PluginSidebar name="ameverywhere-sidebar" title={__('AmEveryWhere AI SEO', 'ameverywhere')}>
-                <div className="ameverywhere-editor-wrapper" style={{ padding: '12px 16px' }}>
+            <PluginSidebar name="holvek-sidebar" title={__('Holvek AI SEO', 'holvek')}>
+                <div className="holvek-editor-wrapper" style={{ padding: '12px 16px' }}>
 
                     {/* ── SEO Score Header ── */}
                     <div style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', marginBottom: '8px' }}>
@@ -2053,23 +2063,23 @@ const AmEveryWhereSidebar = () => {
                     </div>
 
                     {/* ── On-Page SEO Analysis ── */}
-                    <PanelBody title={__('SEO Analysis', 'ameverywhere')} initialOpen={true}>
+                    <PanelBody title={__('SEO Analysis', 'holvek')} initialOpen={true}>
                         <TextControl
-                            label={__('Primary Focus Keyword', 'ameverywhere')}
+                            label={__('Primary Focus Keyword', 'holvek')}
                             value={focusKeyword}
-                            onChange={(value) => updateMeta('_ameverywhere_focus_keyword', value)}
+                            onChange={(value) => updateMeta('_holvek_focus_keyword', value)}
                         />
                         <ToggleControl
-                            label={__('Pillar Content', 'ameverywhere')}
-                            help={__('Marks this as a top-level pillar page in your topic cluster.', 'ameverywhere')}
+                            label={__('Pillar Content', 'holvek')}
+                            help={__('Marks this as a top-level pillar page in your topic cluster.', 'holvek')}
                             checked={isPillar}
-                            onChange={(checked) => updateMeta('_ameverywhere_is_pillar', checked ? 'yes' : 'no')}
+                            onChange={(checked) => updateMeta('_holvek_is_pillar', checked ? 'yes' : 'no')}
                         />
                         <ToggleControl
-                            label={__('Cornerstone Content', 'ameverywhere')}
-                            help={__('Enforces stricter length (≥1000 words) and internal link audits.', 'ameverywhere')}
+                            label={__('Cornerstone Content', 'holvek')}
+                            help={__('Enforces stricter length (≥1000 words) and internal link audits.', 'holvek')}
                             checked={isCornerstone}
-                            onChange={(checked) => updateMeta('_ameverywhere_is_cornerstone', checked ? 'yes' : 'no')}
+                            onChange={(checked) => updateMeta('_holvek_is_cornerstone', checked ? 'yes' : 'no')}
                         />
                         <ul style={{ listStyle: 'none', margin: '12px 0 0', padding: 0 }}>
                             {seoResult.checks.map((check, i) => (
@@ -2079,10 +2089,10 @@ const AmEveryWhereSidebar = () => {
                         {seoResult.keywordGaps && seoResult.keywordGaps.length > 0 && focusKeyword && (
                             <div style={{ background: '#fffbeb', borderLeft: '4px solid #f59e0b', borderRadius: '4px', padding: '10px 12px', marginTop: '12px', marginBottom: '4px', boxShadow: '0 1px 2px 0 rgba(0,0,0,0.05)' }}>
                                 <div style={{ fontWeight: '600', color: '#b45309', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                                    <span>⚠️</span> {__('Keyword Optimization Gaps', 'ameverywhere')}
+                                    <span>⚠️</span> {__('Keyword Optimization Gaps', 'holvek')}
                                 </div>
                                 <div style={{ fontSize: '12px', color: '#78350f', lineHeight: '1.4' }}>
-                                    {__('Your focus keyword is missing in these critical locations:', 'ameverywhere')}
+                                    {__('Your focus keyword is missing in these critical locations:', 'holvek')}
                                 </div>
                                 <ul style={{ margin: '6px 0 0 16px', padding: 0, fontSize: '12px', color: '#78350f', listStyleType: 'disc' }}>
                                     {seoResult.keywordGaps.map((gap, i) => (
@@ -2102,13 +2112,13 @@ const AmEveryWhereSidebar = () => {
                     />
 
                     {/* ── Unlimited Keywords ── */}
-                    <PanelBody title={__('Additional Keywords', 'ameverywhere')} initialOpen={false}>
+                    <PanelBody title={__('Additional Keywords', 'holvek')} initialOpen={false}>
                         <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 8px' }}>
-                            Add unlimited secondary keywords. Each is independently analysed against your title, description, and content.
+                            {__('Add unlimited secondary keywords. Each is independently analysed against your title, description, and content.', 'holvek')}
                         </p>
                         <UnlimitedKeywordsEditor
                             primaryKeyword={focusKeyword}
-                            additionalKeywordsJson={meta._ameverywhere_additional_keywords || '[]'}
+                            additionalKeywordsJson={meta._holvek_additional_keywords || '[]'}
                             content={content}
                             title={title}
                             metaTitle={metaTitle}
@@ -2123,7 +2133,7 @@ const AmEveryWhereSidebar = () => {
                     />
 
                     {/* ── Readability Analysis ── */}
-                    <PanelBody title={__('Readability', 'ameverywhere')} initialOpen={false}>
+                    <PanelBody title={__('Readability', 'holvek')} initialOpen={false}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
                             <ScoreRing
                                 score={readability.flesch.score}
@@ -2135,15 +2145,15 @@ const AmEveryWhereSidebar = () => {
                         <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                             <CheckItem label={`Flesch Reading Ease: ${readability.flesch.score} (${readability.flesch.label})`} pass={readability.flesch.pass} />
                             <CheckItem label={`Long sentences: ${readability.longSentences.value}% (target ≤25%)`} pass={readability.longSentences.pass} />
-                            <CheckItem label={readability.longParagraphs.pass ? 'No overly long paragraphs' : `${readability.longParagraphs.value} paragraph(s) exceed 150 words`} pass={readability.longParagraphs.pass} />
+                            <CheckItem label={readability.longParagraphs.pass ? __('No overly long paragraphs', 'holvek') : `${readability.longParagraphs.value} paragraph(s) exceed 150 words`} pass={readability.longParagraphs.pass} />
                             <CheckItem label={`Passive voice: ${readability.passiveVoice.value}% (target ≤10%)`} pass={readability.passiveVoice.pass} />
                             <CheckItem label={`Transition words: ${readability.transitionWords.value}% (target ≥30%)`} pass={readability.transitionWords.pass} />
-                            <CheckItem label={readability.subheadings.pass ? 'Good subheading distribution' : 'Add more subheadings to break up content'} pass={readability.subheadings.pass} />
+                            <CheckItem label={readability.subheadings.pass ? __('Good subheading distribution', 'holvek') : __('Add more subheadings to break up content', 'holvek')} pass={readability.subheadings.pass} />
                         </ul>
                     </PanelBody>
 
                     {/* ── Core Meta + SERP Preview ── */}
-                    <PanelBody title={__('SERP Preview & Meta', 'ameverywhere')} initialOpen={false}>
+                    <PanelBody title={__('SERP Preview & Meta', 'holvek')} initialOpen={false}>
                         <SerpPreview
                             title={effectiveTitle}
                             url={permalink}
@@ -2153,61 +2163,61 @@ const AmEveryWhereSidebar = () => {
                         <div style={{ marginTop: '16px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                                 <label style={{ fontSize: '13px', fontWeight: '600', color: '#334155' }}>
-                                    {__('Meta Title', 'ameverywhere')}
+                                    {__('Meta Title', 'holvek')}
                                 </label>
                                 <CharCount current={effectiveTitle.length} min={30} max={60} />
                             </div>
                             <TextControl
-                                help={__('Leave blank to use the post title.', 'ameverywhere')}
+                                help={__('Leave blank to use the post title.', 'holvek')}
                                 value={metaTitle}
-                                onChange={(value) => updateMeta('_ameverywhere_meta_title', value)}
+                                onChange={(value) => updateMeta('_holvek_meta_title', value)}
                             />
                         </div>
 
                         <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                                 <label style={{ fontSize: '13px', fontWeight: '600', color: '#334155' }}>
-                                    {__('Meta Description', 'ameverywhere')}
+                                    {__('Meta Description', 'holvek')}
                                 </label>
                                 <CharCount current={metaDescription.length} min={120} max={160} />
                             </div>
                             <TextareaControl
                                 value={metaDescription}
-                                onChange={(value) => updateMeta('_ameverywhere_meta_description', value)}
+                                onChange={(value) => updateMeta('_holvek_meta_description', value)}
                                 rows={4}
                             />
                         </div>
                     </PanelBody>
 
                     {/* ── Structured Data Schema (SD-001) ── */}
-                    <PanelBody title={__('Structured Data Schema', 'ameverywhere')} initialOpen={false}>
+                    <PanelBody title={__('Structured Data Schema', 'holvek')} initialOpen={false}>
                         <SelectControl
-                            label={__('Primary Schema Type', 'ameverywhere')}
-                            value={meta._ameverywhere_primary_schema || 'none'}
+                            label={__('Primary Schema Type', 'holvek')}
+                            value={meta._holvek_primary_schema || 'none'}
                             options={[
-                                { label: 'None / Use Default', value: 'none' },
-                                { label: 'Product Schema', value: 'product' },
-                                { label: 'FAQ Page Schema', value: 'faq' },
-                                { label: 'HowTo Tutorial Schema', value: 'howto' },
-                                { label: 'Local Business Schema', value: 'localbusiness' },
-                                { label: 'Recipe Schema', value: 'recipe' },
-                                { label: 'Event Schema', value: 'event' },
-                                { label: 'Custom Schema Builder', value: 'custom' },
+                                { label: __('None / Use Default', 'holvek'), value: 'none' },
+                                { label: __('Product Schema', 'holvek'), value: 'product' },
+                                { label: __('FAQ Page Schema', 'holvek'), value: 'faq' },
+                                { label: __('HowTo Tutorial Schema', 'holvek'), value: 'howto' },
+                                { label: __('Local Business Schema', 'holvek'), value: 'localbusiness' },
+                                { label: __('Recipe Schema', 'holvek'), value: 'recipe' },
+                                { label: __('Event Schema', 'holvek'), value: 'event' },
+                                { label: __('Custom Schema Builder', 'holvek'), value: 'custom' },
                             ]}
-                            onChange={(val) => updateMeta('_ameverywhere_primary_schema', val)}
+                            onChange={(val) => updateMeta('_holvek_primary_schema', val)}
                         />
 
                         {/* Competitor Schema Scraper */}
                         <div style={{ marginTop: '16px', background: '#f8fafc', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '8px' }}>Competitor Schema Scraping</div>
+                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '8px' }}>{__('Competitor Schema Scraping', 'holvek')}</div>
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'end' }}>
                                 <div style={{ flex: 1 }}>
                                     <TextControl
-                                        label="URL to Scrape"
+                                        label={__('URL to Scrape', 'holvek')}
                                         value={competitorUrl}
-                                        placeholder="https://example.com/competitor-post"
+                                        placeholder={__('https://example.com/competitor-post', 'holvek')}
                                         onChange={(v) => setCompetitorUrl(v)}
-                                        help="Imports schema fields from competitor URLs."
+                                        help={__('Imports schema fields from competitor URLs.', 'holvek')}
                                     />
                                 </div>
                                 <Button 
@@ -2217,7 +2227,7 @@ const AmEveryWhereSidebar = () => {
                                     style={{ marginBottom: '24px' }}
                                     disabled={!competitorUrl}
                                 >
-                                    Scrape & Pre-fill
+                                    {__('Scrape & Pre-fill', 'holvek')}
                                 </Button>
                             </div>
                             {scrapeNotice && (
@@ -2227,93 +2237,93 @@ const AmEveryWhereSidebar = () => {
                             )}
                         </div>
 
-                        {meta._ameverywhere_primary_schema === 'product' && (
+                        {meta._holvek_primary_schema === 'product' && (
                             <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0', marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                <strong>Product Details</strong>
+                                <strong>{__('Product Details', 'holvek')}</strong>
                                 <TextControl
-                                    label="Product Name"
-                                    value={meta._ameverywhere_schema_product_name || ''}
-                                    placeholder="Leave blank to use post title"
-                                    onChange={(v) => updateMeta('_ameverywhere_schema_product_name', v)}
+                                    label={__('Product Name', 'holvek')}
+                                    value={meta._holvek_schema_product_name || ''}
+                                    placeholder={__('Leave blank to use post title', 'holvek')}
+                                    onChange={(v) => updateMeta('_holvek_schema_product_name', v)}
                                 />
                                 <TextareaControl
-                                    label="Product Description"
-                                    value={meta._ameverywhere_schema_product_description || ''}
-                                    onChange={(v) => updateMeta('_ameverywhere_schema_product_description', v)}
+                                    label={__('Product Description', 'holvek')}
+                                    value={meta._holvek_schema_product_description || ''}
+                                    onChange={(v) => updateMeta('_holvek_schema_product_description', v)}
                                     rows={2}
                                 />
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                                     <TextControl
-                                        label="Price"
+                                        label={__('Price', 'holvek')}
                                         type="number"
                                         step="0.01"
-                                        value={meta._ameverywhere_schema_product_price || ''}
-                                        onChange={(v) => updateMeta('_ameverywhere_schema_product_price', v)}
+                                        value={meta._holvek_schema_product_price || ''}
+                                        onChange={(v) => updateMeta('_holvek_schema_product_price', v)}
                                     />
                                     <SelectControl
-                                        label="Currency"
-                                        value={meta._ameverywhere_schema_product_currency || 'USD'}
+                                        label={__('Currency', 'holvek')}
+                                        value={meta._holvek_schema_product_currency || 'USD'}
                                         options={[
-                                            { label: 'USD ($)', value: 'USD' },
-                                            { label: 'EUR (€)', value: 'EUR' },
-                                            { label: 'GBP (£)', value: 'GBP' },
-                                            { label: 'NGN (₦)', value: 'NGN' },
+                                            { label: __('USD ($)', 'holvek'), value: 'USD' },
+                                            { label: __('EUR (€)', 'holvek'), value: 'EUR' },
+                                            { label: __('GBP (£)', 'holvek'), value: 'GBP' },
+                                            { label: __('NGN (₦)', 'holvek'), value: 'NGN' },
                                         ]}
-                                        onChange={(v) => updateMeta('_ameverywhere_schema_product_currency', v)}
+                                        onChange={(v) => updateMeta('_holvek_schema_product_currency', v)}
                                     />
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                                     <TextControl
-                                        label="Rating (1-5)"
+                                        label={__('Rating (1-5)', 'holvek')}
                                         type="number"
                                         step="0.1"
                                         min="1"
                                         max="5"
-                                        value={meta._ameverywhere_schema_product_rating || ''}
-                                        onChange={(v) => updateMeta('_ameverywhere_schema_product_rating', v)}
+                                        value={meta._holvek_schema_product_rating || ''}
+                                        onChange={(v) => updateMeta('_holvek_schema_product_rating', v)}
                                     />
                                     <SelectControl
-                                        label="Availability"
-                                        value={meta._ameverywhere_schema_product_availability || 'InStock'}
+                                        label={__('Availability', 'holvek')}
+                                        value={meta._holvek_schema_product_availability || 'InStock'}
                                         options={[
-                                            { label: 'In Stock', value: 'InStock' },
-                                            { label: 'Out of Stock', value: 'OutOfStock' },
-                                            { label: 'Pre Order', value: 'PreOrder' },
+                                            { label: __('In Stock', 'holvek'), value: 'InStock' },
+                                            { label: __('Out of Stock', 'holvek'), value: 'OutOfStock' },
+                                            { label: __('Pre Order', 'holvek'), value: 'PreOrder' },
                                         ]}
-                                        onChange={(v) => updateMeta('_ameverywhere_schema_product_availability', v)}
+                                        onChange={(v) => updateMeta('_holvek_schema_product_availability', v)}
                                     />
                                 </div>
 
                                 {/* Product Rich Snippet Preview */}
                                 <div style={{ marginTop: '8px', borderTop: '1px solid #cbd5e1', paddingTop: '8px' }}>
-                                    <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>Google Product SERP Preview</div>
+                                    <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>{__('Google Product SERP Preview', 'holvek')}</div>
                                     <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', padding: '8px', background: '#fff', fontSize: '13px', marginTop: '6px' }}>
-                                        <div style={{ color: '#1a0dab', fontWeight: '600' }}>{meta._ameverywhere_schema_product_name || effectiveTitle}</div>
+                                        <div style={{ color: '#1a0dab', fontWeight: '600' }}>{meta._holvek_schema_product_name || effectiveTitle}</div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#f59e0b', fontSize: '12px', marginTop: '3px' }}>
                                             <span style={{ letterSpacing: '2px' }}>★★★★★</span>
-                                            <span style={{ color: '#475569' }}>Rating: {meta._ameverywhere_schema_product_rating || '5.0'}</span>
+                                            <span style={{ color: '#475569' }}>Rating: {meta._holvek_schema_product_rating || '5.0'}</span>
                                             <span style={{ color: '#cbd5e1' }}>•</span>
-                                            <span style={{ color: '#475569' }}>{meta._ameverywhere_schema_product_price ? `${meta._ameverywhere_schema_product_currency || 'USD'} ${meta._ameverywhere_schema_product_price}` : '$99.99'}</span>
+                                            <span style={{ color: '#475569' }}>{meta._holvek_schema_product_price ? `${meta._holvek_schema_product_currency || 'USD'} ${meta._holvek_schema_product_price}` : '$99.99'}</span>
                                             <span style={{ color: '#cbd5e1' }}>•</span>
-                                            <span style={{ color: meta._ameverywhere_schema_product_availability === 'OutOfStock' ? '#ef4444' : '#22c55e' }}>{meta._ameverywhere_schema_product_availability || 'InStock'}</span>
+                                            <span style={{ color: meta._holvek_schema_product_availability === 'OutOfStock' ? '#ef4444' : '#22c55e' }}>{meta._holvek_schema_product_availability || 'InStock'}</span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         )}
 
-                        {meta._ameverywhere_primary_schema === 'faq' && (
+                        {meta._holvek_primary_schema === 'faq' && (
                             <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0', marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                <strong>FAQ Setup</strong>
+                                <strong>{__('FAQ Setup', 'holvek')}</strong>
                                 <FaqEditor
-                                    value={meta._ameverywhere_schema_faq_questions || '[]'}
-                                    onChange={(newJson) => updateMeta('_ameverywhere_schema_faq_questions', newJson)}
+                                    value={meta._holvek_schema_faq_questions || '[]'}
+                                    onChange={(newJson) => updateMeta('_holvek_schema_faq_questions', newJson)}
                                 />
 
                                 {/* FAQ Rich Snippet Preview */}
                                 {parsedFaqs.length > 0 && (
                                     <div style={{ marginTop: '8px', borderTop: '1px solid #cbd5e1', paddingTop: '8px' }}>
-                                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>Google FAQ SERP Preview</div>
+                                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>{__('Google FAQ SERP Preview', 'holvek')}</div>
                                         <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', padding: '8px', background: '#fff', fontSize: '13px', marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                             <div style={{ color: '#1a0dab', fontWeight: '600' }}>{effectiveTitle}</div>
                                             {parsedFaqs.map((faq, index) => (
@@ -2322,7 +2332,7 @@ const AmEveryWhereSidebar = () => {
                                                         <span>{faq.question || `Question ${index + 1}`}</span>
                                                         <span style={{ color: '#70757a' }}>▾</span>
                                                     </div>
-                                                    <div style={{ color: '#4d5156', fontSize: '12px', marginTop: '2px' }}>{faq.answer || 'Enter an answer above.'}</div>
+                                                    <div style={{ color: '#4d5156', fontSize: '12px', marginTop: '2px' }}>{faq.answer || __('Enter an answer above.', 'holvek')}</div>
                                                 </div>
                                             ))}
                                         </div>
@@ -2331,238 +2341,238 @@ const AmEveryWhereSidebar = () => {
                             </div>
                         )}
 
-                        {meta._ameverywhere_primary_schema === 'howto' && (
+                        {meta._holvek_primary_schema === 'howto' && (
                             <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0', marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                <strong>HowTo Tutorial details</strong>
+                                <strong>{__('HowTo Tutorial details', 'holvek')}</strong>
                                 <TextControl
-                                    label="HowTo Name"
-                                    value={meta._ameverywhere_schema_howto_name || ''}
-                                    placeholder="Leave blank to use post title"
-                                    onChange={(v) => updateMeta('_ameverywhere_schema_howto_name', v)}
+                                    label={__('HowTo Name', 'holvek')}
+                                    value={meta._holvek_schema_howto_name || ''}
+                                    placeholder={__('Leave blank to use post title', 'holvek')}
+                                    onChange={(v) => updateMeta('_holvek_schema_howto_name', v)}
                                 />
                                 <TextareaControl
-                                    label="HowTo Description"
-                                    value={meta._ameverywhere_schema_howto_description || ''}
-                                    onChange={(v) => updateMeta('_ameverywhere_schema_howto_description', v)}
+                                    label={__('HowTo Description', 'holvek')}
+                                    value={meta._holvek_schema_howto_description || ''}
+                                    onChange={(v) => updateMeta('_holvek_schema_howto_description', v)}
                                     rows={2}
                                 />
                                 <TextControl
-                                    label="Required Supplies (comma separated)"
-                                    value={meta._ameverywhere_schema_howto_supplies || ''}
-                                    placeholder="e.g. Water, Soil, Plant Pot"
-                                    onChange={(v) => updateMeta('_ameverywhere_schema_howto_supplies', v)}
+                                    label={__('Required Supplies (comma separated)', 'holvek')}
+                                    value={meta._holvek_schema_howto_supplies || ''}
+                                    placeholder={__('e.g. Water, Soil, Plant Pot', 'holvek')}
+                                    onChange={(v) => updateMeta('_holvek_schema_howto_supplies', v)}
                                 />
                                 <TextControl
-                                    label="Required Tools (comma separated)"
-                                    value={meta._ameverywhere_schema_howto_tools || ''}
-                                    placeholder="e.g. Trowel, Watering Can"
-                                    onChange={(v) => updateMeta('_ameverywhere_schema_howto_tools', v)}
+                                    label={__('Required Tools (comma separated)', 'holvek')}
+                                    value={meta._holvek_schema_howto_tools || ''}
+                                    placeholder={__('e.g. Trowel, Watering Can', 'holvek')}
+                                    onChange={(v) => updateMeta('_holvek_schema_howto_tools', v)}
                                 />
                                 <HowToStepsEditor
-                                    value={meta._ameverywhere_schema_howto_steps || '[]'}
-                                    onChange={(newJson) => updateMeta('_ameverywhere_schema_howto_steps', newJson)}
+                                    value={meta._holvek_schema_howto_steps || '[]'}
+                                    onChange={(newJson) => updateMeta('_holvek_schema_howto_steps', newJson)}
                                 />
                             </div>
                         )}
 
-                        {meta._ameverywhere_primary_schema === 'localbusiness' && (
+                        {meta._holvek_primary_schema === 'localbusiness' && (
                             <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0', marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                <strong>Local Business Info</strong>
+                                <strong>{__('Local Business Info', 'holvek')}</strong>
                                 <TextControl
-                                    label="Business Name"
-                                    value={meta._ameverywhere_schema_localbusiness_name || ''}
-                                    placeholder="Leave blank to use site name"
-                                    onChange={(v) => updateMeta('_ameverywhere_schema_localbusiness_name', v)}
+                                    label={__('Business Name', 'holvek')}
+                                    value={meta._holvek_schema_localbusiness_name || ''}
+                                    placeholder={__('Leave blank to use site name', 'holvek')}
+                                    onChange={(v) => updateMeta('_holvek_schema_localbusiness_name', v)}
                                 />
                                 <TextControl
-                                    label="Telephone"
-                                    value={meta._ameverywhere_schema_localbusiness_telephone || ''}
-                                    placeholder="e.g. +1-555-0199"
-                                    onChange={(v) => updateMeta('_ameverywhere_schema_localbusiness_telephone', v)}
+                                    label={__('Telephone', 'holvek')}
+                                    value={meta._holvek_schema_localbusiness_telephone || ''}
+                                    placeholder={__('e.g. +1-555-0199', 'holvek')}
+                                    onChange={(v) => updateMeta('_holvek_schema_localbusiness_telephone', v)}
                                 />
                                 <TextControl
-                                    label="Street Address"
-                                    value={meta._ameverywhere_schema_localbusiness_street || ''}
-                                    placeholder="e.g. 100 Main St"
-                                    onChange={(v) => updateMeta('_ameverywhere_schema_localbusiness_street', v)}
+                                    label={__('Street Address', 'holvek')}
+                                    value={meta._holvek_schema_localbusiness_street || ''}
+                                    placeholder={__('e.g. 100 Main St', 'holvek')}
+                                    onChange={(v) => updateMeta('_holvek_schema_localbusiness_street', v)}
                                 />
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                                     <TextControl
-                                        label="City"
-                                        value={meta._ameverywhere_schema_localbusiness_city || ''}
-                                        placeholder="e.g. Seattle"
-                                        onChange={(v) => updateMeta('_ameverywhere_schema_localbusiness_city', v)}
+                                        label={__('City', 'holvek')}
+                                        value={meta._holvek_schema_localbusiness_city || ''}
+                                        placeholder={__('e.g. Seattle', 'holvek')}
+                                        onChange={(v) => updateMeta('_holvek_schema_localbusiness_city', v)}
                                     />
                                     <TextControl
-                                        label="Postal Code"
-                                        value={meta._ameverywhere_schema_localbusiness_postal || ''}
-                                        placeholder="e.g. 98101"
-                                        onChange={(v) => updateMeta('_ameverywhere_schema_localbusiness_postal', v)}
+                                        label={__('Postal Code', 'holvek')}
+                                        value={meta._holvek_schema_localbusiness_postal || ''}
+                                        placeholder={__('e.g. 98101', 'holvek')}
+                                        onChange={(v) => updateMeta('_holvek_schema_localbusiness_postal', v)}
                                     />
                                 </div>
                                 <TextControl
-                                    label="Country Code"
-                                    value={meta._ameverywhere_schema_localbusiness_country || 'US'}
-                                    placeholder="e.g. US"
-                                    onChange={(v) => updateMeta('_ameverywhere_schema_localbusiness_country', v)}
+                                    label={__('Country Code', 'holvek')}
+                                    value={meta._holvek_schema_localbusiness_country || 'US'}
+                                    placeholder={__('e.g. US', 'holvek')}
+                                    onChange={(v) => updateMeta('_holvek_schema_localbusiness_country', v)}
                                 />
                             </div>
                         )}
 
-                        {meta._ameverywhere_primary_schema === 'recipe' && (
+                        {meta._holvek_primary_schema === 'recipe' && (
                             <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0', marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                <strong>Recipe Information</strong>
+                                <strong>{__('Recipe Information', 'holvek')}</strong>
                                 <TextControl
-                                    label="Recipe Name"
-                                    value={meta._ameverywhere_schema_recipe_name || ''}
-                                    placeholder="Leave blank to use post title"
-                                    onChange={(v) => updateMeta('_ameverywhere_schema_recipe_name', v)}
+                                    label={__('Recipe Name', 'holvek')}
+                                    value={meta._holvek_schema_recipe_name || ''}
+                                    placeholder={__('Leave blank to use post title', 'holvek')}
+                                    onChange={(v) => updateMeta('_holvek_schema_recipe_name', v)}
                                 />
                                 <TextareaControl
-                                    label="Recipe Description"
-                                    value={meta._ameverywhere_schema_recipe_description || ''}
-                                    onChange={(v) => updateMeta('_ameverywhere_schema_recipe_description', v)}
+                                    label={__('Recipe Description', 'holvek')}
+                                    value={meta._holvek_schema_recipe_description || ''}
+                                    onChange={(v) => updateMeta('_holvek_schema_recipe_description', v)}
                                     rows={2}
                                 />
                                 <TextareaControl
-                                    label="Ingredients (one per line)"
-                                    value={meta._ameverywhere_schema_recipe_ingredients || ''}
-                                    onChange={(v) => updateMeta('_ameverywhere_schema_recipe_ingredients', v)}
+                                    label={__('Ingredients (one per line)', 'holvek')}
+                                    value={meta._holvek_schema_recipe_ingredients || ''}
+                                    onChange={(v) => updateMeta('_holvek_schema_recipe_ingredients', v)}
                                     rows={4}
                                 />
                                 
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                                     <TextControl
-                                        label="Prep Time (mins)"
+                                        label={__('Prep Time (mins)', 'holvek')}
                                         type="number"
-                                        value={meta._ameverywhere_schema_recipe_prep_time || ''}
-                                        onChange={(v) => updateMeta('_ameverywhere_schema_recipe_prep_time', v)}
+                                        value={meta._holvek_schema_recipe_prep_time || ''}
+                                        onChange={(v) => updateMeta('_holvek_schema_recipe_prep_time', v)}
                                     />
                                     <TextControl
-                                        label="Cook Time (mins)"
+                                        label={__('Cook Time (mins)', 'holvek')}
                                         type="number"
-                                        value={meta._ameverywhere_schema_recipe_cook_time || ''}
-                                        onChange={(v) => updateMeta('_ameverywhere_schema_recipe_cook_time', v)}
+                                        value={meta._holvek_schema_recipe_cook_time || ''}
+                                        onChange={(v) => updateMeta('_holvek_schema_recipe_cook_time', v)}
                                     />
                                 </div>
                                 <TextControl
-                                    label="Calories (kcal)"
+                                    label={__('Calories (kcal)', 'holvek')}
                                     type="number"
-                                    value={meta._ameverywhere_schema_recipe_calories || ''}
-                                    onChange={(v) => updateMeta('_ameverywhere_schema_recipe_calories', v)}
+                                    value={meta._holvek_schema_recipe_calories || ''}
+                                    onChange={(v) => updateMeta('_holvek_schema_recipe_calories', v)}
                                 />
 
                                 <RecipeInstructionsEditor
-                                    value={meta._ameverywhere_schema_recipe_instructions || '[]'}
-                                    onChange={(newJson) => updateMeta('_ameverywhere_schema_recipe_instructions', newJson)}
+                                    value={meta._holvek_schema_recipe_instructions || '[]'}
+                                    onChange={(newJson) => updateMeta('_holvek_schema_recipe_instructions', newJson)}
                                 />
 
                                 <RecipeSerpPreview 
-                                    name={meta._ameverywhere_schema_recipe_name || effectiveTitle}
+                                    name={meta._holvek_schema_recipe_name || effectiveTitle}
                                     url={permalink}
                                     image={featuredMediaUrl}
-                                    calories={meta._ameverywhere_schema_recipe_calories}
-                                    prepTime={meta._ameverywhere_schema_recipe_prep_time}
-                                    cookTime={meta._ameverywhere_schema_recipe_cook_time}
-                                    ingredientsCount={meta._ameverywhere_schema_recipe_ingredients ? meta._ameverywhere_schema_recipe_ingredients.split('\n').filter(i => i.trim()).length : 0}
+                                    calories={meta._holvek_schema_recipe_calories}
+                                    prepTime={meta._holvek_schema_recipe_prep_time}
+                                    cookTime={meta._holvek_schema_recipe_cook_time}
+                                    ingredientsCount={meta._holvek_schema_recipe_ingredients ? meta._holvek_schema_recipe_ingredients.split('\n').filter(i => i.trim()).length : 0}
                                     stepsCount={(() => {
-                                        try { return JSON.parse(meta._ameverywhere_schema_recipe_instructions || '[]').length; } catch(e) { return 0; }
+                                        try { return JSON.parse(meta._holvek_schema_recipe_instructions || '[]').length; } catch(e) { return 0; }
                                     })()}
                                 />
                             </div>
                         )}
 
-                        {meta._ameverywhere_primary_schema === 'event' && (
+                        {meta._holvek_primary_schema === 'event' && (
                             <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0', marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                <strong>Event Details</strong>
+                                <strong>{__('Event Details', 'holvek')}</strong>
                                 <TextControl
-                                    label="Event Name"
-                                    value={meta._ameverywhere_schema_event_name || ''}
-                                    placeholder="Leave blank to use post title"
-                                    onChange={(v) => updateMeta('_ameverywhere_schema_event_name', v)}
+                                    label={__('Event Name', 'holvek')}
+                                    value={meta._holvek_schema_event_name || ''}
+                                    placeholder={__('Leave blank to use post title', 'holvek')}
+                                    onChange={(v) => updateMeta('_holvek_schema_event_name', v)}
                                 />
                                 
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                                     <TextControl
-                                        label="Start Date & Time"
+                                        label={__('Start Date & Time', 'holvek')}
                                         type="datetime-local"
-                                        value={meta._ameverywhere_schema_event_start_date || ''}
-                                        onChange={(v) => updateMeta('_ameverywhere_schema_event_start_date', v)}
+                                        value={meta._holvek_schema_event_start_date || ''}
+                                        onChange={(v) => updateMeta('_holvek_schema_event_start_date', v)}
                                     />
                                     <TextControl
-                                        label="End Date & Time"
+                                        label={__('End Date & Time', 'holvek')}
                                         type="datetime-local"
-                                        value={meta._ameverywhere_schema_event_end_date || ''}
-                                        onChange={(v) => updateMeta('_ameverywhere_schema_event_end_date', v)}
+                                        value={meta._holvek_schema_event_end_date || ''}
+                                        onChange={(v) => updateMeta('_holvek_schema_event_end_date', v)}
                                     />
                                 </div>
 
                                 <TextControl
-                                    label="Venue / Location Name"
-                                    value={meta._ameverywhere_schema_event_venue || ''}
-                                    onChange={(v) => updateMeta('_ameverywhere_schema_event_venue', v)}
+                                    label={__('Venue / Location Name', 'holvek')}
+                                    value={meta._holvek_schema_event_venue || ''}
+                                    onChange={(v) => updateMeta('_holvek_schema_event_venue', v)}
                                 />
                                 <TextControl
-                                    label="Physical Address"
-                                    value={meta._ameverywhere_schema_event_address || ''}
-                                    onChange={(v) => updateMeta('_ameverywhere_schema_event_address', v)}
+                                    label={__('Physical Address', 'holvek')}
+                                    value={meta._holvek_schema_event_address || ''}
+                                    onChange={(v) => updateMeta('_holvek_schema_event_address', v)}
                                 />
                                 
                                 <TextControl
-                                    label="Main Performer/Speaker"
-                                    value={meta._ameverywhere_schema_event_performer || ''}
-                                    onChange={(v) => updateMeta('_ameverywhere_schema_event_performer', v)}
+                                    label={__('Main Performer/Speaker', 'holvek')}
+                                    value={meta._holvek_schema_event_performer || ''}
+                                    onChange={(v) => updateMeta('_holvek_schema_event_performer', v)}
                                 />
                                 
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                                     <TextControl
-                                        label="Ticket Price"
+                                        label={__('Ticket Price', 'holvek')}
                                         type="number"
                                         step="0.01"
-                                        value={meta._ameverywhere_schema_event_price || ''}
-                                        onChange={(v) => updateMeta('_ameverywhere_schema_event_price', v)}
+                                        value={meta._holvek_schema_event_price || ''}
+                                        onChange={(v) => updateMeta('_holvek_schema_event_price', v)}
                                     />
                                     <SelectControl
-                                        label="Currency"
-                                        value={meta._ameverywhere_schema_event_currency || 'USD'}
+                                        label={__('Currency', 'holvek')}
+                                        value={meta._holvek_schema_event_currency || 'USD'}
                                         options={[
-                                            { label: 'USD ($)', value: 'USD' },
-                                            { label: 'EUR (€)', value: 'EUR' },
-                                            { label: 'GBP (£)', value: 'GBP' },
+                                            { label: __('USD ($)', 'holvek'), value: 'USD' },
+                                            { label: __('EUR (€)', 'holvek'), value: 'EUR' },
+                                            { label: __('GBP (£)', 'holvek'), value: 'GBP' },
                                         ]}
-                                        onChange={(v) => updateMeta('_ameverywhere_schema_event_currency', v)}
+                                        onChange={(v) => updateMeta('_holvek_schema_event_currency', v)}
                                     />
                                 </div>
 
                                 <EventSerpPreview 
-                                    name={meta._ameverywhere_schema_event_name || effectiveTitle}
+                                    name={meta._holvek_schema_event_name || effectiveTitle}
                                     url={permalink}
-                                    startDate={meta._ameverywhere_schema_event_start_date}
-                                    venue={meta._ameverywhere_schema_event_venue}
-                                    address={meta._ameverywhere_schema_event_address}
-                                    performer={meta._ameverywhere_schema_event_performer}
-                                    price={meta._ameverywhere_schema_event_price ? `${meta._ameverywhere_schema_event_currency || 'USD'} ${meta._ameverywhere_schema_event_price}` : ''}
+                                    startDate={meta._holvek_schema_event_start_date}
+                                    venue={meta._holvek_schema_event_venue}
+                                    address={meta._holvek_schema_event_address}
+                                    performer={meta._holvek_schema_event_performer}
+                                    price={meta._holvek_schema_event_price ? `${meta._holvek_schema_event_currency || 'USD'} ${meta._holvek_schema_event_price}` : ''}
                                 />
                             </div>
                         )}
 
-                        {meta._ameverywhere_primary_schema === 'custom' && (
+                        {meta._holvek_primary_schema === 'custom' && (
                             <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '6px', border: '1px solid #e2e8f0', marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                <strong>Custom Schema Configuration</strong>
+                                <strong>{__('Custom Schema Configuration', 'holvek')}</strong>
                                 <TextControl
-                                    label="Root Schema @type"
-                                    value={meta._ameverywhere_schema_custom_type || ''}
-                                    placeholder="e.g. Course, SoftwareApplication"
-                                    onChange={(v) => updateMeta('_ameverywhere_schema_custom_type', v)}
+                                    label={__('Root Schema @type', 'holvek')}
+                                    value={meta._holvek_schema_custom_type || ''}
+                                    placeholder={__('e.g. Course, SoftwareApplication', 'holvek')}
+                                    onChange={(v) => updateMeta('_holvek_schema_custom_type', v)}
                                 />
                                 <CustomPropertyTreeBuilder 
-                                    value={meta._ameverywhere_custom_schema_properties || '[]'}
-                                    onChange={(newJson) => updateMeta('_ameverywhere_custom_schema_properties', newJson)}
+                                    value={meta._holvek_custom_schema_properties || '[]'}
+                                    onChange={(newJson) => updateMeta('_holvek_custom_schema_properties', newJson)}
                                 />
                             </div>
                         )}
                         <SchemaValidator
-                            schemaType={meta._ameverywhere_primary_schema}
+                            schemaType={meta._holvek_primary_schema}
                             meta={meta}
                             title={title}
                             content={content}
@@ -2571,7 +2581,7 @@ const AmEveryWhereSidebar = () => {
                             domain={domain}
                         />
                         <SchemaStackEditor
-                            stackJson={meta._ameverywhere_schema_stack || '[]'}
+                            stackJson={meta._holvek_schema_stack || '[]'}
                             updateMeta={updateMeta}
                         />
                     </PanelBody>
@@ -2579,79 +2589,79 @@ const AmEveryWhereSidebar = () => {
                     {/* ── Ranking Keywords (GSC) ── */}
                     <RankingKeywordsPanel
                         postId={postId}
-                        cachedJson={meta._ameverywhere_ranking_keywords || '[]'}
-                        cachedAt={meta._ameverywhere_ranking_keywords_at || ''}
+                        cachedJson={meta._holvek_ranking_keywords || '[]'}
+                        cachedAt={meta._holvek_ranking_keywords_at || ''}
                         updateMeta={updateMeta}
                     />
 
                     {/* ── PageSpeed Performance ── */}
                     <PageSpeedBadge
                         postId={postId}
-                        cachedJson={meta._ameverywhere_pagespeed_cache || 'null'}
+                        cachedJson={meta._holvek_pagespeed_cache || 'null'}
                         updateMeta={updateMeta}
                     />
 
                     {/* ── Social Metadata ── */}
-                    <PanelBody title={__('Social Metadata', 'ameverywhere')} initialOpen={false}>
+                    <PanelBody title={__('Social Metadata', 'holvek')} initialOpen={false}>
                         <TextControl
-                            label={__('Open Graph Title (Facebook/LinkedIn)', 'ameverywhere')}
-                            value={meta._ameverywhere_og_title || ''}
-                            onChange={(value) => updateMeta('_ameverywhere_og_title', value)}
+                            label={__('Open Graph Title (Facebook/LinkedIn)', 'holvek')}
+                            value={meta._holvek_og_title || ''}
+                            onChange={(value) => updateMeta('_holvek_og_title', value)}
                         />
                         <TextareaControl
-                            label={__('Open Graph Description', 'ameverywhere')}
-                            value={meta._ameverywhere_og_description || ''}
-                            onChange={(value) => updateMeta('_ameverywhere_og_description', value)}
+                            label={__('Open Graph Description', 'holvek')}
+                            value={meta._holvek_og_description || ''}
+                            onChange={(value) => updateMeta('_holvek_og_description', value)}
                             rows={3}
                         />
                         <TextControl
-                            label={__('Open Graph Image URL', 'ameverywhere')}
-                            help="Provide an absolute URL to a custom social sharing image."
-                            value={meta._ameverywhere_og_image || ''}
-                            onChange={(value) => updateMeta('_ameverywhere_og_image', value)}
+                            label={__('Open Graph Image URL', 'holvek')}
+                            help={__('Provide an absolute URL to a custom social sharing image.', 'holvek')}
+                            value={meta._holvek_og_image || ''}
+                            onChange={(value) => updateMeta('_holvek_og_image', value)}
                         />
                         <TextControl
-                            label={__('Twitter Title', 'ameverywhere')}
-                            value={meta._ameverywhere_twitter_title || ''}
-                            onChange={(value) => updateMeta('_ameverywhere_twitter_title', value)}
+                            label={__('Twitter Title', 'holvek')}
+                            value={meta._holvek_twitter_title || ''}
+                            onChange={(value) => updateMeta('_holvek_twitter_title', value)}
                         />
                         
                         <SocialCardPreview
-                            title={meta._ameverywhere_og_title || title}
-                            description={meta._ameverywhere_og_description || (content ? stripHtml(content).substring(0, 150) + '...' : '')}
-                            image={meta._ameverywhere_og_image || featuredMediaUrl || defaultShareImage}
+                            title={meta._holvek_og_title || title}
+                            description={meta._holvek_og_description || (content ? stripHtml(content).substring(0, 150) + '...' : '')}
+                            image={meta._holvek_og_image || featuredMediaUrl || defaultShareImage}
                             domain={domain}
                         />
                     </PanelBody>
 
                     {/* ── Indexing & Technical ── */}
-                    <PanelBody title={__('Indexing & Technical', 'ameverywhere')} initialOpen={false}>
+                    <PanelBody title={__('Indexing & Technical', 'holvek')} initialOpen={false}>
                         <TextControl
-                            label={__('Canonical URL', 'ameverywhere')}
-                            help={__('Prevent duplicate content issues by overriding canonical output.', 'ameverywhere')}
-                            value={meta._ameverywhere_canonical_url || ''}
-                            onChange={(value) => updateMeta('_ameverywhere_canonical_url', value)}
+                            label={__('Canonical URL', 'holvek')}
+                            help={__('Prevent duplicate content issues by overriding canonical output.', 'holvek')}
+                            value={meta._holvek_canonical_url || ''}
+                            onChange={(value) => updateMeta('_holvek_canonical_url', value)}
                         />
 
                         <ToggleControl
-                            label={__('No Index (Hide from Search Engines)', 'ameverywhere')}
-                            checked={meta._ameverywhere_noindex === 'yes'}
-                            onChange={(checked) => updateMeta('_ameverywhere_noindex', checked ? 'yes' : 'no')}
+                            label={__('No Index (Hide from Search Engines)', 'holvek')}
+                            checked={meta._holvek_noindex === 'yes'}
+                            onChange={(checked) => updateMeta('_holvek_noindex', checked ? 'yes' : 'no')}
                         />
                         <ToggleControl
-                            label={__('No Follow (Prevent following outbound links)', 'ameverywhere')}
-                            checked={meta._ameverywhere_nofollow === 'yes'}
-                            onChange={(checked) => updateMeta('_ameverywhere_nofollow', checked ? 'yes' : 'no')}
+                            label={__('No Follow (Prevent following outbound links)', 'holvek')}
+                            checked={meta._holvek_nofollow === 'yes'}
+                            onChange={(checked) => updateMeta('_holvek_nofollow', checked ? 'yes' : 'no')}
                         />
                         <ToggleControl
-                            label={__('Optimize for Google News', 'ameverywhere')}
-                            checked={meta._ameverywhere_is_news === 'yes'}
-                            onChange={(checked) => updateMeta('_ameverywhere_is_news', checked ? 'yes' : 'no')}
+                            label={__('Optimize for Google News', 'holvek')}
+                            checked={meta._holvek_is_news === 'yes'}
+                            onChange={(checked) => updateMeta('_holvek_is_news', checked ? 'yes' : 'no')}
                         />
 
                         <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
-                            <strong>Manual Indexing</strong>
-                            <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 8px' }}>Queue an IndexNow notification. Google Indexing API submission is only available for eligible JobPosting and livestream pages.</p>
+                            <strong>{__('Manual Indexing', 'holvek')}</strong>
+                            <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 8px' }}>{__('Queue an IndexNow notification. Google Indexing API submission is only available for eligible JobPosting and livestream pages.', 'holvek')}</p>
 
                             {submitStatus && (
                                 <Notice status={submitStatus.type} isDismissible={true} onRemove={() => setSubmitStatus(null)} className="mb-2">
@@ -2660,7 +2670,7 @@ const AmEveryWhereSidebar = () => {
                             )}
 
                             <Button isPrimary isBusy={isSubmitting} onClick={submitToIndex} className="w-full justify-center mb-4">
-                                {isSubmitting ? 'Submitting...' : 'Submit to Search Engines'}
+                                {isSubmitting ? __('Submitting...', 'holvek') : __('Submit to Search Engines', 'holvek')}
                             </Button>
 
                         </div>
@@ -2669,26 +2679,26 @@ const AmEveryWhereSidebar = () => {
                 </div>
                 
                 {/* ── Social Media Sharing ── */}
-                <PanelBody title={__('Social Media Sharing', 'ameverywhere')} initialOpen={false}>
+                <PanelBody title={__('Social Media Sharing', 'holvek')} initialOpen={false}>
                     <div style={{ marginBottom: '16px' }}>
                         <ToggleControl
-                            label={__('Disable Auto-Share for this Post', 'ameverywhere')}
-                            help={__('If enabled, this post will NOT be automatically shared to your connected social accounts when published.', 'ameverywhere')}
-                            checked={meta._ameverywhere_disable_social_share === '1'}
-                            onChange={(checked) => updateMeta('_ameverywhere_disable_social_share', checked ? '1' : '0')}
+                            label={__('Disable Auto-Share for this Post', 'holvek')}
+                            help={__('If enabled, this post will NOT be automatically shared to your connected social accounts when published.', 'holvek')}
+                            checked={meta._holvek_disable_social_share === '1'}
+                            onChange={(checked) => updateMeta('_holvek_disable_social_share', checked ? '1' : '0')}
                         />
                     </div>
 
                     <div style={{ marginBottom: '16px' }}>
-                        <strong>Live Social Preview</strong>
-                        <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 8px' }}>Preview how your post will appear on Facebook, X (Twitter), and LinkedIn.</p>
+                        <strong>{__('Live Social Preview', 'holvek')}</strong>
+                        <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 8px' }}>{__('Preview how your post will appear on Facebook, X (Twitter), and LinkedIn.', 'holvek')}</p>
                         
                         <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
                             <div style={{ width: '100%', height: '150px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid #e2e8f0', overflow: 'hidden' }}>
-                                {meta._ameverywhere_og_image ? (
-                                    <img src={meta._ameverywhere_og_image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="OG Preview" />
+                                {meta._holvek_og_image ? (
+                                    <img src={meta._holvek_og_image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="OG Preview" />
                                 ) : (
-                                    <div style={{ color: '#94a3b8', fontSize: '12px' }}>[Default Share Image]</div>
+                                    <div style={{ color: '#94a3b8', fontSize: '12px' }}>{__('[Default Share Image]', 'holvek')}</div>
                                 )}
                             </div>
                             <div style={{ padding: '12px' }}>
@@ -2696,35 +2706,35 @@ const AmEveryWhereSidebar = () => {
                                     {window.location.hostname}
                                 </div>
                                 <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#0f1419', lineHeight: '1.3', marginBottom: '4px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                    {meta._ameverywhere_og_title || meta._ameverywhere_seo_title || '(Post Title)'}
+                                    {meta._holvek_og_title || meta._holvek_seo_title || __('(Post Title)', 'holvek')}
                                 </div>
                                 <div style={{ fontSize: '13px', color: '#536471', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                    {meta._ameverywhere_og_description || meta._ameverywhere_meta_description || '(Post Excerpt)'}
+                                    {meta._holvek_og_description || meta._holvek_meta_description || __('(Post Excerpt)', 'holvek')}
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
-                        <strong>Manual Share</strong>
-                        <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 8px' }}>Force push this post to your connected social channels now.</p>
+                        <strong>{__('Manual Share', 'holvek')}</strong>
+                        <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 8px' }}>{__('Force push this post to your connected social channels now.', 'holvek')}</p>
                         <Button 
                             isSecondary 
                             className="w-full justify-center"
                             onClick={() => {
                                 const currentPostId = wp.data.select('core/editor').getCurrentPostId();
                                 wp.apiFetch({
-                                    path: '/ameverywhere/v1/social/share',
+                                    path: '/holvek/v1/social/share',
                                     method: 'POST',
                                     data: { post_id: currentPostId }
                                 }).then((res) => {
                                     alert(res.message);
                                 }).catch((err) => {
-                                    alert(err.message || 'Error triggering share.');
+                                    alert(err.message || __('Error triggering share.', 'holvek'));
                                 });
                             }}
                         >
-                            Share Now
+                            {__('Share Now', 'holvek')}
                         </Button>
                     </div>
                 </PanelBody>
@@ -2735,7 +2745,7 @@ const AmEveryWhereSidebar = () => {
 };
 
 // Register the Gutenberg plugin
-registerPlugin('ameverywhere-editor-sidebar', {
-    render: AmEveryWhereSidebar,
+registerPlugin('holvek-editor-sidebar', {
+    render: HolvekSidebar,
     icon: 'chart-area',
 });

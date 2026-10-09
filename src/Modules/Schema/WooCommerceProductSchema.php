@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Schema;
+namespace Holvek\WordPress\Modules\Schema;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -33,7 +33,7 @@ class WooCommerceProductSchema {
 
 	public function registerRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/schema/product',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -54,7 +54,7 @@ class WooCommerceProductSchema {
 		$schema = $this->buildProductSchema( $postId );
 
 		if ( $schema === null ) {
-			return new \WP_Error( 'not_found', 'Product not found or WooCommerce not active.', array( 'status' => 404 ) );
+			return new \WP_Error( 'not_found', __( 'Product not found or WooCommerce not active.', 'holvek' ), array( 'status' => 404 ) );
 		}
 
 		return rest_ensure_response( array( 'schema' => $schema ) );
@@ -77,7 +77,7 @@ class WooCommerceProductSchema {
 			return;
 		}
 
-		echo '<script type="application/ld+json">' . wp_json_encode( $schema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ) . '</script>' . "\n";
+		JsonLd::printScript( $schema );
 	}
 
 	public function buildProductSchema( int $postId ): ?array {
@@ -143,7 +143,7 @@ class WooCommerceProductSchema {
 				'priceCurrency'   => get_woocommerce_currency(),
 				'availability'    => $product->is_in_stock() ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
 				'url'             => get_permalink( $postId ),
-				'priceValidUntil' => date( 'Y-m-d', strtotime( '+1 year' ) ),
+				'priceValidUntil' => gmdate( 'Y-m-d', strtotime( '+1 year' ) ),
 			);
 		}
 

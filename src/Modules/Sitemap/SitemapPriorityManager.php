@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Sitemap;
+namespace Holvek\WordPress\Modules\Sitemap;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class SitemapPriorityManager {
 
-	private const OPTION_KEY = 'ameverywhere_sitemap_priority_settings';
+	private const OPTION_KEY = 'holvek_sitemap_priority_settings';
 
 	// Defaults per post type
 	private const DEFAULTS = array(
@@ -40,7 +40,7 @@ class SitemapPriorityManager {
 		$adminCap = fn() => current_user_can( 'manage_seo' ) || current_user_can( 'manage_options' );
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/sitemap/priority-settings',
 			array(
 				array(
@@ -58,7 +58,7 @@ class SitemapPriorityManager {
 
 		// Per-URL override (via post meta)
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/sitemap/url-override/(?P<post_id>\d+)',
 			array(
 				array(
@@ -130,9 +130,9 @@ class SitemapPriorityManager {
 		return rest_ensure_response(
 			array(
 				'post_id'    => $postId,
-				'priority'   => get_post_meta( $postId, '_ameverywhere_sitemap_priority', true ) ?: null,
-				'changefreq' => get_post_meta( $postId, '_ameverywhere_sitemap_changefreq', true ) ?: null,
-				'excluded'   => get_post_meta( $postId, '_ameverywhere_sitemap_exclude', true ) === 'yes',
+				'priority'   => get_post_meta( $postId, '_holvek_sitemap_priority', true ) ?: null,
+				'changefreq' => get_post_meta( $postId, '_holvek_sitemap_changefreq', true ) ?: null,
+				'excluded'   => get_post_meta( $postId, '_holvek_sitemap_exclude', true ) === 'yes',
 			)
 		);
 	}
@@ -144,16 +144,16 @@ class SitemapPriorityManager {
 
 		if ( array_key_exists( 'priority', $params ) ) {
 			$priority = max( 0.0, min( 1.0, (float) $params['priority'] ) );
-			update_post_meta( $postId, '_ameverywhere_sitemap_priority', number_format( $priority, 1 ) );
+			update_post_meta( $postId, '_holvek_sitemap_priority', number_format( $priority, 1 ) );
 		}
 
 		if ( array_key_exists( 'changefreq', $params ) ) {
 			$cf = in_array( $params['changefreq'], $valid, true ) ? $params['changefreq'] : 'weekly';
-			update_post_meta( $postId, '_ameverywhere_sitemap_changefreq', $cf );
+			update_post_meta( $postId, '_holvek_sitemap_changefreq', $cf );
 		}
 
 		if ( array_key_exists( 'excluded', $params ) ) {
-			update_post_meta( $postId, '_ameverywhere_sitemap_exclude', $params['excluded'] ? 'yes' : 'no' );
+			update_post_meta( $postId, '_holvek_sitemap_exclude', $params['excluded'] ? 'yes' : 'no' );
 		}
 
 		return rest_ensure_response(
@@ -170,7 +170,7 @@ class SitemapPriorityManager {
 	 * Get the priority for a given post. Per-URL > per-post-type > global default.
 	 */
 	public static function getPriority( int $postId, string $postType ): string {
-		$perUrl = (string) get_post_meta( $postId, '_ameverywhere_sitemap_priority', true );
+		$perUrl = (string) get_post_meta( $postId, '_holvek_sitemap_priority', true );
 		if ( $perUrl !== '' ) {
 			return $perUrl;
 		}
@@ -184,7 +184,7 @@ class SitemapPriorityManager {
 	 * Get the changefreq for a given post. Per-URL > per-post-type > global default.
 	 */
 	public static function getChangefreq( int $postId, string $postType ): string {
-		$perUrl = (string) get_post_meta( $postId, '_ameverywhere_sitemap_changefreq', true );
+		$perUrl = (string) get_post_meta( $postId, '_holvek_sitemap_changefreq', true );
 		if ( $perUrl !== '' ) {
 			return $perUrl;
 		}
@@ -198,7 +198,7 @@ class SitemapPriorityManager {
 	 * Returns true if this post should be excluded from the sitemap.
 	 */
 	public static function isExcluded( int $postId, string $postType ): bool {
-		if ( get_post_meta( $postId, '_ameverywhere_sitemap_exclude', true ) === 'yes' ) {
+		if ( get_post_meta( $postId, '_holvek_sitemap_exclude', true ) === 'yes' ) {
 			return true;
 		}
 		$settings = (array) get_option( self::OPTION_KEY, array() );

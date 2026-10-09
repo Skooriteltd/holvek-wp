@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\ContentAssistant;
+namespace Holvek\WordPress\Modules\ContentAssistant;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class InclusiveLanguageChecker {
 
-	private const EXCEPTIONS_OPTION = 'ameverywhere_inclusive_exceptions';
+	private const EXCEPTIONS_OPTION = 'holvek_inclusive_exceptions';
 	private const CACHE_TTL         = 30 * MINUTE_IN_SECONDS;
 
 	/**
@@ -56,7 +56,7 @@ class InclusiveLanguageChecker {
 		$adminCap  = fn() => current_user_can( 'manage_seo' ) || current_user_can( 'manage_options' );
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/content/inclusive-check',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -66,7 +66,7 @@ class InclusiveLanguageChecker {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/content/inclusive-exceptions',
 			array(
 				array(
@@ -89,7 +89,7 @@ class InclusiveLanguageChecker {
 		$rawContent = $params['content'] ?? '';
 
 		if ( $postId > 0 ) {
-			$cacheKey = 'ameverywhere_inclusive_' . $postId;
+			$cacheKey = 'holvek_inclusive_' . $postId;
 			$cached   = get_transient( $cacheKey );
 			if ( $cached !== false ) {
 				return rest_ensure_response( $cached );

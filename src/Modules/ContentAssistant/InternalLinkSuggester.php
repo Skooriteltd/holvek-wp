@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\ContentAssistant;
+namespace Holvek\WordPress\Modules\ContentAssistant;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -25,7 +25,7 @@ class InternalLinkSuggester {
 
 	public function registerRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/content/internal-link-suggestions',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -44,7 +44,7 @@ class InternalLinkSuggester {
 	public function getSuggestions( \WP_REST_Request $request ): \WP_REST_Response {
 		$postId = (int) $request->get_param( 'post_id' );
 
-		$cacheKey = 'ameverywhere_link_suggestions_' . $postId;
+		$cacheKey = 'holvek_link_suggestions_' . $postId;
 		$cached   = get_transient( $cacheKey );
 		if ( $cached !== false ) {
 			return rest_ensure_response( $cached );
@@ -52,11 +52,11 @@ class InternalLinkSuggester {
 
 		$sourcePost = get_post( $postId );
 		if ( ! $sourcePost ) {
-			return new \WP_Error( 'post_not_found', 'Post not found.', array( 'status' => 404 ) );
+			return new \WP_Error( 'post_not_found', __( 'Post not found.', 'holvek' ), array( 'status' => 404 ) );
 		}
 
 		// Get focus keywords
-		$keywordRaw = (string) get_post_meta( $postId, '_ameverywhere_focus_keyword', true );
+		$keywordRaw = (string) get_post_meta( $postId, '_holvek_focus_keyword', true );
 		$keywords   = array_filter( array_map( 'trim', explode( ',', $keywordRaw ) ) );
 
 		// Find candidate posts
@@ -76,8 +76,8 @@ class InternalLinkSuggester {
 				continue;
 			}
 
-			$candidateKeyword = get_post_meta( $candidate->ID, '_ameverywhere_focus_keyword', true );
-			$inboundLinks     = (int) get_post_meta( $candidate->ID, '_ameverywhere_inbound_links', true );
+			$candidateKeyword = get_post_meta( $candidate->ID, '_holvek_focus_keyword', true );
+			$inboundLinks     = (int) get_post_meta( $candidate->ID, '_holvek_inbound_links', true );
 
 			$suggestions[] = array(
 				'id'                    => $candidate->ID,
@@ -126,7 +126,7 @@ class InternalLinkSuggester {
 		$metaQueries = array( 'relation' => 'OR' );
 		foreach ( $keywords as $kw ) {
 			$metaQueries[] = array(
-				'key'     => '_ameverywhere_focus_keyword',
+				'key'     => '_holvek_focus_keyword',
 				'value'   => $kw,
 				'compare' => 'LIKE',
 			);
@@ -158,18 +158,19 @@ class InternalLinkSuggester {
 	private function findByTitleKeywords( int $excludeId, array $keywords, array $excludeIds ): array {
 		global $wpdb;
 		$excludeIds[] = $excludeId;
+		$excludeIds   = array_map( 'absint', $excludeIds );
 
 		$results = array();
 		foreach ( $keywords as $kw ) {
 			$rows = $wpdb->get_results(
 				$wpdb->prepare(
-					"SELECT ID, post_title, post_content FROM $wpdb->posts
+					"SELECT ID, post_title, post_content FROM {$wpdb->prefix}posts
                      WHERE post_status = 'publish'
                        AND post_type IN ('post','page')
-                       AND ID NOT IN (" . implode( ',', array_map( 'intval', $excludeIds ) ) . ')
+                       AND ID NOT IN (" . implode( ',', array_fill( 0, count( $excludeIds ), '%d' ) ) . ')
                        AND post_title LIKE %s
                      LIMIT 5',
-					'%' . $wpdb->esc_like( $kw ) . '%'
+					array_merge( $excludeIds, array( '%' . $wpdb->esc_like( $kw ) . '%' ) )
 				)
 			);
 			foreach ( $rows as $row ) {

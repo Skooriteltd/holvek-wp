@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\ContentAssistant;
+namespace Holvek\WordPress\Modules\ContentAssistant;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -22,7 +22,7 @@ class MorphologicalKeywordMatcher {
 
 	public function registerRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/content/keyword-density',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -32,7 +32,7 @@ class MorphologicalKeywordMatcher {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/content/stem',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -50,14 +50,14 @@ class MorphologicalKeywordMatcher {
 		$keyword = sanitize_text_field( $params['keyword'] ?? '' );
 
 		if ( $postId > 0 ) {
-			$keyword = $keyword ?: (string) get_post_meta( $postId, '_ameverywhere_focus_keyword', true );
+			$keyword = $keyword ?: (string) get_post_meta( $postId, '_holvek_focus_keyword', true );
 			$content = wp_strip_all_tags( get_post_field( 'post_content', $postId ) );
 		} else {
 			$content = wp_strip_all_tags( $params['content'] ?? '' );
 		}
 
 		if ( empty( $keyword ) || empty( $content ) ) {
-			return new \WP_Error( 'missing_input', 'keyword and content (or post_id) are required.', array( 'status' => 400 ) );
+			return new \WP_Error( 'missing_input', __( 'keyword and content (or post_id) are required.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		return rest_ensure_response( $this->analyseContent( $content, $keyword ) );
@@ -67,7 +67,7 @@ class MorphologicalKeywordMatcher {
 		$params = $request->get_json_params();
 		$word   = sanitize_text_field( $params['word'] ?? '' );
 		if ( empty( $word ) ) {
-			return new \WP_Error( 'missing_word', 'word is required.', array( 'status' => 400 ) );
+			return new \WP_Error( 'missing_word', __( 'word is required.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		return rest_ensure_response(
@@ -150,9 +150,7 @@ class MorphologicalKeywordMatcher {
 			$word = mb_substr( $word, 0, -2 );
 		} elseif ( mb_substr( $word, -3 ) === 'ies' ) {
 			$word = mb_substr( $word, 0, -2 );
-		} elseif ( mb_substr( $word, -2 ) === 'ss' ) {
-			// do nothing
-		} elseif ( mb_substr( $word, -1 ) === 's' ) {
+		} elseif ( mb_substr( $word, -2 ) !== 'ss' && mb_substr( $word, -1 ) === 's' ) {
 			$word = mb_substr( $word, 0, -1 );
 		}
 

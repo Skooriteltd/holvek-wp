@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Ai;
+namespace Holvek\WordPress\Modules\Ai;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -16,9 +16,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class UsageMeteringManager {
 
-	private const TABLE_NAME   = 'ameverywhere_ai_usage';
-	private const LIMIT_OPTION = 'ameverywhere_ai_token_limits';
-	private const CRON_HOOK    = 'ameverywhere_weekly_usage_email';
+	private const TABLE_NAME   = 'holvek_ai_usage';
+	private const LIMIT_OPTION = 'holvek_ai_token_limits';
+	private const CRON_HOOK    = 'holvek_weekly_usage_email';
 
 	private static ?self $instance = null;
 
@@ -58,10 +58,17 @@ class UsageMeteringManager {
 	public function boot(): void {
 		add_action( 'rest_api_init', array( $this, 'registerRoutes' ) );
 		add_action( self::CRON_HOOK, array( $this, 'sendWeeklySummary' ) );
+	}
 
-		if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
-			wp_schedule_event( time(), 'weekly', self::CRON_HOOK );
+	/**
+	 * Schedule the weekly summary. Activation calls this. The worker calls it again when the event is missing.
+	 */
+	public static function schedule(): void {
+		if ( wp_next_scheduled( self::CRON_HOOK ) ) {
+			return;
 		}
+
+		wp_schedule_event( time(), 'weekly', self::CRON_HOOK );
 	}
 
 	// ── Core API ──────────────────────────────────────────────────────────────
@@ -90,21 +97,20 @@ class UsageMeteringManager {
 	 * @param string $period 'month'|'week'|'day'|'all'
 	 */
 	public function getUsage( int $userId, string $period = 'month' ): array {
-		global $wpdb;
-		$table      = $wpdb->prefix . self::TABLE_NAME;
-		$dateClause = $this->buildDateClause( $period );
+		$period = $this->normalizePeriod( $period );
+		$limit  = $this->getLimit();
+		if ( $userId < 1 ) {
+			return array(
+				'user_id'    => 0,
+				'period'     => $period,
+				'total'      => 0,
+				'by_feature' => array(),
+				'limit'      => $limit,
+				'percent'    => null,
+			);
+		}
 
-		$rows = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT provider, feature, SUM(tokens_used) AS total
-                 FROM $table
-                 WHERE user_id = %d $dateClause
-                 GROUP BY provider, feature
-                 ORDER BY total DESC",
-				$userId
-			)
-		);
-
+		$rows  = $this->queryUserUsage( $userId, $period );
 		$total = 0;
 		foreach ( $rows as $row ) {
 			$total += (int) $row->total;
@@ -115,8 +121,8 @@ class UsageMeteringManager {
 			'period'     => $period,
 			'total'      => $total,
 			'by_feature' => $rows,
-			'limit'      => $this->getLimit(),
-			'percent'    => $this->getLimit() > 0 ? round( ( $total / $this->getLimit() ) * 100, 1 ) : null,
+			'limit'      => $limit,
+			'percent'    => $limit > 0 ? round( ( $total / $limit ) * 100, 1 ) : null,
 		);
 	}
 
@@ -124,19 +130,9 @@ class UsageMeteringManager {
 	 * Get site-wide usage for a period.
 	 */
 	public function getSiteUsage( string $period = 'month' ): array {
-		global $wpdb;
-		$table      = $wpdb->prefix . self::TABLE_NAME;
-		$dateClause = $this->buildDateClause( $period );
-
-		$rows = $wpdb->get_results(
-			"SELECT provider, feature, SUM(tokens_used) AS total
-             FROM $table
-             $dateClause
-             GROUP BY provider, feature
-             ORDER BY total DESC"
-		);
-
-		$total = array_sum( array_column( (array) $rows, 'total' ) );
+		$period = $this->normalizePeriod( $period );
+		$rows   = $this->querySiteUsage( $period );
+		$total  = array_sum( array_map( 'intval', array_column( (array) $rows, 'total' ) ) );
 
 		return array(
 			'period'     => $period,
@@ -162,7 +158,7 @@ class UsageMeteringManager {
 
 	public function registerRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/ai/usage',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -172,41 +168,69 @@ class UsageMeteringManager {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/ai/usage/site',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'getSiteUsageEndpoint' ),
-				'permission_callback' => fn() => current_user_can( 'manage_seo' ) || current_user_can( 'manage_options' ),
+				'permission_callback' => fn() => $this->canViewSiteUsage(),
 			)
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/ai/usage/limits',
 			array(
 				array(
 					'methods'             => \WP_REST_Server::READABLE,
 					'callback'            => fn() => rest_ensure_response( get_option( self::LIMIT_OPTION, $this->defaultLimits() ) ),
-					'permission_callback' => fn() => current_user_can( 'manage_seo' ) || current_user_can( 'manage_options' ),
+					'permission_callback' => fn() => $this->canViewSiteUsage(),
 				),
 				array(
 					'methods'             => \WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'saveLimits' ),
-					'permission_callback' => fn() => current_user_can( 'manage_seo' ) || current_user_can( 'manage_options' ),
+					'permission_callback' => fn() => $this->canViewSiteUsage(),
 				),
 			)
 		);
 	}
 
-	public function getMyUsage( \WP_REST_Request $request ): \WP_REST_Response {
+	/**
+	 * Usage for the logged-in user.
+	 *
+	 * A requested user ID is ignored. Counters always belong to the current user.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function getMyUsage( \WP_REST_Request $request ) {
 		$userId = get_current_user_id();
-		$period = sanitize_text_field( $request->get_param( 'period' ) ?? 'month' );
+		if ( ! is_user_logged_in() || $userId < 1 ) {
+			return new \WP_Error(
+				'rest_forbidden',
+				__( 'Sorry, you are not allowed to view AI usage.', 'holvek' ),
+				array( 'status' => 401 )
+			);
+		}
+
+		$period = $this->normalizePeriod( (string) ( $request->get_param( 'period' ) ?? 'month' ) );
 		return rest_ensure_response( $this->getUsage( $userId, $period ) );
 	}
 
-	public function getSiteUsageEndpoint( \WP_REST_Request $request ): \WP_REST_Response {
-		$period = sanitize_text_field( $request->get_param( 'period' ) ?? 'month' );
+	/**
+	 * Site-wide usage for an SEO manager or administrator.
+	 *
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function getSiteUsageEndpoint( \WP_REST_Request $request ) {
+		if ( ! $this->canViewSiteUsage() ) {
+			return new \WP_Error(
+				'rest_forbidden',
+				__( 'Sorry, you are not allowed to view site-wide AI usage.', 'holvek' ),
+				array( 'status' => 403 )
+			);
+		}
+
+		$period = $this->normalizePeriod( (string) ( $request->get_param( 'period' ) ?? 'month' ) );
 		return rest_ensure_response( $this->getSiteUsage( $period ) );
 	}
 
@@ -232,13 +256,19 @@ class UsageMeteringManager {
 	// ── Weekly email ──────────────────────────────────────────────────────────
 
 	public function sendWeeklySummary(): void {
+		self::schedule();
+
 		$usage   = $this->getSiteUsage( 'week' );
 		$admin   = get_option( 'admin_email' );
-		$subject = sprintf( '[AmEveryWhere] Weekly AI Usage Summary — %s tokens used', number_format( $usage['total'] ) );
+		$subject = sprintf(
+			/* translators: %s: number of AI tokens used this week. */
+			__( '[Holvek] Weekly AI Usage Summary — %s tokens used', 'holvek' ),
+			number_format( $usage['total'] )
+		);
 
-		$body  = '<h2>AmEveryWhere Weekly AI Usage</h2>';
-		$body .= '<p>Total tokens used this week: <strong>' . number_format( $usage['total'] ) . '</strong></p>';
-		$body .= "<table border='1' cellpadding='5'><tr><th>Provider</th><th>Feature</th><th>Tokens</th></tr>";
+		$body  = '<h2>' . esc_html__( 'Holvek Weekly AI Usage', 'holvek' ) . '</h2>';
+		$body .= '<p>' . esc_html__( 'Total tokens used this week:', 'holvek' ) . ' <strong>' . number_format( $usage['total'] ) . '</strong></p>';
+		$body .= "<table border='1' cellpadding='5'><tr><th>" . esc_html__( 'Provider', 'holvek' ) . '</th><th>' . esc_html__( 'Feature', 'holvek' ) . '</th><th>' . esc_html__( 'Tokens', 'holvek' ) . '</th></tr>';
 
 		foreach ( (array) $usage['by_feature'] as $row ) {
 			$body .= '<tr><td>' . esc_html( $row->provider ) . '</td><td>' . esc_html( $row->feature ) . '</td><td>' . number_format( (int) $row->total ) . '</td></tr>';
@@ -249,10 +279,28 @@ class UsageMeteringManager {
 		wp_mail( $admin, $subject, $body, array( 'Content-Type: text/html; charset=UTF-8' ) );
 	}
 
+	/**
+	 * Cloud usage reporting. This does not run on a page view.
+	 *
+	 * A site that is not connected receives a local error. Usage totals stay
+	 * in the local table either way. This release does not phone home.
+	 */
+	public function reportToCloud(): \WP_Error {
+		if ( ! \Holvek\WordPress\Core\Mode\OperatingMode::isCloudConfigured() ) {
+			return \Holvek\WordPress\Core\Mode\OperatingMode::disconnected( __( 'Cloud usage reporting', 'holvek' ) );
+		}
+
+		return new \WP_Error(
+			'holvek_usage_local',
+			__( 'AI usage is stored on this site.', 'holvek' ),
+			array( 'status' => 400 )
+		);
+	}
+
 	// ── Helpers ───────────────────────────────────────────────────────────────
 
 	private function getLimit(): int {
-		$tier   = get_option( 'ameverywhere_user_tier', 'free' );
+		$tier   = \Holvek\WordPress\Core\Api\CloudCredential::cachedTier();
 		$limits = get_option( self::LIMIT_OPTION, $this->defaultLimits() );
 		return (int) ( $limits[ $tier ] ?? 50000 );
 	}
@@ -265,12 +313,75 @@ class UsageMeteringManager {
 		);
 	}
 
-	private function buildDateClause( string $period ): string {
-		return match ( $period ) {
-			'day'   => 'AND created_at >= DATE_SUB(NOW(), INTERVAL 1 DAY)',
-			'week'  => 'AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)',
-			'month' => 'AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)',
-			default => '',
-		};
+	private function canViewSiteUsage(): bool {
+		return current_user_can( 'manage_seo' ) || current_user_can( 'manage_options' );
+	}
+
+	/**
+	 * Limit a usage window to the three periods the dashboard offers.
+	 */
+	private function normalizePeriod( string $period ): string {
+		$period = sanitize_key( $period );
+		if ( in_array( $period, array( 'day', 'week', 'month' ), true ) ) {
+			return $period;
+		}
+
+		return 'month';
+	}
+
+	/**
+	 * Rows for one user. The user ID is the only request value in the query.
+	 *
+	 * @return array<int, object>
+	 */
+	private function queryUserUsage( int $userId, string $period ): array {
+		global $wpdb;
+
+		if ( 'day' === $period ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT provider, feature, SUM(tokens_used) AS total FROM {$wpdb->prefix}holvek_ai_usage WHERE user_id = %d AND created_at >= DATE_SUB(NOW(), INTERVAL 1 DAY) GROUP BY provider, feature ORDER BY total DESC",
+					$userId
+				)
+			);
+		} elseif ( 'week' === $period ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT provider, feature, SUM(tokens_used) AS total FROM {$wpdb->prefix}holvek_ai_usage WHERE user_id = %d AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) GROUP BY provider, feature ORDER BY total DESC",
+					$userId
+				)
+			);
+		} else {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT provider, feature, SUM(tokens_used) AS total FROM {$wpdb->prefix}holvek_ai_usage WHERE user_id = %d AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) GROUP BY provider, feature ORDER BY total DESC",
+					$userId
+				)
+			);
+		}
+
+		return is_array( $rows ) ? $rows : array();
+	}
+
+	/**
+	 * Rows for the whole site. There is no user-supplied SQL.
+	 *
+	 * @return array<int, object>
+	 */
+	private function querySiteUsage( string $period ): array {
+		global $wpdb;
+
+		if ( 'day' === $period ) {
+			$sql = "SELECT provider, feature, SUM(tokens_used) AS total FROM {$wpdb->prefix}holvek_ai_usage WHERE created_at >= DATE_SUB(NOW(), INTERVAL 1 DAY) GROUP BY provider, feature ORDER BY total DESC";
+		} elseif ( 'week' === $period ) {
+			$sql = "SELECT provider, feature, SUM(tokens_used) AS total FROM {$wpdb->prefix}holvek_ai_usage WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) GROUP BY provider, feature ORDER BY total DESC";
+		} else {
+			$sql = "SELECT provider, feature, SUM(tokens_used) AS total FROM {$wpdb->prefix}holvek_ai_usage WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) GROUP BY provider, feature ORDER BY total DESC";
+		}
+
+		// The period selects one of the three literal queries above.
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$rows = $wpdb->get_results( $sql );
+		return is_array( $rows ) ? $rows : array();
 	}
 }

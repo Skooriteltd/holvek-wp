@@ -33,23 +33,23 @@ jobs:
       - name: Test ZIP installation in temporary WordPress
         run: |
           npm -g install @wordpress/env
-          ZIP_FILE=$(ls dist/ameverywhere-*.zip | head -n 1)
+          ZIP_FILE=$(ls dist/holvek-*.zip | head -n 1)
           # wp-env supports installing from a local ZIP file
           echo "{\"core\": \"WordPress/WordPress#master\", \"plugins\": [\"${ZIP_FILE}\"]}" > .wp-env.json
           wp-env start
           
           # Verify activation and check for fatal errors
-          wp-env run cli wp plugin is-active ameverywhere || wp-env run cli wp plugin activate ameverywhere
+          wp-env run cli wp plugin is-active holvek || wp-env run cli wp plugin activate holvek
           
           # Verify the tables were created successfully
-          wp-env run cli wp db query "SHOW TABLES LIKE '%ameverywhere%';" | grep ameverywhere
+          wp-env run cli wp db query "SHOW TABLES LIKE '%holvek%';" | grep holvek
           
           wp-env stop
 
       - name: Upload package and manifest
         uses: actions/upload-artifact@v4
         with:
-          name: ameverywhere-${{ github.ref_name }}
+          name: holvek-${{ github.ref_name }}
           path: |
             dist/*.zip
             dist/*.manifest.sha256

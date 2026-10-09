@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Schema;
+namespace Holvek\WordPress\Modules\Schema;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -38,11 +38,21 @@ class SchemaGenerator {
 			return;
 		}
 
-		echo "<!-- AmEveryWhere AI-Ready Schema -->\n";
-		echo '<script type="application/ld+json">' . "\n";
-		echo wp_json_encode( $schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) . "\n";
-		echo "</script>\n";
-		echo "<!-- /AmEveryWhere Schema -->\n";
+		$json = JsonLd::encode( $schema );
+		if ( '' === $json ) {
+			return;
+		}
+
+		echo "<!-- Holvek AI-Ready Schema -->\n";
+		// JSON_HEX_TAG, JSON_HEX_AMP, and JSON_HEX_APOS already encode the payload. esc_html() would break the JSON.
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		echo wp_get_inline_script_tag(
+			$json,
+			array(
+				'type' => 'application/ld+json',
+			)
+		);
+		echo "<!-- /Holvek Schema -->\n";
 	}
 
 	/**
@@ -55,7 +65,11 @@ class SchemaGenerator {
 		foreach ( $this->schemaTypes as $type ) {
 			if ( $type->isApplicable( $postId ) ) {
 				$payload = $type->generate( $postId );
-				if ( ! empty( $payload ) ) {
+				if ( JsonLd::isListOfNodes( $payload ) ) {
+					foreach ( $payload as $node ) {
+						$graphs[] = $node;
+					}
+				} elseif ( ! empty( $payload ) ) {
 					$graphs[] = $payload;
 				}
 			}
@@ -83,13 +97,13 @@ class SchemaGenerator {
 	 * Resolves effective primary schema based on local or global templates.
 	 */
 	public static function getEffectivePrimarySchema( int $postId ): string {
-		$primarySchema = get_post_meta( $postId, '_ameverywhere_primary_schema', true );
+		$primarySchema = get_post_meta( $postId, '_holvek_primary_schema', true );
 		if ( ! empty( $primarySchema ) && $primarySchema !== 'none' ) {
 			return $primarySchema;
 		}
 
 		// Apply global conditional display rules
-		$globalRulesJson = get_option( 'ameverywhere_global_schema_rules' );
+		$globalRulesJson = get_option( 'holvek_global_schema_rules' );
 		if ( ! empty( $globalRulesJson ) ) {
 			$rules = json_decode( $globalRulesJson, true );
 			if ( is_array( $rules ) ) {

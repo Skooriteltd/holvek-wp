@@ -1,13 +1,13 @@
 <?php
 
-namespace AmEveryWhere\Modules\Migration;
+namespace Holvek\WordPress\Modules\Migration;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
 /**
- * Auto-detects installed SEO plugins and migrates their data to AmEveryWhere.
+ * Auto-detects installed SEO plugins and migrates their data to Holvek.
  * Supports: Yoast SEO, RankMath, All in One SEO (AIOSEO).
  *
  * Philosophy: One click, zero data loss.
@@ -15,37 +15,38 @@ if ( ! defined( 'ABSPATH' ) ) {
 class MigrationManager {
 
 	/**
-	 * Meta key mapping from competitor plugins to AmEveryWhere.
+	 * Meta key mapping from competitor plugins to Holvek.
 	 */
 	private const META_MAP = array(
 		'yoast'    => array(
-			'_yoast_wpseo_title'                 => '_ameverywhere_meta_title',
-			'_yoast_wpseo_metadesc'              => '_ameverywhere_meta_description',
-			'_yoast_wpseo_focuskw'               => '_ameverywhere_focus_keyword',
-			'_yoast_wpseo_opengraph-title'       => '_ameverywhere_og_title',
-			'_yoast_wpseo_opengraph-description' => '_ameverywhere_og_description',
-			'_yoast_wpseo_opengraph-image'       => '_ameverywhere_og_image',
-			'_yoast_wpseo_twitter-title'         => '_ameverywhere_twitter_title',
-			'_yoast_wpseo_meta-robots-noindex'   => '_ameverywhere_noindex',
+			'_yoast_wpseo_title'                 => '_holvek_meta_title',
+			'_yoast_wpseo_metadesc'              => '_holvek_meta_description',
+			'_yoast_wpseo_focuskw'               => '_holvek_focus_keyword',
+			'_yoast_wpseo_opengraph-title'       => '_holvek_og_title',
+			'_yoast_wpseo_opengraph-description' => '_holvek_og_description',
+			'_yoast_wpseo_opengraph-image'       => '_holvek_og_image',
+			'_yoast_wpseo_twitter-title'         => '_holvek_twitter_title',
+			'_yoast_wpseo_meta-robots-noindex'   => '_holvek_noindex',
+			'_yoast_wpseo_meta-robots-nofollow'  => '_holvek_nofollow',
 		),
 		'rankmath' => array(
-			'rank_math_title'                => '_ameverywhere_meta_title',
-			'rank_math_description'          => '_ameverywhere_meta_description',
-			'rank_math_focus_keyword'        => '_ameverywhere_focus_keyword',
-			'rank_math_facebook_title'       => '_ameverywhere_og_title',
-			'rank_math_facebook_description' => '_ameverywhere_og_description',
-			'rank_math_facebook_image'       => '_ameverywhere_og_image',
-			'rank_math_twitter_title'        => '_ameverywhere_twitter_title',
-			'rank_math_robots'               => '_ameverywhere_noindex',
+			'rank_math_title'                => '_holvek_meta_title',
+			'rank_math_description'          => '_holvek_meta_description',
+			'rank_math_focus_keyword'        => '_holvek_focus_keyword',
+			'rank_math_facebook_title'       => '_holvek_og_title',
+			'rank_math_facebook_description' => '_holvek_og_description',
+			'rank_math_facebook_image'       => '_holvek_og_image',
+			'rank_math_twitter_title'        => '_holvek_twitter_title',
+			'rank_math_robots'               => '_holvek_noindex',
 		),
 		'aioseo'   => array(
-			'_aioseo_title'          => '_ameverywhere_meta_title',
-			'_aioseo_description'    => '_ameverywhere_meta_description',
-			'_aioseo_keywords'       => '_ameverywhere_focus_keyword',
-			'_aioseo_og_title'       => '_ameverywhere_og_title',
-			'_aioseo_og_description' => '_ameverywhere_og_description',
-			'_aioseo_og_image'       => '_ameverywhere_og_image',
-			'_aioseo_twitter_title'  => '_ameverywhere_twitter_title',
+			'_aioseo_title'          => '_holvek_meta_title',
+			'_aioseo_description'    => '_holvek_meta_description',
+			'_aioseo_keywords'       => '_holvek_focus_keyword',
+			'_aioseo_og_title'       => '_holvek_og_title',
+			'_aioseo_og_description' => '_holvek_og_description',
+			'_aioseo_og_image'       => '_holvek_og_image',
+			'_aioseo_twitter_title'  => '_holvek_twitter_title',
 		),
 	);
 
@@ -98,15 +99,69 @@ class MigrationManager {
 		return $detected;
 	}
 
+	private const BATCH_SIZE = 50;
+
 	/**
-	 * Run the migration for a specific plugin.
-	 * Returns the number of posts migrated.
+	 * Count fields that would be copied. This does not write.
+	 *
+	 * @return array<string, mixed>
+	 */
+	public function preview( string $pluginId ): array {
+		if ( ! isset( self::META_MAP[ $pluginId ] ) ) {
+			return array(
+				'success' => false,
+				'wrote'   => false,
+				'message' => __( 'Unknown plugin.', 'holvek' ),
+			);
+		}
+
+		global $wpdb;
+		$fields  = 0;
+		$skipped = 0;
+
+		foreach ( self::META_MAP[ $pluginId ] as $sourceKey => $targetKey ) {
+			$total    = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value != ''",
+					$sourceKey
+				)
+			);
+			$already  = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT COUNT(*) FROM {$wpdb->postmeta} AS source_meta INNER JOIN {$wpdb->postmeta} AS target_meta ON source_meta.post_id = target_meta.post_id WHERE source_meta.meta_key = %s AND source_meta.meta_value != '' AND target_meta.meta_key = %s AND target_meta.meta_value != ''",
+					$sourceKey,
+					$targetKey
+				)
+			);
+			$fields  += $total;
+			$skipped += min( $already, $total );
+		}
+
+		$copy = max( 0, $fields - $skipped );
+
+		return array(
+			'success' => true,
+			'wrote'   => false,
+			'fields'  => $fields,
+			'copy'    => $copy,
+			'skipped' => $skipped,
+			'message' => $this->previewMessage( $copy, $skipped, $pluginId ),
+		);
+	}
+
+	/**
+	 * Copy one plugin's meta in batches of 50.
+	 *
+	 * An existing non-empty `_holvek_*` value is left unchanged.
+	 *
+	 * @return array<string, mixed>
 	 */
 	public function migrate( string $pluginId ): array {
 		if ( ! isset( self::META_MAP[ $pluginId ] ) ) {
 			return array(
 				'success' => false,
-				'message' => 'Unknown plugin.',
+				'wrote'   => false,
+				'message' => __( 'Unknown plugin.', 'holvek' ),
 			);
 		}
 
@@ -116,64 +171,159 @@ class MigrationManager {
 		$skipped  = 0;
 
 		foreach ( $map as $sourceKey => $targetKey ) {
-			// Get all posts with this source meta key that have a value
-			$rows = $wpdb->get_results(
-				$wpdb->prepare(
-					"SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value != ''",
-					$sourceKey
-				)
-			);
+			$offset = 0;
 
-			foreach ( $rows as $row ) {
-				// Don't overwrite existing AmEveryWhere data
-				$existing = get_post_meta( $row->post_id, $targetKey, true );
-				if ( ! empty( $existing ) ) {
-					++$skipped;
-					continue;
+			do {
+				$rows = $wpdb->get_results(
+					$wpdb->prepare(
+						"SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s AND meta_value != '' LIMIT %d OFFSET %d",
+						$sourceKey,
+						self::BATCH_SIZE,
+						$offset
+					)
+				);
+
+				if ( empty( $rows ) ) {
+					break;
 				}
 
-				$value = $row->meta_value;
+				foreach ( $rows as $row ) {
+					$postId = (int) $row->post_id;
+					$value  = (string) $row->meta_value;
 
-				// Special handling for noindex values
-				if ( $targetKey === '_ameverywhere_noindex' ) {
-					$value = $this->normalizeNoindex( $value, $pluginId );
+					if ( 'rank_math_robots' === $sourceKey ) {
+						$this->writeRankMathRobots( $postId, $value, $migrated, $skipped );
+						continue;
+					}
+
+					if ( in_array( $targetKey, array( '_holvek_noindex', '_holvek_nofollow' ), true ) && 'yoast' === $pluginId ) {
+						$value = ( '1' === $value ) ? 'yes' : 'no';
+					}
+
+					if ( '_holvek_focus_keyword' === $targetKey && in_array( $pluginId, array( 'rankmath', 'aioseo' ), true ) ) {
+						$value = $this->firstKeyword( $value );
+					}
+
+					$this->writeIfEmpty( $postId, $targetKey, sanitize_text_field( $value ), $migrated, $skipped );
 				}
 
-				// Special handling for RankMath focus keyword (comma-separated → first one)
-				if ( $targetKey === '_ameverywhere_focus_keyword' && $pluginId === 'rankmath' ) {
-					$keywords = explode( ',', $value );
-					$value    = trim( $keywords[0] );
-				}
-
-				if ( ! empty( $value ) ) {
-					update_post_meta( $row->post_id, $targetKey, sanitize_text_field( $value ) );
-					++$migrated;
-				}
-			}
+				$rowCount = count( $rows );
+				$offset  += self::BATCH_SIZE;
+			} while ( $rowCount === self::BATCH_SIZE );
 		}
 
 		return array(
-			'success'  => true,
-			'migrated' => $migrated,
-			'skipped'  => $skipped,
-			'message'  => "Migrated {$migrated} meta entries. Skipped {$skipped} (already had AmEveryWhere data).",
+			'success'    => true,
+			'wrote'      => true,
+			'migrated'   => $migrated,
+			'skipped'    => $skipped,
+			'batch_size' => self::BATCH_SIZE,
+			'message'    => $this->migrateMessage( $migrated, $skipped, $pluginId ),
 		);
 	}
 
 	/**
-	 * Normalize the noindex value from different plugins to 'yes'/'no'.
+	 * @param mixed $value Stored meta.
+	 * @return mixed
 	 */
-	private function normalizeNoindex( string $value, string $pluginId ): string {
-		if ( $pluginId === 'yoast' ) {
-			return $value === '1' ? 'yes' : 'no';
+	private function decodeStored( string $value ) {
+		$decoded = maybe_unserialize( $value );
+		if ( is_array( $decoded ) ) {
+			return $decoded;
 		}
-
-		if ( $pluginId === 'rankmath' ) {
-			// RankMath stores robots as a serialized array or comma-separated string
-			return ( stripos( $value, 'noindex' ) !== false ) ? 'yes' : 'no';
+		if ( is_string( $decoded ) && str_starts_with( ltrim( $decoded ), '[' ) ) {
+			$json = json_decode( $decoded, true );
+			if ( is_array( $json ) ) {
+				return $json;
+			}
 		}
+		return $decoded;
+	}
 
-		return 'no';
+	private function firstKeyword( string $value ): string {
+		$decoded = $this->decodeStored( $value );
+		if ( is_array( $decoded ) ) {
+			$first = reset( $decoded );
+			$value = is_scalar( $first ) ? (string) $first : '';
+		}
+		$parts = preg_split( '/\s*,\s*/', $value );
+		return trim( (string) ( $parts[0] ?? '' ) );
+	}
+
+	/**
+	 * Rank Math stores robots as a serialized list or a comma-separated string.
+	 *
+	 * @param int $migrated Updated by reference.
+	 * @param int $skipped  Updated by reference.
+	 */
+	private function writeRankMathRobots( int $postId, string $value, int &$migrated, int &$skipped ): void {
+		$decoded = $this->decodeStored( $value );
+		if ( is_array( $decoded ) ) {
+			$tokens = $decoded;
+		} else {
+			$tokens = preg_split( '/\s*,\s*/', (string) $decoded ) ?: array();
+		}
+		$tokens = array_map(
+			static function ( $token ): string {
+				return strtolower( trim( (string) $token ) );
+			},
+			$tokens
+		);
+
+		$this->writeIfEmpty( $postId, '_holvek_noindex', in_array( 'noindex', $tokens, true ) ? 'yes' : 'no', $migrated, $skipped );
+		if ( in_array( 'nofollow', $tokens, true ) ) {
+			$this->writeIfEmpty( $postId, '_holvek_nofollow', 'yes', $migrated, $skipped );
+		}
+	}
+
+	/**
+	 * @param int $migrated Updated by reference.
+	 * @param int $skipped  Updated by reference.
+	 */
+	private function writeIfEmpty( int $postId, string $targetKey, string $value, int &$migrated, int &$skipped ): void {
+		$existing = get_post_meta( $postId, $targetKey, true );
+		if ( ! empty( $existing ) ) {
+			++$skipped;
+			return;
+		}
+		if ( '' === $value ) {
+			return;
+		}
+		update_post_meta( $postId, $targetKey, $value );
+		++$migrated;
+	}
+
+	private function pluginLabel( string $pluginId ): string {
+		if ( 'yoast' === $pluginId ) {
+			return 'Yoast SEO';
+		}
+		if ( 'rankmath' === $pluginId ) {
+			return 'Rank Math';
+		}
+		if ( 'aioseo' === $pluginId ) {
+			return 'All in One SEO';
+		}
+		return '';
+	}
+
+	private function previewMessage( int $copy, int $skipped, string $pluginId ): string {
+		return sprintf(
+			/* translators: 1: number of fields to copy, 2: number skipped, 3: the other SEO plugin name. */
+			__( 'Will copy %1$d fields. %2$d already have Holvek data and will be skipped. Deactivate %3$s after import so both plugins do not print titles and schema.', 'holvek' ),
+			$copy,
+			$skipped,
+			$this->pluginLabel( $pluginId )
+		);
+	}
+
+	private function migrateMessage( int $migrated, int $skipped, string $pluginId ): string {
+		return sprintf(
+			/* translators: 1: number of fields copied, 2: number skipped, 3: the other SEO plugin name. */
+			__( 'Migrated %1$d meta entries. Skipped %2$d that already had Holvek data. Deactivate %3$s after import so both plugins do not print titles and schema.', 'holvek' ),
+			$migrated,
+			$skipped,
+			$this->pluginLabel( $pluginId )
+		);
 	}
 
 	/**
@@ -181,7 +331,7 @@ class MigrationManager {
 	 */
 	public function registerRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/migration/detect',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -192,7 +342,7 @@ class MigrationManager {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/migration/run',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -208,8 +358,15 @@ class MigrationManager {
 	}
 
 	public function handleMigrate( \WP_REST_Request $request ): \WP_REST_Response {
-		$pluginId = sanitize_text_field( $request->get_param( 'plugin_id' ) );
-		$result   = $this->migrate( $pluginId );
-		return rest_ensure_response( $result );
+		$params   = $request->get_json_params();
+		$params   = is_array( $params ) ? $params : array();
+		$pluginId = sanitize_text_field( (string) ( $params['plugin_id'] ?? $request->get_param( 'plugin_id' ) ?? '' ) );
+		$confirm  = ! empty( $params['confirm'] ) || true === $request->get_param( 'confirm' );
+
+		if ( ! $confirm ) {
+			return rest_ensure_response( $this->preview( $pluginId ) );
+		}
+
+		return rest_ensure_response( $this->migrate( $pluginId ) );
 	}
 }

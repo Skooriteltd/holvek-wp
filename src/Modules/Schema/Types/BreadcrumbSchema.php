@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Schema\Types;
+namespace Holvek\WordPress\Modules\Schema\Types;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -16,47 +16,27 @@ class BreadcrumbSchema {
 	}
 
 	public function generate( ?int $postId = null ): array {
-		$itemListElement = array();
-
-		// Home
-		$itemListElement[] = array(
-			'@type'    => 'ListItem',
-			'position' => 1,
-			'name'     => 'Home',
-			'item'     => home_url( '/' ),
-		);
-
-		// Simple implementation for single posts
-		$post = $postId !== null ? get_post( $postId ) : get_post();
-		if ( $post ) {
-			$categories = get_the_category( $post->ID );
-
-			if ( ! empty( $categories ) ) {
-				$category          = $categories[0];
-				$itemListElement[] = array(
-					'@type'    => 'ListItem',
-					'position' => 2,
-					'name'     => $category->name,
-					'item'     => get_category_link( $category->term_id ),
-				);
-
-				$itemListElement[] = array(
-					'@type'    => 'ListItem',
-					'position' => 3,
-					'name'     => get_the_title( $post->ID ),
-					'item'     => get_permalink( $post->ID ),
-				);
-			} else {
-				$itemListElement[] = array(
-					'@type'    => 'ListItem',
-					'position' => 2,
-					'name'     => get_the_title( $post->ID ),
-					'item'     => get_permalink( $post->ID ),
-				);
-			}
+		$renderer = new \Holvek\WordPress\Modules\Breadcrumbs\BreadcrumbRenderer();
+		$trail    = $postId !== null ? $renderer->itemsForPost( $postId ) : $renderer->items();
+		if ( count( $trail ) < 2 ) {
+			return array();
 		}
 
-		$pageUrl = $post ? get_permalink( $post->ID ) : home_url( add_query_arg( array(), $GLOBALS['wp']->request ) );
+		$itemListElement = array();
+		foreach ( $trail as $index => $item ) {
+			$entry = array(
+				'@type'    => 'ListItem',
+				'position' => $index + 1,
+				'name'     => $item['name'],
+			);
+			if ( $item['url'] !== '' ) {
+				$entry['item'] = $item['url'];
+			}
+			$itemListElement[] = $entry;
+		}
+
+		$last    = $trail[ count( $trail ) - 1 ];
+		$pageUrl = $last['url'] !== '' ? $last['url'] : home_url( '/' );
 
 		return array(
 			'@type'           => 'BreadcrumbList',

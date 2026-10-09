@@ -1,0 +1,490 @@
+# Holvek production-readiness report
+
+Review date: 2026-10-02
+
+## Implementation status
+
+- Task 1 — done. Bootstrap, imports, fully qualified calls, and unit tests now use `Holvek\WordPress`. `NamespaceBootTest` loads every class whose file name matches its class name. PHP syntax check passed on `src/`, `tests/`, and `holvek.php` (PHP 8.2.4).
+- Task 2 — done. `HolvekApiGateway` lives in `src/Core/Api/HolvekApiGateway.php` and autoloads. Callers use `Holvek\WordPress\Core\Api\HolvekApiGateway`.
+- Task 3 — done. `Plugin::boot()` returns immediately on a second call. `PluginBootOnceTest` covers `boot()` and the legacy `ameverywhere_init()` wrapper. An anonymous front-end boot registers 25 hooks, a logged-in front-end boot registers 26, and an admin boot registers 133. Each boot registers those hooks once.
+- Task 8 — done. Anonymous `GET /seo/{id}` no longer returns focus keyword, search intent, cornerstone, AI-generated, or schema-type fields. Unpublished posts 404. `PUT` still checks `edit_post`. `/schemamap` accepts published posts only, pages at 20 items, and caches each page for 15 minutes. `PublicSeoPayloadTest` covers these cases.
+- Task 9 — done. `POST /inspector/audit` requires `edit_posts`, then `edit_post` for the requested ID. A missing ID is 400, a missing post is 404, and a post the user cannot edit is 403. Neither error includes SEO meta. The front-end overlay is injected only when the current user can edit that singular post. `FrontendSeoInspectorAccessTest` covers these cases. PHPCS is clean on the inspector. Unit suite: 68 tests, 216 assertions, PHP 8.2.4.
+- Task 10 — done. Social account, share, OAuth start, and settings routes require `manage_options` or `manage_seo`. Authors and editors get 403 and cannot store or read tokens or app secrets. List, save, update, and delete responses mask token and secret fields; storage stays `aew_enc::` ciphertext. Twitter authorize keeps a server-side PKCE verifier, sends `S256`, and the token exchange posts that verifier. Facebook posts `client_secret` and loads Pages with `Authorization: Bearer`. Authorize and token `redirect_uri` values match and include the network. The public callback stays single-use, re-checks the initiating user's capability, and uses `wp_safe_redirect`. `SocialAccountAccessTest` covers these cases. PHPCS is clean on `SocialModule.php`. Unit suite: 79 tests, 405 assertions, PHP 8.2.4.
+- Task 11 — done. The `.htaccess` editor requires `manage_options` and stays off until an administrator turns it on. `DISALLOW_FILE_EDIT` blocks read, write, restore, and enable, with no bypass. Responses omit the filesystem path. Backups live in the non-autoloaded option `holvek_htaccess_backups`. One `init` cleanup imports safe legacy files from `wp-content/holvek-backups/htaccess/`, deletes them, and stores `holvek_htaccess_web_backups_retired` as an autoloaded flag so later requests do not scan the filesystem. An authorized read retires those files even while the editor is off. Save and restore reject directives that can execute code, including `SetHandler`, `php_flag`, `php_admin_value`, CGI wrappers, and rewrite targets that run code. WordPress `index.php` rewrite rules stay allowed. Redirects and robots.txt are unchanged. Direct writes also refuse when the user lacks `manage_options`, file editing is disabled, or the editor is off. `HtaccessEditorTest` covers these cases. PHPCS is clean on `HtaccessEditor.php`. Unit suite: 89 tests, 521 assertions, PHP 8.2.4.
+- Task 12 — done. Holvek API requests use `https://api.holvek.com/v1`. The `holvek_backend_api_url` option is ignored. A developer filter of the same name may substitute another `https` URL. IndexNow accepts only `api.indexnow.org`, `www.bing.com`, `yandex.com`, and `search.seznam.cz`. Competitor schema import requires `manage_options`, allows 10 attempts per 10 minutes, sends a `Holvek-WP` user agent, and refuses hosts that resolve to private, loopback, link-local, or carrier-grade NAT addresses, including after redirects. Ollama accepts `http` or `https` and defaults to loopback. A remote host is stored only after confirmation, because it receives post content, and settings import cannot set one. `OutboundHostGuardTest` covers these cases. PHPCS is clean on `OllamaEndpoint.php`, `BackendApiClient.php`, `BingIndexNowApi.php`, and `SchemaModule.php`. Unit suite: 95 tests, 605 assertions, PHP 8.2.4.
+- Task 13 — done. New ciphertext is written with the prefix `holvek_enc::`. Decrypt still accepts `aew_enc::`. `encrypt()` creates `holvek_encryption_salt` when it is missing and returns `WP_Error` when the salt cannot be created or OpenSSL is unavailable. Callers that store API keys, tokens, and GA4 credentials skip the write, so a failure does not save plaintext or wipe the previous value. There is no `AUTH_KEY` or built-in fallback key. Ciphertext written with that old fallback can no longer be decrypted. Boot registers one admin notice; administrators see it on Holvek screens when OpenSSL is missing, and secret storage stays off until the extension is available. Settings export lists the salt and then removes it. Settings import ignores it. A full database copy still contains the salt and the ciphertext, so that copy can be decrypted. `holvek_license_key` is included with the other encrypted settings. `hasActiveLicense()` is still true when a stored string decrypts to a non-empty value, and it does not call `api.holvek.com`. `KeyVaultTest` covers these cases. PHPCS is clean on `KeyVault.php`, `HolvekApiGateway.php`, `SocialAccountManager.php`, `SocialModule.php`, and `Plugin.php`. Unit suite: 102 tests, 663 assertions, PHP 8.2.4.
+- Task 14 — done. Settings export omits secret values: indexing JSON, the IndexNow key, API keys, OAuth secrets, and the encryption salt. `_redacted` lists those option names and does not include the values. Import checks each public field: yes/no, verification tokens, `http`/`https` URLs, breadcrumb text, enums, slug lists, positive ID lists, GA4 IDs, sitemap depth, and `wp_kses_post` for the RSS HTML fields. An unknown key, or a value that fails its check, rejects the whole file before any option is written. A known secret in the file is ignored, so an older backup still imports its public fields and does not wipe stored keys. Settings import still cannot point Ollama at a remote host. `GET /settings/export` and `POST /settings/import` require `manage_options`. The live settings saver is unchanged. `SettingsTransferTest` covers these cases. PHPCS is clean on `SettingsTransfer.php`. Unit suite: 107 tests, 768 assertions, PHP 8.2.4. The settings screen was not exercised in a logged-in WordPress admin.
+- Task 15 — done. The IndexNow key file is the home path plus `/{key}.txt`. `wp_parse_url()` ignores the query string, so `/blog/{key}.txt?x=1` matches a site installed in `/blog` and `/{key}.txt` on that site does not. A key must be 8 to 128 letters, numbers, or dashes; anything else is not served and is not sent. Publishing a public post adds its URL to a queue of at most 100 and does not call IndexNow. The `holvek_indexnow_flush` cron sends at most 10 URLs at a time, and only when automatic IndexNow is on and a valid key is already saved. Holvek does not create a key. An invalid key rejects that settings request before any of its fields are saved. A failed batch stays queued. `IndexingJob` does not ping IndexNow. `IndexNowSubmissionTest` covers these cases. PHPCS is clean on `BingIndexNowApi.php`, `IndexingJob.php`, and `SitemapRouteManager.php`. Unit suite: 113 tests, 931 assertions, PHP 8.2.4. The settings screen was not exercised in a logged-in WordPress admin.
+- Task 16 — done. The schema graph, WooCommerce product schema, breadcrumbs, and image objects are printed with `wp_get_inline_script_tag()` after encoding with `JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES`. A property value that contains `</script>` stays inside the JSON string, and `https://schema.org` stays readable. Custom schema JSON is accepted only as one Schema.org node, a list of up to 20 nodes, a `@graph` document whose context is `http://schema.org` or `https://schema.org`, or the editor’s key/value list. A JSON string, number, boolean, null, an object without `@type`, or a property name that is not a plain identifier is rejected and is not merged into the graph. Empty input and `[]` add nothing. Saving invalid JSON through post meta returns `invalid_custom_schema` with status 400. `JsonLdSchemaTest` covers these cases. PHPCS is clean on `JsonLd.php`, `SchemaGenerator.php`, `BreadcrumbRenderer.php`, and `ContentAssistantModule.php`. `CustomSchema.php` and `WooCommerceProductSchema.php` still call `date()` for event and offer dates, and `ImageObjectSchema.php` still calls `array_search()` without a strict comparison. Those findings were already present. Unit suite: 117 tests, 966 assertions, PHP 8.2.4. A full boot still registers 118 hooks. The schema screens were not exercised in a logged-in WordPress admin.
+- Task 17 — done. The robots.txt filter starts from the document WordPress and earlier plugins already built. On a public site, Holvek appends its `sitemap.xml` and `news-sitemap.xml` lines when they are missing. AI crawler rules and the training opt-out are appended only when those settings are on. A saved document replaces the generated file only when `holvek_robots_txt_replaces_generated` is `yes` and the document is not empty. A request that asks to replace the file without any rules returns `robots_replace_empty` and does not write. A robots.txt saved before this change stays in the editor and is not published until an administrator confirms the replacement. `holvek_block_ai_bots` still defaults to `no`. When it is on, a crawler name matches only as its own token, so `Omgili` matches `Omgili/1.0` and does not match `NotOmgiliBrowser`. Custom crawler names must be 4 to 100 characters. The 403 page uses translatable strings. `<html lang>` is included only when the site locale is English. `RobotsTxtEditorTest` covers these cases. PHPCS is clean on `RobotsTxtEditor.php`. Unit suite: 126 tests, 1000 assertions, PHP 8.2.4. A full boot still registers 118 hooks. The Technical SEO screen was not opened in a logged-in WordPress admin. The admin bundle was rebuilt, and `build/index.js` contains the replacement confirmation.
+- Task 18 — done. `GET /holvek/v1/ai/usage` still allows any logged-in user, and the counters are always the current user’s. A `user_id` query argument is ignored. A logged-out request is rejected with `rest_forbidden` and status 401 before a query runs. `GET /holvek/v1/ai/usage/site` and `/ai/usage/limits` stay on `manage_seo` or `manage_options`. A subscriber who calls the site endpoint gets `rest_forbidden` with status 403, and no usage query runs. An SEO manager or administrator can read the site totals. Usage periods are `day`, `week`, or `month`. `AiUsageScopeTest` covers a subscriber. PHPCS is clean on `UsageMeteringManager.php`. Unit suite: 130 tests, 1026 assertions, PHP 8.2.4. A full boot still registers 118 hooks. No admin screen was opened.
+- Task 19 — done. Legacy table, option, post meta, and user meta renames detect a collision before any write. An option rename is one `UPDATE` by `option_id`. Post meta and user meta use `meta_id` and `umeta_id`. A meta collision is the same post or user, so another object with only the old key is still renamed. Rows are read in primary-key batches of 100. A pass stops after 200 full batches and does not set `holvek_migrated_from`, so the next `install()` continues. A finished pass sets that option to `ameverywhere` with autoload off, including when some names were skipped. Skipped names are stored in `holvek_migration_collisions` and that option is removed when nothing was skipped. A failed write leaves the completion flag unset. `RENAME TABLE` doubles backticks inside the table name. The table rename still runs before `dbDelta`. Compatibility shims are unchanged. `InstallerMigrationTest` covers the planner, collisions, batches, the batch cap, a backtick in the prefix, a second pass, and a failed write. PHPCS is clean on `Installer.php`. Unit suite: 137 tests, 1073 assertions, PHP 8.2.4. A full boot still registers 118 hooks. No admin screen was opened.
+- Task 20 — done. A front-end HTML request constructs metadata and Open Graph, schema, redirects, the 404 buffer, the robots filter, breadcrumbs, and the image filename filter when `holvek_filename_enforce` is `yes` (the default). Sitemap generators, the llms.txt generator, and the IndexNow client are constructed only inside the callback for a matching path. The cookie banner boots only when its option is enabled. The GPC signal is hooked without the retention scheduler. The inspector overlay is constructed only for a logged-in front-end user. The HTML sitemap shortcode stays registered, including its existing `wp_head` style hook. Admin menus, React assets, the setup wizard, migration, the bulk editor, the role manager, the audit log, PageSpeed, the rank tracker, Search Console, Bing, and the writing assistant register in `is_admin()` or on `rest_api_init`. Registering those routes does not call an HTTP client. `holvek_db_version` is still compared on every request. `BootstrapSplitTest` covers anonymous HTML, a logged-in view, a disabled filename filter, the cookie banner, admin, REST, sitemap and llms.txt paths, IndexNow key paths, the core sitemap filter, the retired `.htaccess` backup flag, and a second boot. PHPCS is clean on `Plugin.php`. Unit suite: 149 tests, 1177 assertions, PHP 8.2.4. An anonymous front-end boot registers 26 hooks. A logged-in front-end boot registers 27. An admin boot registers 134. No admin screen was opened.
+- Task 21 — done. `holvek_redirect_counts` stores `exact` and `regex` and is autoloaded. Create, CSV import, delete, and the one-time legacy option migration keep those numbers current. `handleRedirects()` returns before any redirect query when both counts are zero. A missing option is counted from the table once, so rules that are already stored still match. Regex rules are kept in the `holvek_regex_redirects` transient and the `holvek` object-cache group, and both copies are cleared when a redirect is written. A pattern that does not compile is rejected on save and import, and an older stored pattern that does not compile is skipped. The front-end request does not call `ini_set`. CSV import checks redirect loops and then saves the valid rows. `RedirectManagerTest` covers an idle page, a one-time recount, an exact match, the regex cache, create/import/delete counts, a delete that matches nothing, and an admin request. PHPCS is clean on `RedirectManager.php`. Unit suite: 157 tests, 1208 assertions, PHP 8.2.4. No admin screen was opened.
+- Task 22 — done. IndexNow, social share, broken-link checks, orphan scans, rank checks, and technical audits go through `QueueManager`. Publish and manual share only enqueue. `IndexNowFlushJob` sends at most 10 URLs and queues another job while URLs remain. `AutoShareJob` shares at most 3 accounts per run. A broken-link batch checks at most 10 URLs across at most 10 posts, then queues the next slice; a single recheck is queued too. An orphan scan counts inbound links for 20 posts and queues the next page. A rank check asks the provider about 5 keywords and queues the rest. A technical audit runs 2 checks and queues the next slice. A cacheable front-end view does not register `holvek_indexnow_flush`, `holvek_rank_check`, `holvek_blc_scan_batch`, `holvek_scan_orphaned`, or `holvek_run_technical_audit`. `BackgroundWorkTest` covers each batch. PHPCS is clean on `BingIndexNowApi.php`, `IndexNowFlushJob.php`, `IndexingJob.php`, `AutoShareJob.php`, `SocialModule.php`, `BrokenLinkScanJob.php`, `BrokenLinkRecheckJob.php`, `OrphanedContentFinder.php`, `OrphanScanJob.php`, `RankCheckJob.php`, and `TechnicalAuditJob.php`. `BrokenLinkChecker.php`, `KeywordRankTracker.php`, and `TechnicalSeoAuditEngine.php` still have the earlier SQL, `parse_url`, `date`, and `urlencode` findings. The admin bundle was rebuilt so the rank and recheck buttons show that the work was queued. Unit suite: 163 tests, 1308 assertions, PHP 8.2.4. No admin screen was opened.
+- Task 23 — done. The HTML sitemap stylesheet is printed inside `[holvek_sitemap]` and `[ameverywhere_sitemap]`, once for each shortcode instance. Recurring work is scheduled on activation. `holvek_flush_404_buffer` is hourly, `holvek_rank_check` is daily, `holvek_apply_retention` is daily, `holvek_weekly_usage_email` is weekly, `holvek_cornerstone_staleness_check` is weekly, `holvek_prune_audit_log` is daily, and `holvek_scheduled_audit` follows the saved weekly or monthly frequency. Each worker schedules its own event again when that event is missing. A front-end or admin boot does not schedule those events. Redirect and 404 admin reads return at most 100 rows. Audit-log export selects named columns in pages of at most 200. The link index reads one page of published posts, then the link rows for those URLs. Redirect counts, robots mode, AI-bot flags, the cookie banner, filename enforcement, GPC, the `.htaccess` retirement flag, and automatic IndexNow stay autoloaded. Secrets, logs, the robots.txt document, and dashboard caches are stored with autoload off, and activation updates rows that are already saved. `AssetQueryTest` covers the stylesheet, scheduling, paged SQL, and autoload flags. PHPCS is clean on `Plugin.php`, `RedirectManager.php`, `RobotsTxtEditor.php`, `CookieBannerModule.php`, `SocialAccountManager.php`, `SocialModule.php`, `UsageMeteringManager.php`, and `StaleCornerStoneDetector.php`. `HtmlSitemapShortcode.php` still warns on `posts_per_page` 200. `ErrorMonitor.php`, `SeoAuditHistoryLog.php`, `CcpaPrivacyTools.php`, `AuditScheduler.php`, `GoogleSearchConsoleIntegration.php`, `BingWebmasterIntegration.php`, and `ImageFilenameEnforcer.php` still have older SQL, `date()`, or filesystem findings. `AdminModule.php` and `KeywordRankTracker.php` were left with their earlier findings. The admin bundle was rebuilt and contains the paged redirect, 404, and orphan requests. An anonymous front-end boot registers 25 hooks. A logged-in front-end boot registers 26. An admin boot registers 133. Unit suite: 167 tests, 1378 assertions, PHP 8.2.4. No admin screen was opened.
+- Release cleanup — done. Public names from the previous plugin are removed: the `AMEVERYWHERE_*` constants, `ameverywhere_init()`, `ameverywhere_breadcrumbs()`, `[ameverywhere_sitemap]`, and the `ameverywhere_gpc_opt_out` action. The HTML sitemap, cookie notice, and admin field errors use `holvek-` class names, and the admin and cookie-banner bundles were rebuilt. `build/index.asset.php` depends on react, react-dom, wp-components, wp-element, and wp-i18n. Upgrade still renames the previous tables, options, and meta once, and decrypt still reads `aew_enc::`. New secrets are saved as `holvek_enc::`. readme.txt and docs/features.md describe `[holvek_sitemap]` only. phpcs.xml.dist is named Holvek and allows `posts_per_page` 200, the existing cap. The release and end-to-end workflows activate `holvek.php` and look for `holvek` tables. Whole-tree PHPCS exits 0. The earlier interpolated table names now use `{$wpdb->prefix}` plus the literal suffix, dates use `gmdate()`, query components use `rawurlencode()`, URL parsing uses `wp_parse_url()`, and JSON encoding uses `wp_json_encode()`. Generated `IN` lists and JWT base64 keep a reason comment. `languages/holvek.pot` was regenerated with WP-CLI 2.12.0 and does not contain ameverywhere or aew_. editor.js still warns on its placeholder comments. `SetupWizard.php` now has the translators comment on the welcome link. `PluginBootOnceTest` calls `holvek_init()` twice. `RenameAuditTest` checks that the public names are gone and that the installer source and the legacy cipher stay. Unit suite: 250 tests, 2451 assertions, PHP 8.2.4, Time 00:00.694, Memory 42.00 MB. No admin screen was opened. Hook counts were not remeasured. The WordPress test library was not used. `package.json` `test:integration` was not run. Plugin Check is not installed. Tested up to stays 6.5. The local `v1.0.0` tag is moved onto this commit and was not pushed.
+- Task 36 — done. The release gate is covered with the project stubs. The WordPress test library is not installed, and `package.json` `test:integration` was not run. `NamespaceBootTest` still loads the bootstrap class. `KeyVaultTest` still covers a round trip, a tampered ciphertext, and a refusal to encrypt without a salt. `RobotsTxtEditorTest` still keeps another plugin’s robots.txt unless custom replacement is on. `PublicSeoPayloadTest` still omits the focus keyword from an anonymous published post, and `ProductionReadinessTest` still omits the IndexNow key. Its imports were already the current class names. `SettingsTransferTest` still rejects an unknown key before any write. Settings have no canonical field. A `javascript:` canonical is stored as empty by the post-meta sanitizer in `EditorMetaTest`, and settings import still rejects `javascript:` on the share image. `IndexNowSubmissionTest` still matches the key file under `/blog/`. `InstallerMigrationTest` still covers an `ameverywhere_` upgrade. `MultisiteLifecycleTest` still keeps tables when the uninstall flag is off and drops `holvek_` tables and options when it is on. `RedirectManager::isSafeTarget` now rejects a regex target that starts with `//` and contains a substitution, the same rule as a normal protocol-relative target. `RedirectManagerTest` rejects `//evil.example`, `//evil.example/$1`, `https://evil.example/phish`, and `javascript:alert(1)` with `unsafe_target` and no insert, and it still saves `/local-page` and `https://example.com/about`. `ReleaseGateTest` calls `Plugin::activate()` and `Plugin::deactivate()` through the stubs. Activation runs `dbDelta` for the redirect, 404, sitemap settings, link, AI usage, audit log, rank history, and broken-link tables, adds `manage_seo`, `view_seo_reports`, `manage_redirects`, and `edit_seo_meta` to the administrator, does not add those capabilities to the contributor, flushes rewrite rules once, and does not add the sitemap rule while the sitemap option is off. A second activation with `holvek_enable_index_sitemap` set to `yes` adds the sitemap index rule. Deactivation clears the scheduled Holvek hooks, removes that sitemap rule, leaves an unrelated rewrite rule, does not run `DROP TABLE`, and leaves `holvek_db_version` in place. A contributor, with `manage_options` and `manage_seo` false and `edit_post` limited to another post, receives `forbidden` with status 403 from the `.htaccess` read and from the social account read, and the error does not include the stored token. The settings export and import permission callbacks are `checkSettingsTransferPermission` and return false while the user is logged in. This stub does not boot `WP_REST_Server`, which is what turns that false callback into a 403 response. `updatePostSeo` on another user’s draft returns `forbidden` with status 403 and does not change the title. An anonymous read of that draft is 404. The contributor can still save a title on the draft `edit_post` allows. `OperatingModeTest` boots an anonymous `/hello` request with the cloud, license, SerpApi, PageSpeed, OpenAI, Anthropic, indexing, Bing, Search Console, and IndexNow options empty and asserts `mock_http_log` is empty. PHPCS is clean on `RedirectManager.php`. Unit suite: 250 tests, 2421 assertions, PHP 8.2.4, Time 00:00.586, Memory 42.00 MB. No admin screen was opened. Hook counts were not remeasured. No commit or tag was created.
+- Task 35 — done. The existing personal-data exporter and eraser in CcpaPrivacyTools now include audit-log rows for that WordPress user ID, and they still include AI usage rows for that user and 404 rows whose path or referrer contains the account email or a login of at least 4 characters. The 404 export includes the path, referrer, and shortened browser name. Search Console and Google Analytics 4 credentials stay site settings and are not part of the export. The cookie notice choice stays in the holvek_consent browser cookie and is not tied to an email or user ID. The privacy policy text says Holvek stores these records and the site owner decides the legal basis, and it says the plugin does not make a site compliant with a privacy law. tests/e2e-privacy.php now inserts 404 rows with the uri column. It is still a wp eval-file script, not the PHPUnit runner, and it was not executed. PrivacyRecordsTest covers the audit export, the audit delete, and the policy sentences. PHPCS on CcpaPrivacyTools.php still reports the earlier interpolated $logsTable and $usageTable queries. The new audit queries use {$wpdb->prefix} inside prepare. Unit suite: 246 tests, 2307 assertions, PHP 8.2.4. No admin screen was opened. Hook counts were not remeasured. The WordPress test library was not used.
+- Task 33 — done. readme.txt now says Requires PHP: 8.2, matching holvek.php, composer.json, and the PHP 8.2 check in package-zip.sh. The unit suite that checked this ran on PHP 8.2.4. Tested up to stays 6.5 because no WordPress install was exercised. The readme external-services section lists OpenAI, Anthropic, Ollama, SerpApi, PageSpeed, Google Search Console, Google Analytics 4, IndexNow, the Google Indexing API, Facebook, X, LinkedIn, Pinterest, the Bing Webmaster API, and https://api.holvek.com, and it says nothing is sent until an administrator turns the feature on. The changelog and description do not claim a Discovery Scan, guaranteed indexing, or a ranking improvement. The support URL remains https://wordpress.org/support/plugin/holvek/. languages/holvek.pot does not contain ameverywhere or aew_. The icon files are 128 and 256 pixels and the banners are 772 by 250 and 1544 by 500. screenshot-1.png through screenshot-8.png in assets/wporg/ and assets/screenshots/ are the same 1280 by 720 design mockups of the previous name. They were not replaced, and readme.txt no longer has a Screenshots section. FeatureCopyTest covers the PHP line, the services sentence, and the removed claims. Unit suite: 244 tests, 2294 assertions, PHP 8.2.4. No admin screen was opened. Hook counts were not remeasured. The WordPress test library was not used.
+- Task 32 — done. User-facing PHP messages that were bare English now use text domain holvek. That includes the REST errors for Search Console, Bing, the writing assistant, content gap, index inspection, social accounts, privacy email checks, schema validation, migration’s “Unknown plugin.” text, the weekly AI usage email, and the front-end inspector checks. The inspector control reads SEO, its accessible name is SEO Inspector, and the panel heading is Holvek Inspector. Notices render only on screens whose id contains holvek, are dismissible, and stay dismissed. Skip setup marks holvek_setup_complete and does not flush rewrite rules. Activation does not redirect. Navigation labels are text. Those controls are buttons, arrow keys move between them, and one status line uses aria-live. Visible focus is scoped to .holvek-wrapper. Setup wizard strings use @wordpress/i18n. build/index.asset.php depends on react, react-dom, wp-components, wp-element, and wp-i18n, version d50f5a8abc06f11547df. React stays external. languages/holvek.pot was regenerated with WP-CLI 2.12.0. It contains the new messages and does not contain ameverywhere or aew_. RenameAuditTest passed: 6 tests, 50 assertions. App.js screen bodies beyond the navigation, the connection copy, and the three form errors remain English literals. SetupWizard.php:57 still lacks an adjacent translators comment. editor.js still warns on its placeholder comments. PHPCS is clean on SocialModule.php, SocialApiGateway.php, UsageMeteringManager.php, FrontendSeoInspector.php, ImageAltAudit.php, SchemaOutputValidator.php, IndexStatusChecker.php, MigrationManager.php, and HolvekApiGateway.php. InternalLinkSuggester.php, MorphologicalKeywordMatcher.php, SearchIntentClassifier.php, WooCommerceProductSchema.php, BingWebmasterIntegration.php, AuditScheduler.php, AdminModule.php, CcpaPrivacyTools.php, and GoogleSearchConsoleIntegration.php still have their earlier findings. The admin bundle was not rebuilt for this string pass because App.js did not change after the rebuild that already contains Skip setup. Unit suite: 243 tests, 2282 assertions, PHP 8.2.4. No admin screen was opened. Hook counts were not remeasured. The WordPress test library was not used.
+- Task 31 — done. A site created after network activation runs `wp_initialize_site`, and Holvek installs tables and capabilities on that site only when the plugin is network-active. Reading or writing another site’s settings from the network routes requires `manage_network_options` inside the callback, so a user without that capability does not switch blogs and does not save network settings. `uninstall.php` declares `global $wpdb` for the network `sitemeta` delete. Each site clears its scheduled hooks, including `holvek_indexnow_flush`, and removes `manage_seo`, `view_seo_reports`, `manage_redirects`, and `edit_seo_meta` from the administrator, editor, author, and contributor roles even when data is kept. With the delete flag on, each site also drops its `holvek_*` tables, `holvek_*` user meta, and the `wp-content/holvek-backups` directory, and the network deletes `holvek_*` rows from `sitemeta`. `MultisiteLifecycleTest` covers the new site, the capability gate, and both uninstall modes with the project stubs. PHPCS is clean on `MultisiteNetworkSeo.php` and `uninstall.php`. Unit suite: 240 tests, 2267 assertions, PHP 8.2.4. No admin screen was opened. Hook counts were not remeasured. The WordPress test library was not used. `languages/holvek.pot` was not regenerated.
+- Task 30 — done. SEO import from Yoast, Rank Math, and All in One SEO counts source rows and Holvek fields that are already filled, and it does not write until `confirm` is true. An existing non-empty `_holvek_*` value is skipped. A Yoast noindex or nofollow value of `1` becomes `yes`. Rank Math’s serialized robots array sets noindex and, when that token is present, nofollow. A focus keyword stored as a list or a comma-separated string keeps the first term. Confirmed writes run in batches of 50 and finish in that request. The response tells the user to deactivate Yoast SEO, Rank Math, or All in One SEO after import so both plugins do not print titles and schema. The setup wizard previews on the first click and writes on the second. `readme.txt` and `docs/features.md` say the import shows how many fields it will copy and does not write until you confirm. The admin bundle was rebuilt. `MigrationTest` covers the preview, the skip, the Rank Math shapes, and the readme sentence. PHPCS is clean on `MigrationManager.php`. Unit suite: 235 tests, 2230 assertions, PHP 8.2.4. No admin screen was opened. Hook counts were not remeasured. The WordPress test library was not used. `languages/holvek.pot` was not regenerated.
+- Task 29 — done. Filename enforcement renames a new upload when `holvek_filename_enforce` is `yes` and does not rename files that are already in the media library. `bulkRename` returns `existing_files_not_renamed` with status 400 and says existing media files are left unchanged. The missing-alt page size defaults to 20 and is capped at 20. The keyword and auto-fill queries also read 20 rows. Compression stays off until `acknowledge_reversible_processing`. Before a file is compressed, the original is copied into a new media attachment and the source stores that attachment id. A failed compression copies those bytes back and does not delete the original attachment. `ImageSeoBehaviorTest` covers the upload rename, the bulk refusal, the page cap, and the media-library original. PHPCS is clean on `ImageAltAudit.php`. `ImageFilenameEnforcer.php` still warns on `iconv`. `ImageCompressor.php` still warns on `is_writable` and the `imagecreate` silences. Unit suite at this check: 231 tests, 2213 assertions, PHP 8.2.4. No admin screen was opened. Hook counts were not remeasured. The WordPress test library was not used. `languages/holvek.pot` was not regenerated.
+- Task 28 — done. Gutenberg post and page meta for the title, description, canonical URL, robots flags, and FAQ schema is registered with `register_post_meta`. `auth_callback` calls `current_user_can( 'edit_post', $objectId )` and does not treat `edit_posts` as permission for that post. `sanitize_callback` runs on that registration. A canonical value must be an `http` or `https` URL. A `javascript:` URL and a protocol-relative URL are stored as empty, and an empty value stays empty. A robots value other than `yes` is stored as `no`. FAQ JSON keeps at most 50 question and answer rows and drops empty rows and extra keys. Invalid FAQ JSON is stored as `[]`. Custom schema still returns the `JsonLd` result, including `WP_Error`. Editor sidebar strings use `@wordpress/i18n` with text domain `holvek`. A schema stack entry still stores the English type name. `EditorMetaTest` covers the post id check and the sanitizers. PHPCS is clean on `ContentAssistantModule.php`. The editor bundle was rebuilt with `wp-scripts`. `build/editor.asset.php` depends on `wp-i18n`, and React stays the WordPress external. Admin `App.js` strings and `languages/holvek.pot` were left for the admin internationalization pass. `readme.txt` still says Requires PHP 8.0 and Tested up to 6.5. Unit suite: 228 tests, 2199 assertions, PHP 8.2.4. No admin screen was opened. Hook counts were not remeasured. The WordPress test library was not used.
+- Task 27 — done. `/sitemap.xml` is a sitemap index. A month with more published URLs than the limit, which defaults to 1,000, is split into `/sitemap-posts-YYYY-MM.xml` and then `/sitemap-posts-YYYY-MM-2.xml` and later pages. The `holvek_sitemap_urls_per_file` filter can set that limit from 1 to 50,000. Noindex posts, excluded post IDs, and excluded post types stay out of the index and the chunk. Excluding every public type leaves the sitemap empty of those types. The news sitemap keeps posts published in the last 48 hours, including a post at the cutoff, and still skips noindex. The video sitemap lists only pages that have a video. An empty video sitemap no longer adds the homepage. Activation calls `flushRules()` once. That registers the sitemap rules when the sitemap is enabled and flushes once. Deactivation calls `removeRulesAndFlush()` once and leaves an unrelated rewrite rule in place. A request for `/sitemap-posts-YYYY-MM-2.xml` is recognized without constructing the generator. `/sitemap-posts-YYYY-MM-1.xml` is not a sitemap page. Yoast SEO, Rank Math, All in One SEO, and SEOPress are detected from the active plugin list. When the Holvek XML sitemap is also on, a Holvek screen tells the user to disable one sitemap. Other admin screens do not show that notice, and a user who cannot manage SEO does not see it. The WordPress test library is not installed. `SitemapBehaviorTest` covers this with the project stubs. PHPCS is clean on `SitemapGenerator.php`, `NewsSitemapGenerator.php`, `VideoSitemapGenerator.php`, `SitemapRouteManager.php`, `SitemapModule.php`, and `Plugin.php`. `readme.txt` still says Requires PHP 8.0 and Tested up to 6.5. Unit suite: 227 tests, 2187 assertions, PHP 8.2.4. No admin screen was opened. Hook counts were not remeasured.
+- Task 26 — done. FAQ, HowTo, Recipe, Event, LocalBusiness, and Product schema omit empty recommended fields. A FAQ needs a question and an answer. A HowTo needs a name and at least one step. A Recipe needs a name and an image. An Event needs a name and a start date. A LocalBusiness needs a name and a street or a city, and it does not invent a country or a telephone. A Product needs a name and either a price or a rating. On a WooCommerce product URL, Holvek does not add a second Product node; the `holvek_woocommerce_owns_product_schema` filter reports that WooCommerce owns that URL. Breadcrumb JSON-LD uses `BreadcrumbRenderer::itemsForPost()`, the same list as the visible trail, including the saved home label. `SchemaFixtureTest` covers the fixtures. PHPCS is clean on `BreadcrumbSchema.php` and `BreadcrumbRenderer.php`. `CustomSchema.php` still warns on `date()` for event dates. `readme.txt` still says Requires PHP 8.0 and Tested up to 6.5. Unit suite: 219 tests, 2120 assertions, PHP 8.2.4. No admin screen was opened. Hook counts were not remeasured.
+- Task 25 — done. A regex redirect longer than 180 characters, or a pattern that does not compile, is rejected before it is saved. Save-time validation runs `preg_match` with the PCRE backtrack limit set to 10000 and the recursion limit set to 50, then restores both limits. The front-end match does not change those limits. CSV import validates the file in the REST request and does not insert there. Accepted rows are stored in `holvek_redirect_import_queue` with autoload off, and `RedirectImportJob` writes 50 rows at a time and queues the rest. A 404 log stores the path only, a referrer with the query string, fragment, and userinfo removed, and at most 160 characters of the browser name. Probes for static files, `wp-admin`, `wp-login`, and `.env` are still skipped. The personal-data exporter and eraser include a 404 row when the stored path or referrer contains that account email or a login of at least 4 characters. Activation schedules `holvek_404_cleanup` daily. The worker schedules it again when it is missing, and the purge deletes rows older than 90 days, or the saved retention value when one is set. Deactivation still clears that hook. An anonymous HTML boot does not register it. An admin boot does. `ErrorMonitorTest` and `RedirectManagerTest` cover the cap, the queue, the stripped log, and the exporter. PHPCS is clean on `RedirectManager.php` and `RedirectImportJob.php`. `ErrorMonitor.php` and `CcpaPrivacyTools.php` still have their earlier SQL findings. `readme.txt` still says Requires PHP 8.0 and Tested up to 6.5. Unit suite: 216 tests, 2022 assertions, PHP 8.2.4. No admin screen was opened. Hook counts were not remeasured.
+- Task 7 — done. An administrator can connect Holvek with a site token or an authorization code. Requests go only to `https://api.holvek.com`. The settings screen cannot change that host. Code may override the base URL with the `holvek_backend_api_url` filter. `POST /auth/site-token` sends `grant_type` `site_token`, the pasted token, and this site's home address. `POST /auth/token` sends `grant_type` `authorization_code`, `code`, and the same address. The pasted value is not stored. The returned access token is saved with `KeyVault` in `holvek_api_key`, autoload off, only after `GET /auth/verify` says `active` is true. The check is cached in `holvek_cloud_verification`, also autoload off, for one day. `hasActiveLicense()` and `isCloudConfigured()` read that cache and do not call the API. A stored string, a revoked credential, an expired cache, or a hash mismatch is not connected. A tier comes from the verification response. `holvek_user_tier` is not read, and settings and import cannot write the credential, the tier, the host, or the cache. Check and rotate run from the connection screen. Disconnect removes the local credential even when Holvek cannot be reached, and it does not delete SEO data. The remote token can remain valid until Holvek is reachable. Each connection request waits 10 seconds and is tried once more after a transport failure or HTTP 408, 429, or 500 and above. A rejected credential is not retried and is not saved. The routes are under `holvek/v1/connection` and require `manage_options`. A page view does not call Holvek. `readme.txt` and `docs/features.md` document the host, the payload, and the failure behavior. `readme.txt` still says Requires PHP 8.0 and Tested up to 6.5. `CloudCredentialTest` covers exchange, retry, revocation, settings, and import. PHPCS is clean on `CloudCredential.php`, `OperatingMode.php`, `HolvekApiGateway.php`, `Plugin.php`, `UpgradePromptManager.php`, `UsageMeteringManager.php`, and `SettingsTransfer.php`. The admin bundle was rebuilt. `languages/holvek.pot` was regenerated with WP-CLI 2.12.0. `RenameAuditTest` passed after that build: 6 tests, 50 assertions. Unit suite: 210 tests, 1990 assertions, PHP 8.2.4. No admin screen was opened. Hook counts were not remeasured.
+- Task 6 — done. Discovery Scan is not described as a feature. `readme.txt`, `docs/features.md`, and the admin UI name the same screens: Google Analytics 4, Link Health, Technical SEO, XML Sitemaps, Schema Markup, llms.txt, Bulk Meta Editor, HTML Sitemap, Image SEO, the cookie notice, Roles & Capabilities, Technical SEO Audit, Broken Link Checker, Keyword Rank Tracker, Google Search Console, IndexNow, and Redirects Manager. PageSpeed stays in the post editor. The plugin header, Composer description, readme short description, and admin subtitle are “Technical SEO, structured data, sitemaps, redirects, and indexing tools for WordPress.” The readme title is Holvek. The header button that did not run an audit is gone. The Technical SEO Audit screen says the audit runs on this site and does not score AI mentions, Google presence, or competitors. The llms.txt screen says Holvek publishes that file and does not submit the site to ChatGPT, Perplexity, or Claude. The writing assistant uses an OpenAI, Anthropic, or Ollama key saved on this site. `readme.txt` still says Requires PHP 8.0 and Tested up to 6.5. `FeatureCopyTest` covers the shared names and the removed claims. PHPCS is clean on `holvek.php`. The admin bundle was rebuilt, and `build/index.js` contains the new sentences. `languages/holvek.pot` was regenerated with WP-CLI 2.12.0. `RenameAuditTest` passed after that build. Unit suite: 189 tests, 1679 assertions, PHP 8.2.4. No admin screen was opened. Hook counts were not remeasured.
+- Task 5 — done. The first Holvek admin screen answers without an account. It says Holvek writes titles, meta descriptions, schema, the sitemap, and robots.txt on this site, and that a Holvek account is optional. Unfinished setup offers the setup wizard while those local results stay on screen. Finished setup says titles and the sitemap are already active. `GET /holvek/v1/dashboard/standalone` allows `edit_seo_meta` or `manage_options`. A user with neither gets `rest_forbidden` and status 403, and no query runs. The payload reads indexability from `blog_public`, the sitemap from `home_url( '/sitemap.xml' )`, published posts and pages with an empty title, images with no alternative text, and the redirect total in `holvek_redirect_counts`. A missing redirect option is zero and does not scan the redirects table. The 404 count runs only when `holvek_404_table_exists` is `yes`. Those three counts are cached for 15 minutes in the `holvek_standalone_counts` transient. The request does not call Holvek, Google, or SerpApi. Search Console loads only after the user opens it. Connect Google Search Console opens the settings section where the service account JSON is saved. Connect Holvek says an account is optional and does not collect a credential, rotate one, or change the API host. The upgrade banner no longer says Unlock Holvek Pro. Search Console, the technical audit, bulk redirects, the rank tracker, and the writing assistant are available. AI visibility, multi-brand workspaces, and client reporting are not listed as locked upgrades. `StandaloneDashboardTest` covers the denial, the counts, the finished-setup sentence, the cache, and the feature list. The HTML boot path does not construct the dashboard. PHPCS is clean on `StandaloneDashboard.php` and `UpgradePromptManager.php`. The admin bundle was rebuilt. `languages/holvek.pot` was regenerated with WP-CLI 2.12.0. Unit suite: 185 tests, 1535 assertions, PHP 8.2.4. No admin screen was opened.
+- Task 4 — done. `Holvek\WordPress\Core\Mode\OperatingMode` is the standalone contract. `isCloudConfigured()` is true only when a decrypted `holvek_api_key` or `holvek_license_key` is stored and `holvek_cloud_revoked` is not `yes`. That check reads options and does not call `api.holvek.com`. `isCloudReachable()` requests `https://api.holvek.com/v1/health`, and no production code calls it. A normal page view still registers metadata, schema, sitemaps, redirects, and robots, and it does not request Holvek. When the site is not connected, the PageSpeed proxy, Backend API `post`/`get`, cloud AI, content-gap offload, cannibalization offload, cloud technical audit, rank offload, and usage reporting return `holvek_not_connected` and do not make an HTTP call. `hasActiveLicense()` is still a non-empty decrypted license string, including after revocation, and a revoked credential does not proxy. A SerpApi key still queues rank checks. The rank screen and the editor PageSpeed panel show the not-connected sentence. The editor's existing Google PageSpeed request is unchanged. `OperatingModeTest` covers the credential, revocation, the closed cloud calls, and a front-end page view. PHPCS is clean on `OperatingMode.php`, `HolvekApiGateway.php`, `BackendApiClient.php`, `UsageMeteringManager.php`, `AdminMenu.php`, `ContentAssistantModule.php`, `ContentGapAnalyser.php`, and `Plugin.php`. `KeywordRankTracker.php` still has its earlier SQL, `date()`, `urlencode`, and `parse_url` findings. `PageSpeedDashboard.php` still warns on `urlencode`. `AiGateway.php` still warns on `json_encode`. The admin and editor bundles were rebuilt. Unit suite: 179 tests, 1468 assertions, PHP 8.2.4. No admin screen was opened.
+- Task 24 — done. User-facing script globals now match on both sides: `holvekAdminConfig`, `holvekEditorConfig`, `holvekCookieConfig`, `holvekConsent`, and `holvekWritingAssistant`. `languages/holvek.pot` was regenerated with WP-CLI 2.12.0 for text domain `holvek`. The old `dist/ameverywhere-1.0.0.zip` was already absent, and its manifest was removed. Compatibility shims stay through 1.0.0 and are marked for removal in 2.0.0: `AMEVERYWHERE_*`, `ameverywhere_init()` (it still calls `holvek_init()`, so the boot-once guard holds), `ameverywhere_breadcrumbs()`, `[ameverywhere_sitemap]`, and `ameverywhere_gpc_opt_out`. The readme changelog and FAQ say so. Installer migration of `ameverywhere_*` names stays, covered by `InstallerMigrationTest`. Decrypt still accepts `aew_enc::` and encrypt still writes `holvek_enc::`, covered by `KeyVaultTest`. `aew-` CSS selectors were left so existing front-end rules keep matching. `RenameAuditTest` checks the pairs, the built bundles, the shims, the migration prefix, the pot domain, and the removed artifact. PHPCS is clean on `holvek.php`, `AdminMenu.php`, `ContentAssistantModule.php`, `LlmWritingAssistant.php`, and `CookieBannerModule.php`. The admin, editor, and cookie bundles were rebuilt. Unit suite: 173 tests, 1428 assertions, PHP 8.2.4. No admin screen was opened.
+
+Scope: standalone WordPress plugin in this repository, judged against `architecture.md`, `holvek-wp.md`, `docs/features.md`, `readme.txt`, and the WordPress.org Plugin Directory guidelines.
+Mode under review: standalone. Cloud features may exist, but the site must stay fully useful when `api.holvek.com` is absent or down.
+
+This review did not execute PHPUnit, PHPCS, or Plugin Check. The boot failure below is structural: the Composer map and the class references cannot resolve. Running the suite before that fix would not measure product quality.
+
+## Verdict
+
+The plugin is not production-ready and cannot be activated as shipped.
+
+`composer.json` autoloads `Holvek\WordPress\` from `src/`. Every PHP file declares that namespace. The bootstrap and almost every internal reference still ask for `Holvek\Plugin`, `Holvek\Core\…`, and `Holvek\Modules\…`. Those classes are not registered. Activation and `plugins_loaded` fatal before any SEO feature runs.
+
+After the namespace is one consistent name, the plugin still has security defects, a frontend cost that does not match a standalone SEO plugin, a product surface that does not match `holvek-wp.md`, and directory metadata that still describes AmEveryWhere or an older WordPress release.
+
+Standalone local SEO (metadata, schema, sitemaps, redirects, robots, image checks, on-page analysis) is largely present in code. It is not reachable, and several of those features have correctness or safety bugs. The discovery-intelligence journey in `holvek-wp.md` is not implemented. Do not describe that journey as available in the current release.
+
+## What already holds
+
+Keep these. They are the right shape for a directory plugin:
+
+- Plugin header uses slug `holvek`, text domain `holvek`, GPL-2.0-or-later, and a PHP guard before heavy work.
+- Admin JavaScript and CSS enqueue only on `toplevel_page_holvek`.
+- Redirect targets are restricted to this site (`RedirectManager::isSafeTarget`).
+- Google Indexing API is described as optional and eligibility-limited.
+- Cookie notice copy in `docs/features.md` does not pretend to be a consent-management platform.
+- Uninstall deletes data only when `holvek_delete_data_on_uninstall` is `yes`.
+- The `.htaccess` editor stays off until an administrator with `manage_options` turns it on, stops when `DISALLOW_FILE_EDIT` is set, stores backups in a non-autoloaded option, and rejects unsafe directives on save and restore.
+- OAuth callback checks a single-use state transient and the initiating user’s capability.
+- Settings export intentionally omits GA4 service-account JSON.
+- `package-zip.sh` builds from a clean tag with `composer install --no-dev`.
+- Privacy exporter, eraser, and policy text exist in `CcpaPrivacyTools`.
+- WooCommerce schema checks that WooCommerce is active before it runs.
+
+## P0 — The plugin does not boot
+
+### Task 1. Make one namespace real
+
+Authoritative name, from `architecture.md` and `composer.json`: `Holvek\WordPress`.
+
+Today:
+
+| Location | What it says |
+| --- | --- |
+| `composer.json` PSR-4 | `Holvek\WordPress\` → `src/` |
+| `src/**/*.php` namespace declarations | `Holvek\WordPress\…` |
+| `holvek.php` | `\Holvek\Plugin::getInstance()`, `\Holvek\Plugin::activate`, `\Holvek\Plugin::deactivate` |
+| `src/Plugin.php` imports and fully qualified calls | `Holvek\Core\…`, `Holvek\Modules\…` |
+| Unit tests | `use Holvek\Modules\…` |
+
+Composer will load `Holvek\WordPress\Plugin` from `src/Plugin.php`. It will not load `Holvek\Plugin`. The first request that reaches `holvek_init()` throws `Class "Holvek\Plugin" not found`.
+
+Required work:
+
+1. Point `holvek.php` at `Holvek\WordPress\Plugin`.
+2. Rewrite every `use Holvek\…` and every `\Holvek\Core`, `\Holvek\Modules`, and `\Holvek\WordPress` inconsistency so the prefix is `Holvek\WordPress` exactly once.
+3. Add a boot test that includes `holvek.php` under a WordPress test suite and asserts `class_exists( \Holvek\WordPress\Plugin::class )` and that `plugins_loaded` does not fatal.
+4. Do not add a second autoload prefix for `Holvek\` as a permanent fix. A temporary class alias hides the next collision. One prefix, applied everywhere, including tests.
+
+### Task 2. Fix the PSR-4 filename for the cloud gateway
+
+`src/Core/Api/AmEveryWhereApiGateway.php` declares `class HolvekApiGateway`. PSR-4 loads a class only from a file whose name matches the class. Callers such as `PageSpeedDashboard` use `\Holvek\Core\Api\HolvekApiGateway`, which is the wrong namespace and the wrong file.
+
+Required work:
+
+1. Rename the file to `src/Core/Api/HolvekApiGateway.php`.
+2. Call it as `Holvek\WordPress\Core\Api\HolvekApiGateway`.
+3. Keep cloud calls behind an explicit “connected” check. A missing class must not be on the standalone page-view path.
+
+### Task 3. Boot once
+
+`ameverywhere_init()` calls `holvek_init()`, and `holvek_init()` always calls `boot()`. A second call registers every hook again.
+
+Required work: guard `boot()` with a private `$booted` flag. Legacy wrappers may call the new functions. They must not double-register hooks.
+
+## P0 — Standalone product does not match the spec
+
+`holvek-wp.md` says a site with no Holvek account still gets technical SEO, metadata, schema, sitemaps, robots, IndexNow, canonicals, indexing controls, technical checks, internal linking, redirects, image SEO, content analysis, local diagnostics, and a free Discovery Scan. Cloud monitoring is additive. If `api.holvek.com` is down, the site keeps working.
+
+Local SEO modules exist under `src/Modules`. These product pieces do not:
+
+| Specified | In the tree |
+| --- | --- |
+| Visibility dashboard: search visibility, discovery coverage, brand/entity presence, local visibility, indexing status | No Discovery or Visibility module. `src/Modules/Trends/` is empty. |
+| Free Discovery Scan: snapshot, technical score, AI mention check, Google presence, entity consistency, competitor comparison, three opportunities | Not implemented. |
+| Connect Holvek: site credential, scoped permissions, rotation, revocation, rate limits | No connection flow. `holvek_license_key` is an unchecked option. `UpgradePromptManager` links to `https://holvek.com/upgrade`. |
+| Intelligence: opportunities, missing signals, competitor observations, recommendations | Competitor support is a JSON-LD scraper, not discovery intelligence. |
+| Architecture modules: Discovery Intelligence, Visibility Monitoring, Local, Competitors, Holvek Cloud | Not present as modules. |
+
+`UpgradePromptManager` lists Google Search Console, the rank tracker, the technical audit, and bulk redirects as Pro. Those features are implemented and are not checked with `isFeatureAvailable()` outside that class. The admin banner still tells every free site to upgrade to get them. `readme.txt` says the same features work without an account. That is a misleading claim, which the directory guidelines reject.
+
+### Task 4. Define the standalone contract in code
+
+Add one small service, for example `Holvek\WordPress\Core\Mode\OperatingMode`, with two facts:
+
+- `isCloudConfigured(): bool` — a stored site credential exists and has not been revoked.
+- `isCloudReachable()` is never called on a normal page view.
+
+Every cloud call (PageSpeed proxy, Backend API, rank tracker, content-gap offload, usage metering that phones home) returns a local `WP_Error` with a plain-language message when the site is not connected. The caller shows that state in the admin screen. It does not throw, and it does not block metadata, schema, sitemaps, redirects, or robots.
+
+### Task 5. Ship a first-run standalone dashboard
+
+The first screen after activation must answer, without an account:
+
+1. What Holvek does on this site.
+2. What the user should do next (setup wizard, or “your titles and sitemap are already active”).
+3. The local result: indexability, sitemap URL, a count of missing titles or alt text, redirect and 404 counts.
+4. One optional next step: connect Google Search Console, or connect Holvek. That step is a button, not a blocker.
+
+Remove the current upgrade banner, or rewrite it so it only names features that are actually absent in standalone mode. Do not list Search Console, redirects, or the technical audit as locked if the code provides them.
+
+### Task 6. Defer the Discovery Scan until it is real
+
+Do not invent AI-mention or competitor scores locally and present them as Holvek intelligence. Either:
+
+- implement a clearly labeled local technical scan (the checks the audit engine already knows how to run), with the three opportunities drawn only from local data, and a separate “Connect Holvek” action for the cloud report; or
+- remove Discovery Scan from user-facing copy until the connected API exists.
+
+`readme.txt`, `docs/features.md`, and the admin UI must describe the same set of features.
+
+### Task 7. Cloud credential lifecycle
+
+When the connected mode is built, it needs all of the following before it is exposed:
+
+- Authorization-code or site-token exchange over HTTPS to `api.holvek.com` only. The settings screen cannot replace that host. Code may override the base URL with the `holvek_backend_api_url` filter.
+- Store the credential with `KeyVault`, autoload `no`.
+- Verify the credential with the API. `hasActiveLicense()` today is `(bool) get_option( 'holvek_license_key' )`, so any non-empty value counts as licensed.
+- Rotate and revoke from the connection screen. Deleting the credential returns the plugin to standalone mode without deleting SEO data.
+- Timeouts, a single retry policy, and no call on `init`, `wp_head`, or the public front end.
+- Document the host, the payload, and the failure behavior in `readme.txt`.
+
+`holvek_user_tier` must not be a client-writable option. A tier, if one exists, comes from a verified API response and is cached with an expiry.
+
+## P1 — Security
+
+### Task 8. Stop exposing editorial SEO data on public REST routes
+
+`HeadlessSeoEndpoints` allows anonymous `GET /holvek/v1/seo/{id}` and `GET /holvek/v1/seo/global`.
+
+Global SEO (site name, sitemap URL, public defaults) is acceptable. The post payload also returns focus keyword, search intent, cornerstone flag, and AI-generated flag. Those are editorial data. They are not on the public page.
+
+Required work:
+
+- Public GET returns only fields a visitor could already see: title, description, canonical, robots, Open Graph, public schema.
+- Drop focus keyword, search intent, cornerstone, and AI flags from the anonymous response.
+- Keep `PUT` behind `current_user_can( 'edit_post', $post_id )`, which it already checks.
+- Anonymous `GET /holvek/v1/schemamap` runs an uncached `WP_Query` of the 100 most recently modified public posts. Cache it, paginate it, and do not treat it as an LLM backdoor around private content. `post_status` `inherit` must not be accepted for arbitrary IDs.
+
+### Task 9. Close the inspector IDOR
+
+`FrontendSeoInspector::runAudit()` allows any user with `edit_posts` to pass any `post_id`. `auditPost()` does not check that the post exists or that the user can read it. A contributor can read draft and private SEO metadata.
+
+Required work: `current_user_can( 'edit_post', $post_id )` (or `read_post` for a read-only inspector), return 404 when the post is missing, and return 403 otherwise.
+
+### Task 10. Narrow social and token permissions
+
+`SocialModule::checkPermission()` allows `edit_posts`. `saveAccount()` stores an access token and `getAccounts()` after save returns accounts without the mask applied on the list endpoint. An author can save and read social tokens.
+
+Required work:
+
+- Account, OAuth, and settings routes require `manage_options` (or a dedicated `manage_seo` capability that is not given to authors by default).
+- Every response masks tokens. The save response must use the same mask as the list response.
+- Twitter OAuth uses `code_challenge=challenge` and `code_challenge_method=plain`. That is not PKCE. Generate a real verifier, store it in the state transient, and send `S256`.
+- Facebook token exchange puts `client_secret` in a GET query string. Use POST so the secret is not written to access logs.
+- Keep the public callback, the state check, and the capability check on the initiating user. Add `wp_safe_redirect`.
+
+### Task 11. Treat `.htaccess` as server ownership
+
+`HtaccessEditor` lets `manage_seo` read and write `ABSPATH .htaccess`. The REST response includes the absolute filesystem path. Backups are written to `wp-content/holvek-backups/htaccess/*.txt` with only an `index.php` silence file. Those `.txt` files are directly downloadable on typical Apache and nginx setups and can contain auth or rewrite secrets.
+
+The denylist misses `SetHandler`, `php_flag`, `php_admin_value`, CGI wrappers, and `RewriteRule` targets that execute code. On nginx the file is the wrong control surface.
+
+Required work:
+
+- Capability is `manage_options` only, and the feature is off until an administrator turns it on.
+- Refuse to run when `DISALLOW_FILE_EDIT` is true, unless a separate explicit capability is documented.
+- Store backups outside the web root, or deny web access with a server-level rule. Do not return absolute paths to the browser.
+- Prefer WordPress rewrite and `robots_txt` APIs for the cases the plugin actually needs. Keep raw `.htaccess` editing as an advanced, off-by-default tool.
+- Validate restore filenames the way `restoreHtaccess()` already does, and apply the same dangerous-directive check to restored content.
+
+### Task 12. Lock outbound requests
+
+These paths make the site call arbitrary or over-broad hosts:
+
+- `BackendApiClient::getApiUrl()` reads `holvek_backend_api_url`.
+- `BingIndexNowApi::getEndpoint()` reads `holvek_indexnow_endpoint`.
+- `CompetitorScraper::scrapeUrl()` lets `edit_posts` fetch any URL that passes `wp_http_validate_url`, with a browser-impersonating user agent.
+- Settings import writes `holvek_ollama_url` with no host allow-list.
+
+Required work:
+
+- Holvek API host is the constant `https://api.holvek.com`. A developer filter may override it. The REST settings UI may not.
+- IndexNow endpoint is an allow-list (`api.indexnow.org` and the documented Bing, Yandex, and Seznam endpoints).
+- Competitor schema import requires `manage_options`, is rate-limited, uses a honest `Holvek` user agent, and rejects hosts that resolve to private, loopback, or link-local addresses even after redirects.
+- Ollama URL is validated as `http` or `https` and, by default, only loopback. Document that a remote Ollama host receives post content.
+
+### Task 13. Repair KeyVault before storing new secrets
+
+`KeyVault` is the right idea and the wrong default:
+
+- Ciphertext and the salt both live in `wp_options`. That protects a leaked options export only when the salt option is excluded. Include the salt’s option name in the “never export” list, and document that a full database copy still decrypts.
+- If the salt option is missing, the key falls back to `AUTH_KEY` or the literal `holvek-fallback-key-change-me`. Refuse to encrypt when the salt is missing. Run `ensureSaltExists()` before any encrypt call, not only on activation.
+- Cipher prefix is still `aew_enc::`. Accept the old prefix on decrypt. Write the new prefix on encrypt.
+- `openssl` is assumed. If the extension is missing, show an admin notice and skip features that store secrets. Do not store plaintext while pretending it was encrypted (`encrypt()` returns `''` on failure, which silently drops the key).
+- `holvek_license_key` is not in `sensitiveKeys()` and is not verified.
+
+### Task 14. Settings import and export
+
+`exportSettings()` includes `holvek_google_indexing_key` and `holvek_indexnow_key` while the comment says private keys are excluded. `importSettings()` writes allow-listed options without per-field sanitization. RSS fields can carry HTML. Verification codes and URLs need format checks.
+
+Required work:
+
+- Export redacts every secret: indexing JSON, IndexNow key, API keys, OAuth secrets, salts.
+- Import sanitizes each key (text, URL, bool, ID list, kses for the RSS fields that are intentionally HTML).
+- Reject unknown keys. The allow-list already exists; apply sanitizers inside it.
+- Both routes stay on `manage_options`.
+
+### Task 15. IndexNow key file and publish ping
+
+`serveKeyFile()` compares `$_SERVER['REQUEST_URI']` to `/{key}.txt`. That misses subdirectory installs (`/blog/{key}.txt`) and any query string. The key file then never validates, and IndexNow submissions fail.
+
+`autoSubmitOnPublish()` runs a blocking HTTP POST during `transition_post_status` whenever a key exists.
+
+Required work:
+
+- Match the request path with `wp_parse_url` and `home_url()`’s path prefix.
+- Submit IndexNow from cron or the existing queue, in small batches, and only when the user has turned IndexNow on.
+- Do not generate or send a key until the user opts in.
+
+### Task 16. JSON-LD script safety
+
+`SchemaGenerator::outputSchema()` and `WooCommerceProductSchema` print `wp_json_encode()` inside a `<script type="application/ld+json">` tag without `JSON_HEX_TAG`. A custom schema property containing `</script>` breaks out of the tag.
+
+Required work: encode with `JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_UNESCAPED_UNICODE`, or print through `wp_print_inline_script_tag` / `wp_get_inline_script_tag` with that encoding. Reject custom JSON that does not decode to an object or array of Schema.org nodes.
+
+### Task 17. Robots.txt must not discard other plugins
+
+`RobotsTxtEditor::filterRobotsTxt()` ignores the `$output` argument and returns only the Holvek option or Holvek’s default. Core’s sitemap line and any other plugin’s `robots_txt` changes disappear as soon as Holvek is active.
+
+Required work: start from `$output`. Append Holvek rules. Replace the document only when an administrator has saved a full custom robots.txt and has acknowledged that it replaces the generated file.
+
+`proactiveBlockAiBots()` is opt-in (`holvek_block_ai_bots` defaults to `no`). Keep that default. When it is on, match the user agent on token boundaries so short names such as `Omgili` do not 403 normal browsers. The 403 document is hardcoded English; make it translatable and do not claim a specific language in `<html lang>` unless the site locale is English.
+
+### Task 18. Frontend inspector and AI usage scope
+
+Confirm `GET /holvek/v1/ai/usage` (`is_user_logged_in`) returns only the current user’s counters. Site-wide usage stays on `manage_seo` or `manage_options`. Add a regression test for a subscriber token.
+
+### Task 19. Migration queries
+
+`Installer` renames `ameverywhere_*` tables, options, post meta, and user meta. The SQL is static, so it is not classic injection, but:
+
+- An option rename can collide with an existing `holvek_*` name and stop halfway.
+- A database prefix containing a backtick is interpolated into `RENAME TABLE`.
+- User meta and post meta renames are unbounded `UPDATE`s on large sites.
+
+Required work: detect collisions first, rename in primary-key batches, use identifier escaping, and record `holvek_migrated_from` so the rewrite runs once.
+
+## P1 — Performance on ordinary requests
+
+`Plugin::boot()` constructs the SEO, admin, sitemap, indexing, technical, schema, content-assistant, image, social, queue, and roughly thirty “backlog” services on every front-end request. Each one registers hooks. Notable per-request work:
+
+- `get_option( 'holvek_db_version' )` compared on every request, and a full `dbDelta` path when it differs.
+- `RedirectManager::handleRedirects()` issues one or two indexed queries on every front-end request, then loads up to 500 regex rules. The object-cache entry is useless on hosts without a persistent object cache, which is the common case. The code comments say “zero-bloat”. The code still hits the database.
+- `ErrorMonitor::boot()` calls `wp_next_scheduled()` on every request.
+- `BingIndexNowApi::serveKeyFile()` reads the key option on `init`.
+- `HtmlSitemapShortcode` hooks `wp_head` on every URL, not only when `[holvek_sitemap]` is present.
+- `RobotsTxtEditor::register()` reads options from `init` and `robots_txt`.
+- Rank tracking, PageSpeed, Search Console, Bing, cannibalization, and the audit engine are constructed even when the user has never opened those screens.
+- IndexNow and social auto-share do synchronous HTTP during publish.
+
+### Task 20. Split the bootstrap
+
+On a front-end HTML request, construct only:
+
+- metadata and Open Graph
+- schema
+- redirects
+- 404 buffer
+- robots filter
+- breadcrumbs
+- image filename filter, if that feature is on
+- sitemap rewrite, if the query is a sitemap
+- llms.txt rewrite, if the query is that path
+
+Register admin menus, React assets, setup wizard, migration, bulk editor, role manager, audit log, PageSpeed, rank tracker, Search Console, Bing, and the writing assistant only in `is_admin()` or on their own REST namespace. REST controllers can be registered on `rest_api_init` without constructing their HTTP clients.
+
+### Task 21. Make redirects idle when unused
+
+Store `holvek_redirect_counts` (`exact`, `regex`) and maintain it on create, import, and delete. `handleRedirects()` returns immediately when both counts are zero. Cache regex rules in a transient as well as the object cache, with invalidation on write. Do not call `ini_set` on every request; wrap regex execution and skip a rule whose pattern fails `preg_match` validation at save time.
+
+### Task 22. Move network work off the request
+
+IndexNow, social share, broken-link checks, orphan scans, rank checks, and technical audits run through `QueueManager` in bounded batches. Publish and save handlers only enqueue. Cron callbacks process a fixed number of items and reschedule when work remains. None of these run on a cacheable front-end view.
+
+### Task 23. Assets and queries
+
+- Enqueue the HTML sitemap stylesheet inside the shortcode render, or only after `has_shortcode` / block detection.
+- Do not call `wp_next_scheduled()` on every request. Schedule events on activation and reschedule from the worker if the event is missing.
+- Paginate redirect, 404, audit-log, and link-index admin reads. `SeoAuditHistoryLog` currently selects up to 5000 rows with `SELECT *`.
+- Autoload only the small set of options needed on the front end (robots mode, redirect counts, feature flags). Secrets, logs, and dashboard caches use autoload `no`.
+
+## P2 — Rename leftovers that break behavior or review
+
+These survived the ameverywhere → holvek rename. Some are compatible on purpose. The ones that ship the old brand or the old text domain are not.
+
+| Item | Action |
+| --- | --- |
+| `languages/holvek.pot` header: project `AmEveryWhere`, domain `ameverywhere`, bugs URL `wordpress.org/support/plugin/ameverywhere`, references to `ameverywhere.php` | Regenerate with WP-CLI against `holvek.php` and text domain `holvek`. |
+| `dist/ameverywhere-1.0.0.zip` and its manifest | Delete from the release artifacts. The packager already emits `holvek-{version}.zip`. |
+| Admin and editor globals `amEveryWhereAdminConfig` and `amEveryWhereEditorConfig` | Rename PHP `wp_localize_script` and JavaScript together. They currently match each other, so the admin UI works only while both stay old. A one-sided cleanup blanks every screen. |
+| `KeyVault` prefix `aew_enc::` | Done in Task 13. Decrypt accepts `aew_enc::`. Encrypt writes `holvek_enc::`. |
+| Class filename `AmEveryWhereApiGateway.php` | Task 2. |
+| Shortcode `[ameverywhere_sitemap]` | Keep one release as an alias of `[holvek_sitemap]`. Document it. Remove it in the next major version. |
+| Action `ameverywhere_gpc_opt_out` | Keep as a deprecated extra `do_action` for one release, then remove. |
+| Constants `AMEVERYWHERE_VERSION`, `AMEVERYWHERE_PLUGIN_FILE`, `AMEVERYWHERE_PLUGIN_DIR`, `AMEVERYWHERE_PLUGIN_URL` and functions `ameverywhere_init()`, `ameverywhere_breadcrumbs()` | Keep for one release, mark deprecated in the changelog, and make `ameverywhere_init()` hit the boot-once guard. |
+| Stray `/**` above the compatibility block in `holvek.php` | Delete it so the file header is readable. |
+| Installer comments and migration | Keep until Task 19 has run on existing sites. Do not mention AmEveryWhere in new user-facing strings. |
+
+### Task 24. One-pass rename audit
+
+Search PHP, JS, CSS, JSON, pot, txt, and build output for `ameverywhere`, `AmEveryWhere`, `amEveryWhere`, and `aew_`. Classify each hit as user-facing (must change), compatibility shim (keep, with a removal version), or migration (keep, tested). Rebuild `build/index.js` after the localize-script rename. The committed `build/` output is what WordPress loads.
+
+## P2 — Functional bugs in standalone features
+
+### Task 25. Redirect and 404 correctness
+
+- Regex rules accept patterns that are only checked by running them. Validate with a capped `preg_match` at save time and reject invalid patterns.
+- `importCsvEndpoint` inserts up to 1000 rows inside one REST request. Queue it.
+- 404 records store referrer and user agent. That is personal data when the referrer contains a query string from a logged-in session. Truncate, strip query strings, and cover the log in the exporter and eraser. The 90-day purge claimed in `docs/third-party-services.md` must be the cron that actually runs (`holvek_404_cleanup` is cleared on deactivate; confirm it is scheduled on activate).
+- `ErrorMonitor` skips some probes. It still logs unique public URLs. Cap and retention are required, and they look intended. Add a test that the cron hook is scheduled.
+
+### Task 26. Schema correctness
+
+Custom, FAQ, HowTo, Recipe, Event, and LocalBusiness generators need fixture tests against Google’s required properties. Empty recommended fields should be omitted, not emitted as `""`. Product markup must not duplicate WooCommerce’s own Product schema on the same URL. Breadcrumb schema and the visible breadcrumb trail must use the same items.
+
+### Task 27. Sitemap correctness
+
+Confirm, with integration tests, that:
+
+- `/sitemap.xml` is an index and chunked past the configured URL limit.
+- Noindex posts and excluded post types stay out.
+- News sitemap contains only the last 48 hours.
+- Video sitemap only lists pages that actually have a video.
+- Activation registers rules and flushes once. Deactivation removes those rules and flushes once.
+- A second SEO plugin’s sitemap is detected and the user is told to disable one of them, rather than both plugins printing conflicting URLs.
+
+### Task 28. Metadata and editor
+
+The Gutenberg sidebar must save title, description, canonical, robots, and FAQ schema through the post meta REST registration, with `auth_callback` equal to `edit_post`. Sanitization belongs on `register_post_meta`, not only in the React form. Canonical values must be `http` or `https` URLs, or empty.
+
+Editor strings go through `@wordpress/i18n` with text domain `holvek`. The current `App.js` and editor script are English literals. That blocks translation and is a Plugin Check failure on a UI this large.
+
+### Task 29. Image SEO
+
+Filename enforcement must only rename on upload, never rewrite existing attachment files during an upgrade. Alt audit is an admin query with pagination (the UI already requests pages of 20; the REST handler must enforce a maximum). Compression stays off until the acknowledgement flag, which the existing unit test describes. Originals stay in the media library, not only in a backup path that uninstall might miss.
+
+### Task 30. Migration from Yoast, Rank Math, and AIOSEO
+
+`readme.txt` promises a preview before import. Verify the REST flow shows counts and does not write until the user confirms. Never overwrite existing `_holvek_*` meta (the manager comments say this; add a test). Map robots and focus-keyword shapes per plugin, including Rank Math’s serialized robots array. Run the write in batches. Tell the user to deactivate the other SEO plugin after import so two plugins do not both print titles and schema.
+
+### Task 31. Multisite
+
+`Plugin::activate()` and `deactivate()` loop sites. New sites created later need `wp_initialize_site` (or the network activation equivalent) so tables and capabilities exist. `MultisiteNetworkSeo` must not read or write another site’s options unless the user has `manage_network_options`.
+
+`uninstall.php` uses `$wpdb` after the closure for the network `sitemeta` delete. `$wpdb` is declared `global` only inside the closure. On a multisite uninstall with delete-data enabled, that line fatals or deletes nothing. Pull `global $wpdb` into the uninstall file scope. Also remove `holvek_*` user meta, the backup directory, and scheduled actions per site. Capability removal currently runs even when data is kept, which is correct, but it only edits four built-in roles on the current site.
+
+### Task 32. Internationalization, accessibility, and admin UX
+
+- Text domain `holvek` on every user-facing PHP string. Many REST errors are bare English (`'Content must be a string.'`, `'CSV body is empty.'`, `'Network and Access Token are required.'`).
+- JavaScript uses `wp.i18n` and is listed in the script asset dependencies. Regenerated `holvek.pot` includes those strings.
+- Admin screens: one `h1`, labeled inputs, visible focus, keyboard access to every tab, error text that is not color-only, and status messages in an `aria-live` region. Emoji in the upgrade banner and in navigation labels are not labels.
+- Setup wizard is skippable. Activation does not redirect.
+- Notices render only on Holvek screens, are dismissible, and stay dismissed.
+
+## P2 — Directory and release compliance
+
+### Task 33. Make the readme true
+
+`readme.txt` problems that a reviewer will flag:
+
+- `Requires PHP: 8.0` while `holvek.php`, `composer.json`, and `package-zip.sh` require 8.2. Pick the version the code actually needs, write it in all three places, and test that version.
+- `Tested up to: 6.5`. The review date is 2026-10-02. Set this to the current WordPress release you have installed and exercised. Do not bump it without that run.
+- No external-services section, while the plugin calls Google, Bing, IndexNow, OpenAI, Anthropic, Ollama, SerpApi, PageSpeed, social networks, and `api.holvek.com`. Copy the inventory from `docs/third-party-services.md` into the readme, including “nothing is sent until an administrator turns the feature on”.
+- Changelog and description must not claim a Discovery Scan, guaranteed indexing, or a ranking improvement.
+- Support URL `https://wordpress.org/support/plugin/holvek/` only works once the slug is approved. That is fine for submission. The pot file must not still point at `ameverywhere`.
+- Screenshots in `assets/wporg/` must be the real Holvek UI after the rename, at the directory’s required sizes. `assets/screenshots/` and `assets/wporg/` should not disagree.
+
+### Task 34. Release package
+
+- Do not ship `vendor/` from a developer `composer install`. The zip comes from `package-zip.sh` (`composer install --no-dev`) and contains the generated autoload plus `build/`.
+- Do not ship `tests/`, `node_modules/`, `docs/`, `dist/*.zip`, or `assets/raw-design-sources/`.
+- Confirm `build/index.asset.php` dependencies match the packages the bundle imports, and that React is the WordPress-provided React rather than a second copy, unless the build intentionally vendors it and the handle is unique.
+- Remove the committed `dist/ameverywhere-1.0.0.zip` from the next release commit so the old slug is not what someone uploads.
+- `composer validate`, `php -l` on every PHP file, PHPCS with `phpcs.xml.dist`, PHPUnit, and Plugin Check all pass on the zip, not only on the working tree.
+
+### Task 35. Privacy copy matches storage
+
+Document and implement export/erase for:
+
+- 404 URI, referrer, user agent
+- audit log rows tied to a user ID
+- AI usage rows tied to a user ID
+- Search Console and GA4 tokens stored for the site (site data, not a visitor exporter; say so)
+- cookie-banner choice, if it is stored in a way that identifies a person
+
+Do not claim CCPA or GDPR compliance. The existing policy text should say the plugin stores these records and the site owner decides the legal basis.
+
+### Task 36. Tests that must exist before a 1.0 tag
+
+Unit, without a full WordPress boot where practical:
+
+- namespace smoke: the bootstrap class string exists after autoload
+- KeyVault round-trip, tamper rejection, and refusal to encrypt without a salt
+- redirect target allow-list, including protocol-relative `//evil.example`
+- robots filter preserves existing output unless custom mode is on
+- public SEO payload omits focus keyword and IndexNow key (extend `ProductionReadinessTest`, and fix its imports)
+- settings import rejects an unknown key and a `javascript:` canonical
+- IndexNow path match in a subdirectory
+
+Integration, with the WordPress test library:
+
+- activate, assert tables, capabilities, and rewrite rules
+- deactivate, assert cron hooks and rewrite rules are gone and tables remain
+- uninstall with the flag off, assert tables remain; with the flag on, assert only plugin tables and `holvek_` options are gone
+- upgrade from a fixture database that still has `ameverywhere_` options and tables
+- contributor token receives 403 on `.htaccess`, social tokens, settings export, and another user’s draft SEO meta
+- anonymous GET of a published post does not include editorial fields
+- a front-end request with cloud options empty performs no `wp_remote_*` call
+
+## Recommended order
+
+Do the work in this order. Later tasks assume the plugin boots.
+
+1. Tasks 1–3. Namespace, gateway filename, single boot. Prove activation on PHP 8.2 and the minimum WordPress version.
+2. Tasks 8–19. Security. Do not add features on top of the public SEO leak, the inspector IDOR, token storage, or `.htaccess` backups.
+3. Tasks 20–23. Stop paying the full module graph on every page view.
+4. Tasks 4–7 and 24–32. Standalone dashboard, truthful upgrade copy, rename, and the functional bugs in SEO features the readme already promises.
+5. Tasks 33–36. Readme, package, privacy, and the test gate.
+
+Discovery intelligence, competitor monitoring, historical visibility, and alerts stay out of the 1.0 standalone release until Task 7’s credential flow exists. The local product is the release. The cloud product is an add-on that fails closed.
+
+## Definition of done for this release
+
+- A clean site on the minimum PHP and WordPress versions activates Holvek, sees a local dashboard, edits a title, views a sitemap, and saves a redirect, with no account and no outbound HTTP.
+- An editor cannot read secrets, other users’ drafts, or write `.htaccess`.
+- A front-end request with no redirects and no cookie banner adds a bounded set of hooks and no remote calls.
+- `readme.txt`, the admin UI, and `docs/features.md` list the same features.
+- Plugin Check, PHPCS, and PHPUnit pass on the packaged zip.
+- Uninstall with the delete flag removes only Holvek data, including on a second multisite site.

@@ -1,46 +1,46 @@
 <?php
 
-namespace AmEveryWhere\Modules\Sitemap;
+namespace Holvek\WordPress\Modules\Sitemap;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
 /**
- * Handles database operations for AmEveryWhere sitemap settings using the custom table.
+ * Handles database operations for Holvek sitemap settings using the custom table.
  * Fallbacks to options and handles transparent on-demand migrations.
  */
 class SitemapSettings {
 
-	private static string $table = 'ameverywhere_sitemap_settings';
+	private static string $table = 'holvek_sitemap_settings';
 
 	/**
 	 * Retrieve a sitemap configuration setting.
 	 */
-	public static function get( string $key, $default = null ) {
+	public static function get( string $key, $fallback = null ) {
 		global $wpdb;
 		$tableName = $wpdb->prefix . self::$table;
 
 		// Check if custom table exists; if not, fallback to options
 		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $tableName ) ) ) !== $tableName ) {
-			return get_option( 'ameverywhere_' . $key, $default );
+			return get_option( 'holvek_' . $key, $fallback );
 		}
 
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT setting_value FROM $tableName WHERE setting_key = %s", $key ) );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT setting_value FROM {$wpdb->prefix}holvek_sitemap_settings WHERE setting_key = %s", $key ) );
 		if ( $row !== null ) {
 			return maybe_unserialize( $row->setting_value );
 		}
 
 		// Check fallback to option table for backwards compatibility
-		$optVal = get_option( 'ameverywhere_' . $key, null );
+		$optVal = get_option( 'holvek_' . $key, null );
 		if ( $optVal !== null ) {
 			// One-time self-healing migration
 			self::set( $key, $optVal );
-			delete_option( 'ameverywhere_' . $key );
+			delete_option( 'holvek_' . $key );
 			return $optVal;
 		}
 
-		return $default;
+		return $fallback;
 	}
 
 	/**
@@ -51,7 +51,7 @@ class SitemapSettings {
 		$tableName = $wpdb->prefix . self::$table;
 
 		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $tableName ) ) ) !== $tableName ) {
-			update_option( 'ameverywhere_' . $key, $value );
+			update_option( 'holvek_' . $key, $value );
 			return;
 		}
 

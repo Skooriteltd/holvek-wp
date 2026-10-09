@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Import;
+namespace Holvek\WordPress\Modules\Import;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -10,7 +10,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * CompetitorSeoImporter
  *
  * BL-044: Imports SEO settings from Yoast SEO and All-in-One SEO Pack
- * into AmEveryWhere meta keys. One-time migration with dry-run support.
+ * into Holvek meta keys. One-time migration with dry-run support.
  */
 class CompetitorSeoImporter {
 
@@ -38,7 +38,7 @@ class CompetitorSeoImporter {
 		$adminCap = fn() => current_user_can( 'manage_seo' ) || current_user_can( 'manage_options' );
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/import/detect',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -48,7 +48,7 @@ class CompetitorSeoImporter {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/import/preview',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -58,7 +58,7 @@ class CompetitorSeoImporter {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/import/run',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -79,8 +79,8 @@ class CompetitorSeoImporter {
 		);
 
 				$rankMathData = (int) $wpdb->get_var(
-			$wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = %s LIMIT 1", self::RANKMATH_TITLE )
-		);
+					$wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = %s LIMIT 1", self::RANKMATH_TITLE )
+				);
 
 		return rest_ensure_response(
 			array(
@@ -165,10 +165,10 @@ class CompetitorSeoImporter {
 				);
 
 				$map = array(
-					self::YOAST_TITLE     => '_ameverywhere_meta_title',
-					self::YOAST_DESC      => '_ameverywhere_meta_description',
-					self::YOAST_KW        => '_ameverywhere_focus_keyword',
-					self::YOAST_CANONICAL => '_ameverywhere_canonical_url',
+					self::YOAST_TITLE     => '_holvek_meta_title',
+					self::YOAST_DESC      => '_holvek_meta_description',
+					self::YOAST_KW        => '_holvek_focus_keyword',
+					self::YOAST_CANONICAL => '_holvek_canonical_url',
 				);
 
 				foreach ( $map as $fromKey => $toKey ) {
@@ -190,9 +190,9 @@ class CompetitorSeoImporter {
 				// noindex
 				if ( isset( $meta[ self::YOAST_NOINDEX ] ) && $meta[ self::YOAST_NOINDEX ] === '1' ) {
 					if ( ! $dryRun ) {
-						update_post_meta( $postId, '_ameverywhere_noindex', 'yes' );
+						update_post_meta( $postId, '_holvek_noindex', 'yes' );
 					}
-					$detail['fields'][] = '_ameverywhere_noindex';
+					$detail['fields'][] = '_holvek_noindex';
 				}
 
 				$details[] = $detail;
@@ -216,9 +216,9 @@ class CompetitorSeoImporter {
 			}
 
 			$map = array(
-				self::AIOSEO_TITLE => '_ameverywhere_meta_title',
-				self::AIOSEO_DESC  => '_ameverywhere_meta_description',
-				self::AIOSEO_KW    => '_ameverywhere_focus_keyword',
+				self::AIOSEO_TITLE => '_holvek_meta_title',
+				self::AIOSEO_DESC  => '_holvek_meta_description',
+				self::AIOSEO_KW    => '_holvek_focus_keyword',
 			);
 
 			foreach ( array_slice( $byPost, 0, $limit, true ) as $postId => $meta ) {
@@ -245,7 +245,7 @@ class CompetitorSeoImporter {
 
 				$details[] = $detail;
 			}
-				} elseif ( $source === 'rankmath' ) {
+		} elseif ( $source === 'rankmath' ) {
 			$rows = $wpdb->get_results(
 				$wpdb->prepare(
 					"SELECT post_id, meta_key, meta_value FROM {$wpdb->postmeta}
@@ -265,10 +265,10 @@ class CompetitorSeoImporter {
 			}
 
 			$map = array(
-				self::RANKMATH_TITLE     => '_ameverywhere_meta_title',
-				self::RANKMATH_DESC      => '_ameverywhere_meta_description',
-				self::RANKMATH_KW        => '_ameverywhere_focus_keyword',
-				self::RANKMATH_CANONICAL => '_ameverywhere_canonical_url',
+				self::RANKMATH_TITLE     => '_holvek_meta_title',
+				self::RANKMATH_DESC      => '_holvek_meta_description',
+				self::RANKMATH_KW        => '_holvek_focus_keyword',
+				self::RANKMATH_CANONICAL => '_holvek_canonical_url',
 			);
 
 			foreach ( array_slice( $byPost, 0, $limit, true ) as $postId => $meta ) {
@@ -299,5 +299,4 @@ class CompetitorSeoImporter {
 
 		return compact( 'imported', 'skipped', 'details' );
 	}
-
 }

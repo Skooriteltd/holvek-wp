@@ -1,13 +1,13 @@
 import '../css/cookie-banner.css';
 
 /**
- * AmEveryWhere Cookie Consent Banner
- * Zero-dependency vanilla JS. Reads config from amEveryWhereCookieConfig.
+ * Holvek Cookie Consent Banner
+ * Zero-dependency vanilla JS. Reads config from holvekCookieConfig.
  */
 (function () {
 	'use strict';
 
-	var cfg = window.amEveryWhereCookieConfig || { cookieName: 'ameverywhere_consent', cookieDays: 365 };
+	var cfg = window.holvekCookieConfig || { cookieName: 'holvek_consent', cookieDays: 365 };
 
 	function getCookie(name) {
 		var v = document.cookie.match( '(^|;)\\s*' + name + '\\s*=\\s*([^;]+)' );
@@ -23,7 +23,7 @@ import '../css/cookie-banner.css';
 	}
 
 	function getBanner() {
-		return document.getElementById( 'ameverywhere-cookie-banner' );
+		return document.getElementById( 'holvek-cookie-banner' );
 	}
 
 	function hideBanner() {
@@ -46,9 +46,9 @@ import '../css/cookie-banner.css';
 		setCookie( cfg.cookieName, accepted ? 'accepted' : 'declined', cfg.cookieDays );
 		hideBanner();
 		if (accepted) {
-			document.dispatchEvent( new CustomEvent( 'ameverywhere:consent:accepted' ) );
+			document.dispatchEvent( new CustomEvent( 'holvek:consent:accepted' ) );
 		} else {
-			document.dispatchEvent( new CustomEvent( 'ameverywhere:consent:declined' ) );
+			document.dispatchEvent( new CustomEvent( 'holvek:consent:declined' ) );
 		}
 	}
 
@@ -61,8 +61,8 @@ import '../css/cookie-banner.css';
 
 		showBanner();
 
-		var acceptBtn  = document.getElementById( 'aew-cookie-accept' );
-		var declineBtn = document.getElementById( 'aew-cookie-decline' );
+		var acceptBtn  = document.getElementById( 'holvek-cookie-accept' );
+		var declineBtn = document.getElementById( 'holvek-cookie-decline' );
 
 		if (acceptBtn) {
 			acceptBtn.addEventListener(
@@ -97,5 +97,5 @@ import '../css/cookie-banner.css';
 		},
 	};
 
-	window.amEveryWhereConsent = consentApi;
+	window.holvekConsent = consentApi;
 })();

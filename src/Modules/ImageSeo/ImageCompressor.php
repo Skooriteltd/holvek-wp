@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\ImageSeo;
+namespace Holvek\WordPress\Modules\ImageSeo;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -14,9 +14,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class ImageCompressor {
 
-	private const OPTION_KEY         = 'ameverywhere_image_compression';
-	private const PROCESSED_META_KEY = '_ameverywhere_compressed';
-	private const ORIGINAL_META_KEY  = '_ameverywhere_compression_original';
+	private const OPTION_KEY         = 'holvek_image_compression';
+	private const PROCESSED_META_KEY = '_holvek_compressed';
+	private const ORIGINAL_META_KEY  = '_holvek_compression_original';
 
 	public function boot(): void {
 		$config = $this->getConfig();
@@ -35,6 +35,7 @@ class ImageCompressor {
 	 * Returns true on success, false on failure.
 	 */
 	public function processFile( string $filePath, string $mime, array $config ): bool {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- Local derivative path is checked before GD writes it.
 		if ( ! file_exists( $filePath ) || ! is_writable( $filePath ) ) {
 			return false;
 		}
@@ -84,7 +85,9 @@ class ImageCompressor {
 
 	private function processWithGd( string $path, string $mime, int $quality ): bool {
 		$image = match ( $mime ) {
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- GD warns on corrupt image bytes. The false return is checked.
 			'image/jpeg' => @imagecreatefromjpeg( $path ),
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- GD warns on corrupt image bytes. The false return is checked.
 			'image/png'  => @imagecreatefrompng( $path ),
 			default      => false,
 		};
@@ -108,7 +111,7 @@ class ImageCompressor {
 	public function registerRoutes(): void {
 		// Settings CRUD
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/settings/image-compression',
 			array(
 				array(
@@ -126,7 +129,7 @@ class ImageCompressor {
 
 		// Bulk compress endpoint — processes library in batches
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/images/compress-bulk',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -136,7 +139,7 @@ class ImageCompressor {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/images/(?P<attachment_id>\d+)/restore',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -152,7 +155,7 @@ class ImageCompressor {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/images/compression-backups',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -173,7 +176,7 @@ class ImageCompressor {
 
 		// Stats endpoint — total images, compressed count, saved bytes estimate
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/images/compression-stats',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -194,7 +197,7 @@ class ImageCompressor {
 		if ( $enabled && empty( $params['acknowledge_reversible_processing'] ) ) {
 			return new \WP_Error(
 				'compression_confirmation_required',
-				__( 'Confirm that originals will be retained before enabling image compression.', 'ameverywhere' ),
+				__( 'Confirm that originals will be retained before enabling image compression.', 'holvek' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -227,7 +230,7 @@ class ImageCompressor {
 		$config    = $this->getConfig();
 
 		if ( ! $config['enabled'] ) {
-			return new \WP_Error( 'compression_disabled', __( 'Enable and confirm reversible image compression before starting a bulk run.', 'ameverywhere' ), array( 'status' => 400 ) );
+			return new \WP_Error( 'compression_disabled', __( 'Enable and confirm reversible image compression before starting a bulk run.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		$query = new \WP_Query(
@@ -354,45 +357,117 @@ class ImageCompressor {
 			return false;
 		}
 
-		$backup = $file . '.ameverywhere-original';
-		if ( ! file_exists( $backup ) && ! copy( $file, $backup ) ) {
+		$originalId = $this->retainOriginalAttachment( $attachmentId, $file, $mime );
+		if ( $originalId <= 0 ) {
 			return false;
 		}
 
-		update_post_meta( $attachmentId, self::ORIGINAL_META_KEY, $backup );
 		if ( $this->processFile( $file, $mime, $config ) ) {
 			return true;
 		}
 
-		// Keep the attachment usable when the selected image engine fails.
-		copy( $backup, $file );
+		$originalFile = get_attached_file( $originalId );
+		if ( is_string( $originalFile ) && is_readable( $originalFile ) ) {
+			copy( $originalFile, $file );
+		}
 		return false;
+	}
+
+	/**
+	 * Keep the uncompressed bytes as their own media-library attachment.
+	 *
+	 * A sidecar path is not enough. Uninstall of a backup directory must
+	 * not be the only copy of the original.
+	 */
+	public function retainOriginalAttachment( int $attachmentId, string $file, string $mime ): int {
+		$existing = (int) get_post_meta( $attachmentId, '_holvek_original_attachment_id', true );
+		if ( $existing > 0 ) {
+			$kept = get_attached_file( $existing );
+			if ( get_post( $existing ) && is_string( $kept ) && is_readable( $kept ) ) {
+				return $existing;
+			}
+		}
+
+		if ( ! is_readable( $file ) ) {
+			return 0;
+		}
+
+		$info = pathinfo( $file );
+		$dir  = (string) ( $info['dirname'] ?? '' );
+		$base = (string) ( $info['filename'] ?? 'image' );
+		$ext  = strtolower( (string) ( $info['extension'] ?? 'jpg' ) );
+		if ( '' === $dir ) {
+			return 0;
+		}
+
+		$dest = $dir . '/' . $base . '-holvek-original.' . $ext;
+		$try  = 2;
+		while ( file_exists( $dest ) ) {
+			$dest = $dir . '/' . $base . '-holvek-original-' . $try . '.' . $ext;
+			++$try;
+			if ( $try > 50 ) {
+				return 0;
+			}
+		}
+
+		if ( ! copy( $file, $dest ) ) {
+			return 0;
+		}
+
+		$inserted = wp_insert_attachment(
+			array(
+				'post_mime_type' => $mime,
+				'post_title'     => sanitize_text_field( basename( $dest ) ),
+				'post_content'   => '',
+				'post_status'    => 'inherit',
+			),
+			$dest,
+			0,
+			true
+		);
+
+		if ( is_wp_error( $inserted ) || (int) $inserted <= 0 ) {
+			wp_delete_file( $dest );
+			return 0;
+		}
+
+		$originalId = (int) $inserted;
+		update_attached_file( $originalId, $dest );
+		update_post_meta( $attachmentId, '_holvek_original_attachment_id', $originalId );
+		update_post_meta( $originalId, '_holvek_original_of', $attachmentId );
+		update_post_meta( $attachmentId, self::ORIGINAL_META_KEY, (string) $originalId );
+
+		return $originalId;
 	}
 
 	public function restoreAttachment( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$attachmentId = (int) $request->get_param( 'attachment_id' );
 
 		if ( ! current_user_can( 'edit_post', $attachmentId ) ) {
-			return new \WP_Error( 'unauthorized', __( 'You do not have permission to edit this attachment.', 'ameverywhere' ), array( 'status' => 403 ) );
+			return new \WP_Error( 'unauthorized', __( 'You do not have permission to edit this attachment.', 'holvek' ), array( 'status' => 403 ) );
 		}
 
-		$file   = get_attached_file( $attachmentId );
-		$backup = (string) get_post_meta( $attachmentId, self::ORIGINAL_META_KEY, true );
-
-		if ( ! $file || ! $backup || ! is_readable( $backup ) || ! copy( $backup, $file ) ) {
-			return new \WP_Error( 'restore_failed', __( 'No restorable image backup is available for this attachment.', 'ameverywhere' ), array( 'status' => 404 ) );
+		$file       = get_attached_file( $attachmentId );
+		$originalId = (int) get_post_meta( $attachmentId, '_holvek_original_attachment_id', true );
+		$backup     = $originalId > 0 ? get_attached_file( $originalId ) : '';
+		if ( ! is_string( $backup ) || '' === $backup || ! is_readable( $backup ) ) {
+			$legacy = (string) get_post_meta( $attachmentId, self::ORIGINAL_META_KEY, true );
+			if ( '' !== $legacy && ! ctype_digit( $legacy ) && is_readable( $legacy ) ) {
+				$backup = $legacy;
+			}
 		}
 
-		if ( unlink( $backup ) ) {
-			delete_post_meta( $attachmentId, self::ORIGINAL_META_KEY );
+		if ( ! is_string( $file ) || '' === $file || ! is_string( $backup ) || '' === $backup || ! is_readable( $backup ) || ! copy( $backup, $file ) ) {
+			return new \WP_Error( 'restore_failed', __( 'No restorable image backup is available for this attachment.', 'holvek' ), array( 'status' => 404 ) );
 		}
+
 		delete_post_meta( $attachmentId, self::PROCESSED_META_KEY );
 
 		return rest_ensure_response(
 			array(
-				'success'          => true,
-				'attachment_id'    => $attachmentId,
-				'backup_remaining' => file_exists( $backup ),
+				'success'       => true,
+				'attachment_id' => $attachmentId,
+				'original_id'   => $originalId,
 			)
 		);
 	}

@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\ContentAssistant;
+namespace Holvek\WordPress\Modules\ContentAssistant;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -10,7 +10,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Internal link recommendation engine with indexed orphan detection.
  *
  * Architecture:
- *   - Link Index Table (wp_ameverywhere_links): Populated on post save by parsing
+ *   - Link Index Table (wp_holvek_links): Populated on post save by parsing
  *     HTML content and extracting internal links. Columns: post_id, target_url, anchor_text.
  *   - Orphan Detection: Finding incoming links is now a lightning-fast indexed
  *     SELECT COUNT(*) WHERE target_url = %s, instead of the old LIKE '%url%' full-table scan.
@@ -38,7 +38,7 @@ class InternalLinkEngine {
 
 		$posts           = get_posts( $args );
 		$recommendations = array();
-		$contentLower    = mb_strtolower( strip_tags( $content ) );
+		$contentLower    = mb_strtolower( wp_strip_all_tags( $content ) );
 
 		// 1. Exact Title / Focus Keyword Substring Match
 		foreach ( $posts as $p ) {
@@ -54,7 +54,7 @@ class InternalLinkEngine {
 			$pos = mb_strpos( $contentLower, $titleLower );
 			if ( $pos !== false ) {
 				// Find the original casing in the content
-				$matchedAnchor = mb_substr( strip_tags( $content ), $pos, mb_strlen( $title ) );
+				$matchedAnchor = mb_substr( wp_strip_all_tags( $content ), $pos, mb_strlen( $title ) );
 
 				$recommendations[] = array(
 					'type'    => 'anchor_match',
@@ -62,7 +62,7 @@ class InternalLinkEngine {
 					'title'   => $title,
 					'url'     => get_permalink( $p->ID ),
 					'anchor'  => $matchedAnchor,
-					'reason'  => sprintf( /* translators: %s: Post title */ __( 'Matches the exact title of "%s"', 'ameverywhere' ), $title ),
+					'reason'  => sprintf( /* translators: %s: Post title */ __( 'Matches the exact title of "%s"', 'holvek' ), $title ),
 				);
 			}
 		}
@@ -106,8 +106,8 @@ class InternalLinkEngine {
 						'post_id' => $op->ID,
 						'title'   => $op->post_title,
 						'url'     => get_permalink( $op->ID ),
-						'anchor'  => __( 'related content', 'ameverywhere' ),
-						'reason'  => __( 'Shares matching categories or tags.', 'ameverywhere' ),
+						'anchor'  => __( 'related content', 'holvek' ),
+						'reason'  => __( 'Shares matching categories or tags.', 'holvek' ),
 					);
 				}
 			}
@@ -119,12 +119,11 @@ class InternalLinkEngine {
 	/**
 	 * Verify if the current post is an "Orphan" (has zero incoming internal links).
 	 *
-	 * Uses the indexed wp_ameverywhere_links table for O(1) lookup instead of
+	 * Uses the indexed wp_holvek_links table for O(1) lookup instead of
 	 * the previous LIKE '%url%' full-table scan on wp_posts.
 	 */
 	public function checkOrphanStatus( int $postId ): array {
 		global $wpdb;
-		$table = $wpdb->prefix . 'ameverywhere_links';
 
 		$permalink = get_permalink( $postId );
 		if ( ! $permalink ) {
@@ -139,7 +138,7 @@ class InternalLinkEngine {
 		// Lightning-fast indexed query against the link index table
 		$incomingCount = (int) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT COUNT(*) FROM $table WHERE target_url = %s OR target_url = %s",
+				"SELECT COUNT(*) FROM {$wpdb->prefix}holvek_links WHERE target_url = %s OR target_url = %s",
 				$permalink,
 				$path
 			)
@@ -170,7 +169,7 @@ class InternalLinkEngine {
 		}
 
 		global $wpdb;
-		$table = $wpdb->prefix . 'ameverywhere_links';
+		$table = $wpdb->prefix . 'holvek_links';
 
 		// Clear existing links for this post — full re-index on each save
 		$wpdb->delete( $table, array( 'post_id' => $postId ), array( '%d' ) );
@@ -225,7 +224,7 @@ class InternalLinkEngine {
 	 */
 	public function removePostLinks( int $postId ): void {
 		global $wpdb;
-		$table = $wpdb->prefix . 'ameverywhere_links';
+		$table = $wpdb->prefix . 'holvek_links';
 		$wpdb->delete( $table, array( 'post_id' => $postId ), array( '%d' ) );
 	}
 
@@ -233,7 +232,6 @@ class InternalLinkEngine {
 	 * Check if a URL points to the same site.
 	 */
 	private function isInternalUrl( string $href, string $siteDomain, string $siteUrl ): bool {
-		// Skip anchors, javascript:, mailto:, tel:
 		if ( empty( $href ) || $href[0] === '#' || strpos( $href, 'javascript:' ) === 0
 			|| strpos( $href, 'mailto:' ) === 0 || strpos( $href, 'tel:' ) === 0 ) {
 			return false;

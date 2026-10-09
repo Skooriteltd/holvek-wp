@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Core\Queue;
+namespace Holvek\WordPress\Core\Queue;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class QueueManager {
 
-	private const ACTION_HOOK = 'ameverywhere_process_job';
+	private const ACTION_HOOK = 'holvek_process_job';
 
 	public function boot(): void {
 		add_action( self::ACTION_HOOK, array( $this, 'process' ), 10, 2 );
@@ -23,7 +23,7 @@ class QueueManager {
 
 	public function registerRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/system/queue',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -41,8 +41,20 @@ class QueueManager {
 		);
 
 		if ( $this->hasActionScheduler() ) {
-			$status['pending'] = \ActionScheduler_Store::instance()->query_actions( array( 'hook' => self::ACTION_HOOK, 'status' => \ActionScheduler_Store::STATUS_PENDING ), 'count' );
-			$status['failed']  = \ActionScheduler_Store::instance()->query_actions( array( 'hook' => self::ACTION_HOOK, 'status' => \ActionScheduler_Store::STATUS_FAILED ), 'count' );
+			$status['pending'] = \ActionScheduler_Store::instance()->query_actions(
+				array(
+					'hook'   => self::ACTION_HOOK,
+					'status' => \ActionScheduler_Store::STATUS_PENDING,
+				),
+				'count'
+			);
+			$status['failed']  = \ActionScheduler_Store::instance()->query_actions(
+				array(
+					'hook'   => self::ACTION_HOOK,
+					'status' => \ActionScheduler_Store::STATUS_FAILED,
+				),
+				'count'
+			);
 		} else {
 			$crons = get_option( 'cron', array() );
 			$count = 0;
@@ -69,7 +81,7 @@ class QueueManager {
 			} else {
 				as_enqueue_async_action( self::ACTION_HOOK, $args );
 			}
-				} else {
+		} else {
 			// Prevent WP-Cron option bloat scale issue (PR-018)
 			$crons = get_option( 'cron', array() );
 			$count = 0;
@@ -125,11 +137,14 @@ class QueueManager {
 
 	/**
 	 * Process a queued job by instantiating its class and calling handle().
+	 *
+	 * @throws \Throwable When the queued job handler fails.
 	 */
 	public function process( string $jobClass, array $data ): void {
 		if ( ! class_exists( $jobClass ) ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( "[AmEveryWhere Queue] Job class not found: {$jobClass}" );
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Background queue failures are written to the PHP log.
+				error_log( "[Holvek Queue] Job class not found: {$jobClass}" );
 			}
 			return;
 		}
@@ -141,7 +156,8 @@ class QueueManager {
 			}
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( "[AmEveryWhere Queue] Job failed ({$jobClass}): " . $e->getMessage() );
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Background queue failures are written to the PHP log.
+				error_log( "[Holvek Queue] Job failed ({$jobClass}): " . $e->getMessage() );
 			}
 			throw $e;
 		}

@@ -1,11 +1,11 @@
 <?php
 
-namespace AmEveryWhere\Tests\Unit;
+namespace Holvek\WordPress\Tests\Unit;
 
-use AmEveryWhere\Modules\Api\HeadlessSeoEndpoints;
-use AmEveryWhere\Modules\ImageSeo\ImageCompressor;
-use AmEveryWhere\Modules\Indexing\GoogleIndexingApi;
-use AmEveryWhere\Modules\Indexing\IndexStatusChecker;
+use Holvek\WordPress\Modules\Api\HeadlessSeoEndpoints;
+use Holvek\WordPress\Modules\ImageSeo\ImageCompressor;
+use Holvek\WordPress\Modules\Indexing\GoogleIndexingApi;
+use Holvek\WordPress\Modules\Indexing\IndexStatusChecker;
 use PHPUnit\Framework\TestCase;
 
 class ProductionReadinessTest extends TestCase
@@ -23,14 +23,14 @@ class ProductionReadinessTest extends TestCase
     public function testPublicGlobalSeoPayloadNeverExposesAdminOrIndexnowSecrets(): void
     {
         update_option('admin_email', 'admin@example.com');
-        update_option('ameverywhere_indexnow_key', 'private-indexnow-key');
+        update_option('holvek_indexnow_key', 'private-indexnow-key');
 
         $response = (new HeadlessSeoEndpoints())->getGlobalSeo(new \WP_REST_Request());
         $data = $response->get_data();
 
         $this->assertArrayNotHasKey('admin_email', $data);
         $this->assertArrayNotHasKey('indexnow_key', $data);
-        $this->assertSame('AmEveryWhere Test Site', $data['site_name']);
+        $this->assertSame('Holvek Test Site', $data['site_name']);
     }
 
     public function testGoogleIndexingEligibilityRejectsOrdinaryContent(): void

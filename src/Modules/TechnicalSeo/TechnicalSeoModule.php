@@ -1,12 +1,12 @@
 <?php
 
-namespace AmEveryWhere\Modules\TechnicalSeo;
+namespace Holvek\WordPress\Modules\TechnicalSeo;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use AmEveryWhere\Core\Event\EventManager;
+use Holvek\WordPress\Core\Event\EventManager;
 
 /**
  * Boots technical SEO routines including redirects, 404 monitoring, and their admin REST routes.
@@ -40,7 +40,7 @@ class TechnicalSeoModule {
 		$this->eventManager->addAction( 'rest_api_init', array( $this->errorMonitor, 'registerRoutes' ) );
 
 		// Clean up cron schedule on deactivation
-		$this->eventManager->addAction( 'ameverywhere_deactivation', array( 'AmEveryWhere\Modules\TechnicalSeo\ErrorMonitor', 'deactivate' ) );
+		$this->eventManager->addAction( 'holvek_deactivation', array( 'Holvek\WordPress\Modules\TechnicalSeo\ErrorMonitor', 'deactivate' ) );
 
 		// Custom 404 page handler
 		$custom404 = new Custom404Handler();

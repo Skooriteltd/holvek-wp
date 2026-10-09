@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Schema;
+namespace Holvek\WordPress\Modules\Schema;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -12,43 +12,89 @@ if ( ! defined( 'ABSPATH' ) ) {
 class CompetitorScraper {
 
 	/**
-	 * Scrapes a URL, extracts JSON-LD blocks, and maps them to AmEveryWhere schema structures.
+	 * Scrapes a URL, extracts JSON-LD blocks, and maps them to Holvek schema structures.
 	 */
 	public static function scrapeUrl( string $url ): array {
-		$url = esc_url_raw( $url );
-		if ( empty( $url ) || ! wp_http_validate_url( $url ) ) {
+		return ( new self() )->fetch( $url );
+	}
+
+	/**
+	 * Fetch one public page. Redirects are checked one hop at a time.
+	 */
+	public function fetch( string $url ): array {
+		$current = $this->normalizeRemoteUrl( $url );
+		if ( null === $current ) {
 			return array(
 				'success' => false,
-				'message' => __( 'Invalid competitor URL supplied.', 'ameverywhere' ),
+				'message' => __( 'Invalid competitor URL supplied.', 'holvek' ),
 			);
 		}
 
-		// Fetch the remote HTML page securely
-		$response = wp_safe_remote_get(
-			$url,
-			array(
-				'timeout'             => 10,
-				'redirection'         => 3,
-				'limit_response_size' => 2 * MB_IN_BYTES,
-				'user-agent'          => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.0.0 Safari/537.36 AmEveryWhereProxy/1.0',
-				'headers'             => array(
-					'Accept' => 'text/html',
+		$response = null;
+		for ( $hop = 0; $hop <= 3; $hop++ ) {
+			if ( ! $this->hostIsPublic( $current ) ) {
+				return array(
+					'success' => false,
+					'message' => __( 'That URL points at a private or local address, so it was not fetched.', 'holvek' ),
+				);
+			}
+
+			$response = wp_safe_remote_get(
+				$current,
+				array(
+					'timeout'             => 10,
+					'redirection'         => 0,
+					'limit_response_size' => 2 * MB_IN_BYTES,
+					'user-agent'          => $this->userAgent(),
+					'headers'             => array(
+						'Accept' => 'text/html',
+					),
+				)
+			);
+
+			if ( is_wp_error( $response ) ) {
+				return array(
+					'success' => false,
+					'message' => sprintf(
+						/* translators: %s: error message from the HTTP client. */
+						__( 'Failed to fetch URL: %s', 'holvek' ),
+						$response->get_error_message()
+					),
+				);
+			}
+
+			$code = (int) wp_remote_retrieve_response_code( $response );
+			if ( ! in_array( $code, array( 301, 302, 303, 307, 308 ), true ) ) {
+				break;
+			}
+
+			if ( 3 === $hop ) {
+				return array(
+					'success' => false,
+					'message' => __( 'The competitor URL redirected too many times.', 'holvek' ),
+				);
+			}
+
+			$location = wp_remote_retrieve_header( $response, 'location' );
+			$next     = $this->resolveRedirect( $current, is_string( $location ) ? $location : '' );
+			if ( null === $next ) {
+				return array(
+					'success' => false,
+					'message' => __( 'Invalid competitor URL supplied.', 'holvek' ),
+				);
+			}
+			$current = $next;
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		if ( 200 !== $code ) {
+			return array(
+				'success' => false,
+				'message' => sprintf(
+					/* translators: %d: HTTP status code. */
+					__( 'Competitor URL returned status code %d.', 'holvek' ),
+					$code
 				),
-			)
-		);
-
-		if ( is_wp_error( $response ) ) {
-			return array(
-				'success' => false,
-				'message' => sprintf( /* translators: %s: URL */ __( 'Failed to fetch URL: %s', 'ameverywhere' ), $response->get_error_message() ),
-			);
-		}
-
-		$code = wp_remote_retrieve_response_code( $response );
-		if ( $code !== 200 ) {
-			return array(
-				'success' => false,
-				'message' => sprintf( /* translators: %d: HTTP status code */ __( 'Competitor URL returned status code %d.', 'ameverywhere' ), $code ),
 			);
 		}
 
@@ -56,7 +102,7 @@ class CompetitorScraper {
 		if ( empty( $html ) ) {
 			return array(
 				'success' => false,
-				'message' => __( 'Competitor URL returned empty content.', 'ameverywhere' ),
+				'message' => __( 'Competitor URL returned empty content.', 'holvek' ),
 			);
 		}
 
@@ -64,7 +110,7 @@ class CompetitorScraper {
 		if ( ! preg_match_all( '/<script\b[^>]*type=["\']application\/ld\+json["\'][^>]*>(.*?)<\/script>/is', $html, $matches ) ) {
 			return array(
 				'success' => false,
-				'message' => __( 'No JSON-LD schemas found on the competitor page.', 'ameverywhere' ),
+				'message' => __( 'No JSON-LD schemas found on the competitor page.', 'holvek' ),
 			);
 		}
 
@@ -84,7 +130,7 @@ class CompetitorScraper {
 		if ( empty( $schemas ) ) {
 			return array(
 				'success' => false,
-				'message' => __( 'Could not decode any valid JSON-LD graphs.', 'ameverywhere' ),
+				'message' => __( 'Could not decode any valid JSON-LD graphs.', 'holvek' ),
 			);
 		}
 
@@ -95,6 +141,196 @@ class CompetitorScraper {
 			'success' => true,
 			'schemas' => $extracted,
 		);
+	}
+
+	private function userAgent(): string {
+		$version = defined( 'HOLVEK_VERSION' ) ? HOLVEK_VERSION : '1.0.0';
+		return 'Holvek-WP/' . $version . ' (' . home_url( '/' ) . ')';
+	}
+
+	private function normalizeRemoteUrl( string $url ): ?string {
+		$url = trim( $url );
+		if ( '' === $url || str_contains( $url, '\\' ) || preg_match( '/[[:cntrl:][:space:]]/', $url ) ) {
+			return null;
+		}
+
+		$parts = wp_parse_url( $url );
+		if ( ! is_array( $parts ) || isset( $parts['user'] ) || isset( $parts['pass'] ) ) {
+			return null;
+		}
+
+		$scheme = strtolower( (string) ( $parts['scheme'] ?? '' ) );
+		if ( 'http' !== $scheme && 'https' !== $scheme ) {
+			return null;
+		}
+
+		$host = strtolower( rtrim( (string) ( $parts['host'] ?? '' ), '.' ) );
+		if ( ! $this->isAcceptableHost( $host ) ) {
+			return null;
+		}
+
+		$port = '';
+		if ( isset( $parts['port'] ) ) {
+			$portNumber = (int) $parts['port'];
+			if ( $portNumber < 1 || $portNumber > 65535 ) {
+				return null;
+			}
+			$port = ':' . $portNumber;
+		}
+
+		$path = (string) ( $parts['path'] ?? '/' );
+		if ( '' === $path ) {
+			$path = '/';
+		}
+		if ( ! str_starts_with( $path, '/' ) ) {
+			return null;
+		}
+
+		$query       = isset( $parts['query'] ) ? '?' . $parts['query'] : '';
+		$displayHost = str_contains( $host, ':' ) ? '[' . $host . ']' : $host;
+		return $scheme . '://' . $displayHost . $port . $path . $query;
+	}
+
+	private function resolveRedirect( string $current, string $location ): ?string {
+		$location = trim( $location );
+		if ( '' === $location ) {
+			return null;
+		}
+
+		if ( str_starts_with( $location, '//' ) ) {
+			$scheme   = wp_parse_url( $current, PHP_URL_SCHEME );
+			$location = ( is_string( $scheme ) && '' !== $scheme ? $scheme : 'https' ) . ':' . $location;
+		} elseif ( str_starts_with( $location, '/' ) ) {
+			$parts = wp_parse_url( $current );
+			if ( ! is_array( $parts ) || empty( $parts['host'] ) || empty( $parts['scheme'] ) ) {
+				return null;
+			}
+			$host = (string) $parts['host'];
+			if ( str_contains( $host, ':' ) ) {
+				$host = '[' . $host . ']';
+			}
+			$port     = isset( $parts['port'] ) ? ':' . (int) $parts['port'] : '';
+			$location = $parts['scheme'] . '://' . $host . $port . $location;
+		} elseif ( ! preg_match( '#^[a-z][a-z0-9+.-]*:#i', $location ) ) {
+			$base     = (string) preg_replace( '#/[^/]*$#', '/', $current );
+			$location = $base . $location;
+		}
+
+		return $this->normalizeRemoteUrl( $location );
+	}
+
+	private function hostIsPublic( string $url ): bool {
+		$parts = wp_parse_url( $url );
+		if ( ! is_array( $parts ) || empty( $parts['host'] ) ) {
+			return false;
+		}
+
+		$host = strtolower( (string) $parts['host'] );
+		if ( 'localhost' === $host || str_ends_with( $host, '.localhost' ) || 'metadata.google.internal' === rtrim( $host, '.' ) ) {
+			return false;
+		}
+
+		$addresses = $this->resolveHost( $host );
+		if ( array() === $addresses ) {
+			return false;
+		}
+
+		foreach ( $addresses as $address ) {
+			if ( $this->isBlockedAddress( (string) $address ) ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Addresses for a host. Includes every A and AAAA answer so one private address blocks the fetch.
+	 *
+	 * @return array<int, string>
+	 */
+	protected function resolveHost( string $host ): array {
+		$host = strtolower( trim( $host, '[]' ) );
+		if ( filter_var( $host, FILTER_VALIDATE_IP ) ) {
+			return array( $host );
+		}
+
+		$addresses = array();
+		if ( function_exists( 'dns_get_record' ) ) {
+			$type    = DNS_A;
+			$type   |= defined( 'DNS_AAAA' ) ? DNS_AAAA : 0;
+			$records = dns_get_record( $host, $type );
+			if ( is_array( $records ) ) {
+				foreach ( $records as $record ) {
+					if ( ! is_array( $record ) ) {
+						continue;
+					}
+					if ( isset( $record['ip'] ) && is_string( $record['ip'] ) ) {
+						$addresses[] = $record['ip'];
+					}
+					if ( isset( $record['ipv6'] ) && is_string( $record['ipv6'] ) ) {
+						$addresses[] = $record['ipv6'];
+					}
+				}
+			}
+		}
+
+		if ( array() === $addresses && function_exists( 'gethostbynamel' ) ) {
+			$records = gethostbynamel( $host );
+			if ( is_array( $records ) ) {
+				$addresses = $records;
+			}
+		}
+
+		return $addresses;
+	}
+
+	private function isAcceptableHost( string $host ): bool {
+		if ( '' === $host || str_contains( $host, '%' ) ) {
+			return false;
+		}
+		if ( filter_var( $host, FILTER_VALIDATE_IP ) ) {
+			return true;
+		}
+		if ( ! str_contains( $host, '.' ) ) {
+			return false;
+		}
+		return 1 === preg_match( '/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/', $host );
+	}
+
+	private function isBlockedAddress( string $ip ): bool {
+		$ip = strtolower( trim( $ip, '[]' ) );
+		if ( str_starts_with( $ip, '::ffff:' ) ) {
+			$mapped = substr( $ip, 7 );
+			if ( filter_var( $mapped, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
+				return $this->isBlockedAddress( $mapped );
+			}
+		}
+
+		if ( ! filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+			return true;
+		}
+		if ( ! filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
+			return true;
+		}
+
+		return $this->isCarrierGradeNat( $ip );
+	}
+
+	private function isCarrierGradeNat( string $ip ): bool {
+		if ( ! filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
+			return false;
+		}
+
+		$packed = inet_pton( $ip );
+		if ( ! is_string( $packed ) || 4 !== strlen( $packed ) ) {
+			return false;
+		}
+
+		$bytes  = array_values( unpack( 'C4', $packed ) );
+		$ipLong = ( $bytes[0] * 16777216 ) + ( $bytes[1] * 65536 ) + ( $bytes[2] * 256 ) + $bytes[3];
+		$block  = ( 100 * 16777216 ) + ( 64 * 65536 );
+		return $ipLong >= $block && $ipLong < ( $block + 4194304 );
 	}
 
 	/**
@@ -297,8 +533,8 @@ class CompetitorScraper {
 
 				$result['event'] = array(
 					'name'       => isset( $node['name'] ) ? sanitize_text_field( $node['name'] ) : '',
-					'start_date' => isset( $node['startDate'] ) ? date( 'Y-m-d\TH:i', strtotime( $node['startDate'] ) ) : '',
-					'end_date'   => isset( $node['endDate'] ) ? date( 'Y-m-d\TH:i', strtotime( $node['endDate'] ) ) : '',
+					'start_date' => isset( $node['startDate'] ) ? gmdate( 'Y-m-d\TH:i', strtotime( $node['startDate'] ) ) : '',
+					'end_date'   => isset( $node['endDate'] ) ? gmdate( 'Y-m-d\TH:i', strtotime( $node['endDate'] ) ) : '',
 					'venue'      => sanitize_text_field( $venue ),
 					'address'    => sanitize_text_field( $address ),
 					'performer'  => isset( $node['performer']['name'] ) ? sanitize_text_field( $node['performer']['name'] ) : '',

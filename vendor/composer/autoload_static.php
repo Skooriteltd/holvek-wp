@@ -17,13 +17,13 @@ class ComposerStaticInit049b1e5a9d003021bcc6cac5aaa93292
             'PhpParser\\' => 10,
             'PHPCSStandards\\Composer\\Plugin\\Installers\\PHPCodeSniffer\\' => 57,
         ),
+        'H' => 
+        array (
+            'Holvek\\WordPress\\' => 17,
+        ),
         'D' => 
         array (
             'DeepCopy\\' => 9,
-        ),
-        'A' => 
-        array (
-            'AmEveryWhere\\' => 13,
         ),
     );
 
@@ -36,13 +36,13 @@ class ComposerStaticInit049b1e5a9d003021bcc6cac5aaa93292
         array (
             0 => __DIR__ . '/..' . '/dealerdirect/phpcodesniffer-composer-installer/src',
         ),
+        'Holvek\\WordPress\\' => 
+        array (
+            0 => __DIR__ . '/../..' . '/src',
+        ),
         'DeepCopy\\' => 
         array (
             0 => __DIR__ . '/..' . '/myclabs/deep-copy/src/DeepCopy',
-        ),
-        'AmEveryWhere\\' => 
-        array (
-            0 => __DIR__ . '/../..' . '/src',
         ),
     );
 

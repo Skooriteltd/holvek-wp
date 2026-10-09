@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Core\Event;
+namespace Holvek\WordPress\Core\Event;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

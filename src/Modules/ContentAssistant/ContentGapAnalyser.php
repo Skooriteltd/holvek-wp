@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\ContentAssistant;
+namespace Holvek\WordPress\Modules\ContentAssistant;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -20,7 +20,7 @@ class ContentGapAnalyser {
 
 	public function registerRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/content/gap-analysis',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -30,7 +30,7 @@ class ContentGapAnalyser {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/content/gap-drafts',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -42,13 +42,17 @@ class ContentGapAnalyser {
 
 	// ── REST callbacks ────────────────────────────────────────────────────────
 
-	public function analyseGap( \WP_REST_Request $request ): \WP_REST_Response {
+	public function analyseGap( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$params  = $request->get_json_params();
 		$keyword = sanitize_text_field( $params['keyword'] ?? '' );
 		$postId  = absint( $params['post_id'] ?? 0 );
 
 		if ( empty( $keyword ) ) {
-			return new \WP_Error( 'missing_keyword', 'A target keyword is required.', array( 'status' => 400 ) );
+			return new \WP_Error( 'missing_keyword', __( 'A target keyword is required.', 'holvek' ), array( 'status' => 400 ) );
+		}
+
+		if ( $this->getApiKey() === '' && ! \Holvek\WordPress\Core\Mode\OperatingMode::isCloudConfigured() ) {
+			return \Holvek\WordPress\Core\Mode\OperatingMode::disconnected( __( 'Cloud content-gap analysis', 'holvek' ) );
 		}
 
 		// Build a map of existing content topics
@@ -76,7 +80,7 @@ class ContentGapAnalyser {
 		$topics = $params['topics'] ?? array();
 
 		if ( empty( $topics ) || ! is_array( $topics ) ) {
-			return new \WP_Error( 'missing_topics', 'topics array is required.', array( 'status' => 400 ) );
+			return new \WP_Error( 'missing_topics', __( 'topics array is required.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		$created = array();
@@ -93,13 +97,13 @@ class ContentGapAnalyser {
 					'post_title'   => $title,
 					'post_status'  => 'draft',
 					'post_type'    => 'post',
-					'post_content' => sprintf( '<!-- Draft created by AmEveryWhere Content Gap Analysis for keyword: %s -->', esc_html( $keyword ) ),
+					'post_content' => sprintf( '<!-- Draft created by Holvek Content Gap Analysis for keyword: %s -->', esc_html( $keyword ) ),
 				)
 			);
 
 			if ( ! is_wp_error( $postId ) ) {
-				update_post_meta( $postId, '_ameverywhere_focus_keyword', $keyword );
-				update_post_meta( $postId, '_ameverywhere_gap_analysis_source', 'yes' );
+				update_post_meta( $postId, '_holvek_focus_keyword', $keyword );
+				update_post_meta( $postId, '_holvek_gap_analysis_source', 'yes' );
 				$created[] = array(
 					'post_id'  => $postId,
 					'title'    => $title,
@@ -130,7 +134,7 @@ class ContentGapAnalyser {
 
 		$topics = array();
 		foreach ( $posts as $id ) {
-			$kw = get_post_meta( $id, '_ameverywhere_focus_keyword', true );
+			$kw = get_post_meta( $id, '_holvek_focus_keyword', true );
 			if ( ! empty( $kw ) ) {
 				$topics[] = (string) $kw;
 			}
@@ -142,17 +146,34 @@ class ContentGapAnalyser {
 
 	private function askLlmForGapTopics( string $keyword, array $existing ): array|\WP_Error {
 		$userId   = get_current_user_id();
-		$metering = class_exists( \AmEveryWhere\Modules\Ai\UsageMeteringManager::class )
-			? \AmEveryWhere\Modules\Ai\UsageMeteringManager::getInstance()
+		$metering = class_exists( \Holvek\WordPress\Modules\Ai\UsageMeteringManager::class )
+			? \Holvek\WordPress\Modules\Ai\UsageMeteringManager::getInstance()
 			: null;
 
 		if ( $userId && $metering && ! $metering->checkLimit( $userId, 'openai' ) ) {
-			return new \WP_Error( 'rate_limit_exceeded', 'AI token usage limit exceeded for this billing cycle.', array( 'status' => 429 ) );
+			return new \WP_Error( 'rate_limit_exceeded', __( 'AI token usage limit exceeded for this billing cycle.', 'holvek' ), array( 'status' => 429 ) );
 		}
 
 		$apiKey = $this->getApiKey();
-		if ( empty( $apiKey ) ) {
-			return new \WP_Error( 'no_api_key', 'No LLM API key configured. Set one in AmEveryWhere → AI Settings.', array( 'status' => 400 ) );
+		if ( $apiKey === '' ) {
+			$offload = ( new \Holvek\WordPress\Core\Api\BackendApiClient() )->analyzeContentGap( $keyword, $existing );
+			if ( is_wp_error( $offload ) ) {
+				return $offload;
+			}
+
+			if ( empty( $offload['success'] ) ) {
+				$message = isset( $offload['message'] ) && is_string( $offload['message'] ) && $offload['message'] !== ''
+					? $offload['message']
+					: __( 'Cloud content-gap analysis did not return a result.', 'holvek' );
+				return new \WP_Error( 'content_gap_unavailable', $message, array( 'status' => 502 ) );
+			}
+
+			$data = $offload['data'] ?? array();
+			if ( isset( $data['gap_topics'] ) && is_array( $data['gap_topics'] ) ) {
+				return $data['gap_topics'];
+			}
+
+			return is_array( $data ) ? $data : array();
 		}
 
 		$existingList = implode( ', ', array_slice( $existing, 0, 30 ) );
@@ -162,8 +183,8 @@ class ContentGapAnalyser {
 			. "but which are NOT already in my list. Format: JSON array of objects with 'title' and 'keyword' fields. "
 			. 'Return ONLY the JSON array.';
 
-		$provider = get_option( 'ameverywhere_ai_provider', 'openai' );
-		$model    = get_option( 'ameverywhere_ai_model', get_option( 'ameverywhere_openai_model', 'gpt-4o-mini' ) );
+		$provider = get_option( 'holvek_ai_provider', 'openai' );
+		$model    = get_option( 'holvek_ai_model', get_option( 'holvek_openai_model', 'gpt-4o-mini' ) );
 
 		$response = wp_safe_remote_post(
 			'https://api.openai.com/v1/chat/completions',
@@ -209,10 +230,10 @@ class ContentGapAnalyser {
 	}
 
 	private function getApiKey(): string {
-		$encryptedKey = get_option( 'ameverywhere_openai_key', '' );
+		$encryptedKey = get_option( 'holvek_openai_key', '' );
 		if ( empty( $encryptedKey ) ) {
-			$encryptedKey = get_option( 'ameverywhere_openai_api_key', '' );
+			$encryptedKey = get_option( 'holvek_openai_api_key', '' );
 		}
-		return \AmEveryWhere\Core\Security\KeyVault::decrypt( $encryptedKey );
+		return \Holvek\WordPress\Core\Security\KeyVault::decrypt( $encryptedKey );
 	}
 }

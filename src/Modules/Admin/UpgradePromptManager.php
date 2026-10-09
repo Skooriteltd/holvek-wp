@@ -1,121 +1,38 @@
 <?php
 
-namespace AmEveryWhere\Modules\Admin;
+namespace Holvek\WordPress\Modules\Admin;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
 /**
- * UpgradePromptManager
+ * Lists features this install already provides.
  *
- * Drives free→paid conversion with contextual upgrade prompts, a dismissible
- * banner, and a feature availability API used by other modules to gate Pro
- * features and provide upgrade URLs.
- *
- * BL-012
+ * Search Console, redirects, the technical audit, rank checks, the writing
+ * assistant, content gap, and competitor schema import run without a Holvek
+ * account. Names that are not implemented are omitted so they are not offered
+ * as a locked upgrade.
  */
 class UpgradePromptManager {
 
-	private const TIER_OPTION      = 'ameverywhere_user_tier';
-	private const DISMISSED_META   = 'ameverywhere_upgrade_banner_dismissed';
-	private const UPGRADE_BASE_URL = 'https://ameverywhere.com/upgrade';
-
-	private const PRO_FEATURES = array(
-		'writing_assistant'     => array(
-			'name' => 'AI Writing Assistant',
-			'tier' => 'pro',
-		),
-		'content_gap'           => array(
-			'name' => 'Content Gap Analysis',
-			'tier' => 'pro',
-		),
-		'rank_tracker'          => array(
-			'name' => 'Keyword Rank Tracker',
-			'tier' => 'pro',
-		),
-		'agency_workspace'      => array(
-			'name' => 'Multi-Brand Workspaces',
-			'tier' => 'enterprise',
-		),
-		'schema_aggregation'    => array(
-			'name' => 'Schema Competitor Import',
-			'tier' => 'pro',
-		),
-		'ai_visibility_tracker' => array(
-			'name' => 'AI Visibility Tracker',
-			'tier' => 'enterprise',
-		),
-		'gsc_integration'       => array(
-			'name' => 'Google Search Console',
-			'tier' => 'pro',
-		),
-		'technical_audit'       => array(
-			'name' => 'Full Technical SEO Audit',
-			'tier' => 'pro',
-		),
-		'client_reports'        => array(
-			'name' => 'Client Reporting Portal',
-			'tier' => 'enterprise',
-		),
-		'bulk_csv_redirects'    => array(
-			'name' => 'Bulk CSV Redirects',
-			'tier' => 'pro',
-		),
-	);
+	private const DISMISSED_META = 'holvek_upgrade_banner_dismissed';
 
 	public function boot(): void {
 		add_action( 'admin_notices', array( $this, 'showUpgradeBannerNotice' ) );
 		add_action( 'rest_api_init', array( $this, 'registerRoutes' ) );
-		add_action( 'wp_ajax_ameverywhere_dismiss_upgrade_banner', array( $this, 'handleDismissAjax' ) );
+		add_action( 'wp_ajax_holvek_dismiss_upgrade_banner', array( $this, 'handleDismissAjax' ) );
 	}
 
-	// ── Admin banner ──────────────────────────────────────────────────────────
-
+	/**
+	 * The old notice told every site to upgrade for Search Console, the rank
+	 * tracker, and the technical audit. Those features already run here.
+	 */
 	public function showUpgradeBannerNotice(): void {
-		$tier = get_option( self::TIER_OPTION, 'free' );
-		if ( $tier !== 'free' ) {
-			return;
-		}
-
-		$userId    = get_current_user_id();
-		$dismissed = (bool) get_user_meta( $userId, self::DISMISSED_META, true );
-		if ( $dismissed ) {
-			return;
-		}
-
-		$screen = get_current_screen();
-		if ( ! $screen || strpos( $screen->id, 'ameverywhere' ) === false ) {
-			return;
-		}
-
-		$nonce      = wp_create_nonce( 'ameverywhere_dismiss_banner' );
-		$upgradeUrl = $this->getUpgradeUrl( 'dashboard_banner' );
-
-		echo '<div class="notice notice-info is-dismissible" id="ameverywhere-upgrade-banner" style="border-left-color:#4f46e5;">';
-		echo '<p><strong>🚀 Unlock AmEveryWhere Pro</strong> — AI Writing Assistant, Rank Tracker, GSC Integration, and more. ';
-		echo '<a href="' . esc_url( $upgradeUrl ) . '" target="_blank" style="font-weight:600;">Upgrade now →</a></p>';
-		echo '</div>';
-
-		echo '<script>
-        document.addEventListener("DOMContentLoaded", function() {
-            var banner = document.getElementById("ameverywhere-upgrade-banner");
-            if (!banner) return;
-            banner.addEventListener("click", function(e) {
-                if (e.target.classList.contains("notice-dismiss")) {
-                    fetch(ajaxurl, {
-                        method: "POST",
-                        headers: {"Content-Type": "application/x-www-form-urlencoded"},
-                        body: "action=ameverywhere_dismiss_upgrade_banner&_ajax_nonce=' . esc_js( $nonce ) . '"
-                    });
-                }
-            });
-        });
-        </script>';
 	}
 
 	public function handleDismissAjax(): void {
-		check_ajax_referer( 'ameverywhere_dismiss_banner' );
+		check_ajax_referer( 'holvek_dismiss_banner' );
 		update_user_meta( get_current_user_id(), self::DISMISSED_META, true );
 		wp_die();
 	}
@@ -125,8 +42,10 @@ class UpgradePromptManager {
 	public function registerRoutes(): void {
 		$editorCap = fn() => current_user_can( 'edit_posts' );
 
+		( new StandaloneDashboard() )->registerRoutes();
+
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/upgrade/features',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -136,7 +55,7 @@ class UpgradePromptManager {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/upgrade/dismiss-banner',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -146,7 +65,7 @@ class UpgradePromptManager {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/upgrade/check-feature',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -157,16 +76,16 @@ class UpgradePromptManager {
 	}
 
 	public function listFeatures( \WP_REST_Request $request ): \WP_REST_Response {
-		$currentTier = get_option( self::TIER_OPTION, 'free' );
+		$currentTier = \Holvek\WordPress\Core\Api\CloudCredential::cachedTier();
 		$features    = array();
 
-		foreach ( self::PRO_FEATURES as $key => $info ) {
+		foreach ( $this->localFeatures() as $key => $name ) {
 			$features[] = array(
 				'key'           => $key,
-				'name'          => $info['name'],
-				'tier_required' => $info['tier'],
-				'available'     => $this->isFeatureAvailable( $key ),
-				'upgrade_url'   => $this->getUpgradeUrl( $key ),
+				'name'          => $name,
+				'tier_required' => 'free',
+				'available'     => true,
+				'upgrade_url'   => '',
 			);
 		}
 
@@ -183,49 +102,48 @@ class UpgradePromptManager {
 		return rest_ensure_response( array( 'success' => true ) );
 	}
 
-	public function checkFeature( \WP_REST_Request $request ): \WP_REST_Response {
+	/**
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function checkFeature( \WP_REST_Request $request ) {
 		$params = $request->get_json_params();
 		$key    = sanitize_text_field( $params['feature_key'] ?? '' );
 
-		if ( ! isset( self::PRO_FEATURES[ $key ] ) ) {
-			return new \WP_Error( 'unknown_feature', 'Unknown feature key.', array( 'status' => 404 ) );
+		if ( ! $this->isFeatureAvailable( $key ) ) {
+			return new \WP_Error( 'unknown_feature', __( 'Unknown feature key.', 'holvek' ), array( 'status' => 404 ) );
 		}
 
 		return rest_ensure_response(
 			array(
 				'feature_key'   => $key,
-				'available'     => $this->isFeatureAvailable( $key ),
-				'tier_required' => self::PRO_FEATURES[ $key ]['tier'],
-				'upgrade_url'   => $this->getUpgradeUrl( $key ),
+				'available'     => true,
+				'tier_required' => 'free',
+				'upgrade_url'   => '',
 			)
 		);
 	}
 
-	// ── Feature gating ────────────────────────────────────────────────────────
-
-	public function isFeatureAvailable( string $featureKey ): bool {
-		$currentTier = get_option( self::TIER_OPTION, 'free' );
-
-		if ( $currentTier === 'enterprise' ) {
-			return true;
-		}
-
-		if ( $currentTier === 'pro' ) {
-			$requiredTier = self::PRO_FEATURES[ $featureKey ]['tier'] ?? 'pro';
-			return $requiredTier !== 'enterprise';
-		}
-
-		return false; // free tier: no Pro features
+	/**
+	 * Features the plugin provides on this site, with or without an account.
+	 *
+	 * @return array<string, string>
+	 */
+	private function localFeatures(): array {
+		return array(
+			'writing_assistant'  => __( 'AI Writing Assistant', 'holvek' ),
+			'content_gap'        => __( 'Content Gap Analysis', 'holvek' ),
+			'rank_tracker'       => __( 'Keyword Rank Tracker', 'holvek' ),
+			'schema_aggregation' => __( 'Schema Competitor Import', 'holvek' ),
+			'gsc_integration'    => __( 'Google Search Console', 'holvek' ),
+			'technical_audit'    => __( 'Full Technical SEO Audit', 'holvek' ),
+			'bulk_csv_redirects' => __( 'Bulk CSV Redirects', 'holvek' ),
+		);
 	}
 
-	public function getUpgradeUrl( string $featureKey ): string {
-		return add_query_arg(
-			array(
-				'utm_source'   => 'plugin',
-				'utm_medium'   => 'feature_lock',
-				'utm_campaign' => $featureKey,
-			),
-			self::UPGRADE_BASE_URL
-		);
+	/**
+	 * A feature is available when this install implements it. The tier option does not hide it.
+	 */
+	public function isFeatureAvailable( string $featureKey ): bool {
+		return array_key_exists( $featureKey, $this->localFeatures() );
 	}
 }

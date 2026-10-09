@@ -1,13 +1,13 @@
 <?php
 
-namespace AmEveryWhere\Modules\Indexing;
+namespace Holvek\WordPress\Modules\Indexing;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use AmEveryWhere\Core\Event\EventManager;
-use AmEveryWhere\Core\Queue\QueueManager;
+use Holvek\WordPress\Core\Event\EventManager;
+use Holvek\WordPress\Core\Queue\QueueManager;
 
 class IndexingModule {
 
@@ -31,13 +31,13 @@ class IndexingModule {
 
 		// IndexNow is off until an administrator explicitly enables it. It is
 		// the only generic publication notification supported by this module.
-		$autoIndex = get_option( 'ameverywhere_auto_index', 'no' );
+		$autoIndex = get_option( 'holvek_auto_index', 'no' );
 		if ( $autoIndex !== 'yes' ) {
 			return; // Skip automatic indexing if disabled in settings
 		}
 
 		// Check if the post is set to noindex
-		$noindex = get_post_meta( $post->ID, '_ameverywhere_noindex', true );
+		$noindex = get_post_meta( $post->ID, '_holvek_noindex', true );
 		if ( $noindex === 'yes' ) {
 			return;
 		}
@@ -50,8 +50,8 @@ class IndexingModule {
 		// Dispatch a bounded background notification without blocking the save
 		// request. Google is considered only for content that meets the API's
 		// narrow JobPosting/BroadcastEvent eligibility rules.
-				$strictMode = get_option( 'ameverywhere_google_indexing_strict_mode', 'no' ) === 'yes';
-		$submitGoogle = $strictMode ? GoogleIndexingApi::isEligiblePost( $post ) : true;
+				$strictMode = get_option( 'holvek_google_indexing_strict_mode', 'no' ) === 'yes';
+		$submitGoogle       = $strictMode ? GoogleIndexingApi::isEligiblePost( $post ) : true;
 
 		$this->queueManager->push(
 			IndexingJob::class,

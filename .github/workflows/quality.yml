@@ -29,6 +29,11 @@ jobs:
       - name: Install PHP dependencies
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
 
+      - name: Validate Composer metadata and dependencies
+        run: |
+          composer validate --no-check-publish --strict
+          composer audit --locked
+
       - name: Install JavaScript dependencies
         run: npm ci
 
@@ -37,6 +42,9 @@ jobs:
 
       - name: Run unit tests
         run: ./vendor/bin/phpunit --testdox
+
+      - name: Enforce WordPress coding standards
+        run: ./vendor/bin/phpcs
 
       - name: Build production assets
         run: npm run build

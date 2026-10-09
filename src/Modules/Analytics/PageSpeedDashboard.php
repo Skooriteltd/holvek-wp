@@ -1,10 +1,12 @@
 <?php
 
-namespace AmEveryWhere\Modules\Analytics;
+namespace Holvek\WordPress\Modules\Analytics;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+
+use Holvek\WordPress\Core\Mode\OperatingMode;
 
 /**
  * PageSpeedDashboard
@@ -15,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class PageSpeedDashboard {
 
 	private const API_BASE    = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed';
-	private const CACHE_GROUP = 'ameverywhere_psi';
+	private const CACHE_GROUP = 'holvek_psi';
 
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'registerRoutes' ) );
@@ -25,7 +27,7 @@ class PageSpeedDashboard {
 		$reportCap = fn() => current_user_can( 'view_seo_reports' ) || current_user_can( 'manage_options' );
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/analytics/pagespeed',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -46,7 +48,7 @@ class PageSpeedDashboard {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/analytics/pagespeed/bulk',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -56,18 +58,24 @@ class PageSpeedDashboard {
 		);
 	}
 
-	public function getPageSpeed( \WP_REST_Request $request ): \WP_REST_Response {
+	public function getPageSpeed( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		$url      = $request->get_param( 'url' );
 		$strategy = in_array( $request->get_param( 'strategy' ), array( 'mobile', 'desktop' ), true )
 			? $request->get_param( 'strategy' ) : 'mobile';
 		$force    = (bool) $request->get_param( 'force' );
 
-		$apiKey = (string) get_option( 'ameverywhere_pagespeed_api_key', '' );
-		if ( empty( $apiKey ) ) {
-			if ( \AmEveryWhere\Core\Api\AmEveryWhereApiGateway::hasActiveLicense() ) {
-				return $this->fetchViaProxy( $url, $strategy );
+		$apiKey = (string) get_option( 'holvek_pagespeed_api_key', '' );
+		if ( $apiKey === '' ) {
+			if ( ! OperatingMode::isCloudConfigured() ) {
+				return OperatingMode::disconnected( __( 'PageSpeed through Holvek', 'holvek' ) );
 			}
-			return new \WP_Error( 'no_api_key', 'Set your Google PageSpeed API key in AmEveryWhere → Settings.', array( 'status' => 400 ) );
+
+			$proxied = $this->fetchViaProxy( $url, $strategy );
+			if ( is_wp_error( $proxied ) ) {
+				return $proxied;
+			}
+
+			return rest_ensure_response( $proxied );
 		}
 
 		$cacheKey = 'psi_' . md5( $url . $strategy );
@@ -87,21 +95,53 @@ class PageSpeedDashboard {
 		return rest_ensure_response( array_merge( $result, array( 'cached' => false ) ) );
 	}
 
-	public function bulkCheck( \WP_REST_Request $request ): \WP_REST_Response {
-		$params   = $request->get_json_params();
-		$urls     = array_map( 'sanitize_url', array_slice( $params['urls'] ?? array(), 0, 10 ) );
-		$strategy = in_array( $params['strategy'] ?? 'mobile', array( 'mobile', 'desktop' ), true ) ? $params['strategy'] : 'mobile';
-		$apiKey   = (string) get_option( 'ameverywhere_pagespeed_api_key', '' );
-
-		if ( empty( $apiKey ) ) {
-			if ( \AmEveryWhere\Core\Api\AmEveryWhereApiGateway::hasActiveLicense() ) {
-				return $this->fetchViaProxy( $url, $strategy );
-			}
-			return new \WP_Error( 'no_api_key', 'Set your Google PageSpeed API key.', array( 'status' => 400 ) );
+	public function bulkCheck( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$params = $request->get_json_params();
+		if ( ! is_array( $params ) ) {
+			$params = array();
 		}
 
-		if ( empty( $urls ) ) {
-			return new \WP_Error( 'missing_urls', 'urls array is required.', array( 'status' => 400 ) );
+		$rawUrls = $params['urls'] ?? array();
+		if ( ! is_array( $rawUrls ) ) {
+			$rawUrls = array();
+		}
+
+		$urls = array();
+		foreach ( array_slice( $rawUrls, 0, 10 ) as $rawUrl ) {
+			if ( ! is_string( $rawUrl ) || $rawUrl === '' ) {
+				continue;
+			}
+			$urls[] = esc_url_raw( $rawUrl );
+		}
+
+		$requested = isset( $params['strategy'] ) && is_string( $params['strategy'] ) ? $params['strategy'] : 'mobile';
+		$strategy  = in_array( $requested, array( 'mobile', 'desktop' ), true ) ? $requested : 'mobile';
+		$apiKey    = (string) get_option( 'holvek_pagespeed_api_key', '' );
+
+		if ( $apiKey === '' ) {
+			if ( ! OperatingMode::isCloudConfigured() ) {
+				return OperatingMode::disconnected( __( 'PageSpeed through Holvek', 'holvek' ) );
+			}
+
+			if ( $urls === array() ) {
+				return new \WP_Error( 'missing_urls', __( 'Add at least one URL to check.', 'holvek' ), array( 'status' => 400 ) );
+			}
+
+			$proxied = array();
+			foreach ( $urls as $url ) {
+				$result = $this->fetchViaProxy( $url, $strategy );
+				if ( is_wp_error( $result ) ) {
+					$proxied[ $url ] = array( 'error' => $result->get_error_message() );
+					continue;
+				}
+				$proxied[ $url ] = $result;
+			}
+
+			return rest_ensure_response( array( 'results' => $proxied ) );
+		}
+
+		if ( $urls === array() ) {
+			return new \WP_Error( 'missing_urls', __( 'Add at least one URL to check.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		$results = array();
@@ -127,7 +167,7 @@ class PageSpeedDashboard {
 	private function fetchPageSpeed( string $url, string $strategy, string $apiKey ): array|\WP_Error {
 		$endpoint = add_query_arg(
 			array(
-				'url'      => urlencode( $url ),
+				'url'      => rawurlencode( $url ),
 				'strategy' => $strategy,
 				'key'      => $apiKey,
 				'category' => array( 'performance', 'accessibility', 'seo', 'best-practices' ),
@@ -196,10 +236,13 @@ class PageSpeedDashboard {
 		return array_slice( $opps, 0, 10 );
 	}
 	private function fetchViaProxy( string $url, string $strategy ): array|\WP_Error {
-		$result = \AmEveryWhere\Core\Api\AmEveryWhereApiGateway::proxyRequest( 'pagespeed', array(
-			'url'      => $url,
-			'strategy' => $strategy
-		));
+		$result = \Holvek\WordPress\Core\Api\HolvekApiGateway::proxyRequest(
+			'pagespeed',
+			array(
+				'url'      => $url,
+				'strategy' => $strategy,
+			)
+		);
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}

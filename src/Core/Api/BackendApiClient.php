@@ -1,39 +1,58 @@
 <?php
 
-namespace AmEveryWhere\Core\Api;
+namespace Holvek\WordPress\Core\Api;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use AmEveryWhere\Core\Security\KeyVault;
+use Holvek\WordPress\Core\Mode\OperatingMode;
+use Holvek\WordPress\Core\Security\KeyVault;
 
 /**
  * BackendApiClient
  *
- * Central HTTP client connecting the AmEveryWhere WordPress plugin (Distribution &
- * Data-Collection Layer) to the AmEveryWhere Backend API.
+ * Central HTTP client connecting the Holvek WordPress plugin (Distribution &
+ * Data-Collection Layer) to the Holvek Backend API.
  * Offloads heavy computational workloads (AI generation, full-site auditing,
  * content gap analysis, keyword cannibalization, and rank tracking).
  */
 class BackendApiClient {
 
-	private const DEFAULT_API_URL = 'https://api.ameverywhere.com/v1';
+	private const DEFAULT_API_URL = 'https://api.holvek.com/v1';
 	private const TIMEOUT         = 30;
 
 	/**
-	 * Get the configured Backend API base URL.
+	 * Holvek API base URL.
+	 *
+	 * The host is https://api.holvek.com. The settings screen cannot replace it.
+	 * Code may override the base URL with the holvek_backend_api_url filter.
 	 */
 	public function getApiUrl(): string {
-		$url = get_option( 'ameverywhere_backend_api_url', self::DEFAULT_API_URL );
-		return untrailingslashit( ! empty( $url ) ? $url : self::DEFAULT_API_URL );
+		$filtered = apply_filters( 'holvek_backend_api_url', self::DEFAULT_API_URL );
+		if ( ! is_string( $filtered ) || ! $this->isHttpsBaseUrl( $filtered ) ) {
+			return untrailingslashit( self::DEFAULT_API_URL );
+		}
+
+		return untrailingslashit( $filtered );
+	}
+
+	private function isHttpsBaseUrl( string $url ): bool {
+		$parts = wp_parse_url( trim( $url ) );
+		if ( ! is_array( $parts ) || isset( $parts['user'] ) || isset( $parts['pass'] ) || isset( $parts['query'] ) || isset( $parts['fragment'] ) ) {
+			return false;
+		}
+
+		$scheme = strtolower( (string) ( $parts['scheme'] ?? '' ) );
+		$host   = strtolower( (string) ( $parts['host'] ?? '' ) );
+		return 'https' === $scheme && '' !== $host;
 	}
 
 	/**
-	 * Get the decrypted API key for AmEveryWhere backend.
+	 * Get the decrypted API key for Holvek backend.
 	 */
 	public function getApiKey(): string {
-		$encryptedKey = get_option( 'ameverywhere_api_key', '' );
+		$encryptedKey = get_option( 'holvek_api_key', '' );
 
 		if ( empty( $encryptedKey ) ) {
 			return '';
@@ -43,29 +62,37 @@ class BackendApiClient {
 	}
 
 	/**
-	 * Determine if the remote backend API is configured.
+	 * Whether this site has a stored Holvek credential that has not been revoked.
 	 */
 	public function isConfigured(): bool {
-		return ! empty( $this->getApiKey() );
+		return OperatingMode::isCloudConfigured();
 	}
 
 	/**
-	 * Test connection to the AmEveryWhere Backend API.
+	 * Test connection to the Holvek Backend API.
 	 */
 	public function testConnection(): array {
 		if ( ! $this->isConfigured() ) {
 			return array(
 				'success' => false,
-				'message' => __( 'No AmEveryWhere API key configured. Operating in local / BYOK fallback mode.', 'ameverywhere' ),
+				'message' => __( 'No Holvek API key configured. Operating in local / BYOK fallback mode.', 'holvek' ),
 				'mode'    => 'fallback',
 			);
 		}
 
 		$result = $this->get( '/health' );
+		if ( is_wp_error( $result ) ) {
+			return array(
+				'success' => false,
+				'message' => $result->get_error_message(),
+				'mode'    => 'fallback',
+			);
+		}
+
 		if ( ! empty( $result['success'] ) ) {
 			return array(
 				'success' => true,
-				'message' => __( 'Successfully connected to AmEveryWhere Backend API.', 'ameverywhere' ),
+				'message' => __( 'Successfully connected to Holvek Backend API.', 'holvek' ),
 				'mode'    => 'cloud',
 				'data'    => $result['data'] ?? array(),
 			);
@@ -73,7 +100,7 @@ class BackendApiClient {
 
 		return array(
 			'success' => false,
-			'message' => $result['message'] ?? __( 'Failed to connect to AmEveryWhere Backend API.', 'ameverywhere' ),
+			'message' => $result['message'] ?? __( 'Failed to connect to Holvek Backend API.', 'holvek' ),
 			'mode'    => 'fallback',
 		);
 	}
@@ -81,19 +108,19 @@ class BackendApiClient {
 	/**
 	 * Send a POST request to the Backend API.
 	 */
-	public function post( string $endpoint, array $payload = array() ): array {
-		$url    = $this->getApiUrl() . '/' . ltrim( $endpoint, '/' );
-		$apiKey = $this->getApiKey();
-
-		$headers = array(
-			'Content-Type' => 'application/json',
-			'Accept'       => 'application/json',
-			'User-Agent'   => 'AmEveryWhere-WP/' . ( defined( 'AMEVERYWHERE_VERSION' ) ? AMEVERYWHERE_VERSION : '1.0.0' ),
-		);
-
-		if ( ! empty( $apiKey ) ) {
-			$headers['Authorization'] = 'Bearer ' . $apiKey;
+	public function post( string $endpoint, array $payload = array() ): array|\WP_Error {
+		$blocked = $this->cloudRequired();
+		if ( is_wp_error( $blocked ) ) {
+			return $blocked;
 		}
+
+		$url     = $this->getApiUrl() . '/' . ltrim( $endpoint, '/' );
+		$headers = array(
+			'Content-Type'  => 'application/json',
+			'Accept'        => 'application/json',
+			'User-Agent'    => 'Holvek-WP/' . ( defined( 'HOLVEK_VERSION' ) ? HOLVEK_VERSION : '1.0.0' ),
+			'Authorization' => 'Bearer ' . OperatingMode::credential(),
+		);
 
 		// Include client origin metadata for license/rate-limit verification
 		$payload['site_url'] = get_site_url();
@@ -113,22 +140,22 @@ class BackendApiClient {
 	/**
 	 * Send a GET request to the Backend API.
 	 */
-	public function get( string $endpoint, array $params = array() ): array {
+	public function get( string $endpoint, array $params = array() ): array|\WP_Error {
+		$blocked = $this->cloudRequired();
+		if ( is_wp_error( $blocked ) ) {
+			return $blocked;
+		}
+
 		$url = $this->getApiUrl() . '/' . ltrim( $endpoint, '/' );
 		if ( ! empty( $params ) ) {
 			$url = add_query_arg( $params, $url );
 		}
 
-		$apiKey = $this->getApiKey();
-
 		$headers = array(
-			'Accept'     => 'application/json',
-			'User-Agent' => 'AmEveryWhere-WP/' . ( defined( 'AMEVERYWHERE_VERSION' ) ? AMEVERYWHERE_VERSION : '1.0.0' ),
+			'Accept'        => 'application/json',
+			'User-Agent'    => 'Holvek-WP/' . ( defined( 'HOLVEK_VERSION' ) ? HOLVEK_VERSION : '1.0.0' ),
+			'Authorization' => 'Bearer ' . OperatingMode::credential(),
 		);
-
-		if ( ! empty( $apiKey ) ) {
-			$headers['Authorization'] = 'Bearer ' . $apiKey;
-		}
 
 		$response = wp_safe_remote_get(
 			$url,
@@ -144,13 +171,9 @@ class BackendApiClient {
 	/**
 	 * Offload AI Generation request to Backend API.
 	 */
-	public function generateAi( array $payload ): array {
+	public function generateAi( array $payload ): array|\WP_Error {
 		if ( ! $this->isConfigured() ) {
-			return array(
-				'success'  => false,
-				'fallback' => true,
-				'message'  => __( 'AmEveryWhere Backend API key is not set; falling back to BYOK provider.', 'ameverywhere' ),
-			);
+			return OperatingMode::disconnected( __( 'Cloud AI generation', 'holvek' ) );
 		}
 
 		return $this->post( '/ai/generate', $payload );
@@ -159,13 +182,9 @@ class BackendApiClient {
 	/**
 	 * Offload Content Gap Analysis to Backend API.
 	 */
-	public function analyzeContentGap( string $keyword, array $existingTopics ): array {
+	public function analyzeContentGap( string $keyword, array $existingTopics ): array|\WP_Error {
 		if ( ! $this->isConfigured() ) {
-			return array(
-				'success'  => false,
-				'fallback' => true,
-				'message'  => __( 'Backend API key not configured; falling back to local processing.', 'ameverywhere' ),
-			);
+			return OperatingMode::disconnected( __( 'Cloud content-gap analysis', 'holvek' ) );
 		}
 
 		return $this->post(
@@ -180,13 +199,9 @@ class BackendApiClient {
 	/**
 	 * Offload Keyword Cannibalization computation to Backend API.
 	 */
-	public function analyzeCannibalization( array $postKeywordMap ): array {
+	public function analyzeCannibalization( array $postKeywordMap ): array|\WP_Error {
 		if ( ! $this->isConfigured() ) {
-			return array(
-				'success'  => false,
-				'fallback' => true,
-				'message'  => __( 'Backend API key not configured; falling back to local matrix processing.', 'ameverywhere' ),
-			);
+			return OperatingMode::disconnected( __( 'Cloud cannibalization analysis', 'holvek' ) );
 		}
 
 		return $this->post(
@@ -200,13 +215,9 @@ class BackendApiClient {
 	/**
 	 * Offload Technical SEO Site Audit to Backend API.
 	 */
-	public function dispatchTechnicalAudit( array $siteMetadata ): array {
+	public function dispatchTechnicalAudit( array $siteMetadata ): array|\WP_Error {
 		if ( ! $this->isConfigured() ) {
-			return array(
-				'success'  => false,
-				'fallback' => true,
-				'message'  => __( 'Backend API key not configured; running audit locally via WP-Cron.', 'ameverywhere' ),
-			);
+			return OperatingMode::disconnected( __( 'Cloud technical audit', 'holvek' ) );
 		}
 
 		return $this->post(
@@ -215,6 +226,42 @@ class BackendApiClient {
 				'site' => $siteMetadata,
 			)
 		);
+	}
+
+	/**
+	 * Rank tracking stays on this site until a cloud rank API exists.
+	 *
+	 * A site that is not connected gets the shared not-connected error and
+	 * this method does not call api.holvek.com.
+	 *
+	 * @param array<int, string> $keywords
+	 */
+	public function trackRanks( array $keywords ): \WP_Error {
+		$keywords = array_values( array_filter( $keywords, 'is_string' ) );
+		if ( ! $this->isConfigured() ) {
+			return OperatingMode::disconnected( __( 'Cloud rank tracking', 'holvek' ) );
+		}
+
+		if ( $keywords === array() ) {
+			return new \WP_Error( 'no_keywords', __( 'No keywords to check.', 'holvek' ), array( 'status' => 400 ) );
+		}
+
+		return new \WP_Error(
+			'holvek_rank_local',
+			__( 'Add a SerpApi key in Holvek settings to check rankings on this site.', 'holvek' ),
+			array( 'status' => 400 )
+		);
+	}
+
+	/**
+	 * Stop a Holvek HTTP call when the site is not connected.
+	 */
+	private function cloudRequired(): ?\WP_Error {
+		if ( $this->isConfigured() ) {
+			return null;
+		}
+
+		return OperatingMode::disconnected( __( 'the Holvek cloud', 'holvek' ) );
 	}
 
 	/**
@@ -239,7 +286,7 @@ class BackendApiClient {
 			);
 		}
 
-		$errorMessage = $data['message'] ?? $data['error'] ?? sprintf( /* translators: %d: HTTP status code */ __( 'API returned error code %d', 'ameverywhere' ), $code );
+		$errorMessage = $data['message'] ?? $data['error'] ?? sprintf( /* translators: %d: HTTP status code */ __( 'API returned error code %d', 'holvek' ), $code );
 		return array(
 			'success' => false,
 			'message' => $errorMessage,

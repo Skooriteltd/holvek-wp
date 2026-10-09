@@ -1,20 +1,22 @@
 import { useState, useEffect } from '@wordpress/element';
+import { __, sprintf } from '@wordpress/i18n';
 import { Button, Notice, Spinner, TextControl } from '@wordpress/components';
 
 const SITE_TYPES = [
-    { id: 'blog', label: 'Blog / Personal', icon: '✍️', desc: 'Content-focused site with regular posts' },
-    { id: 'news', label: 'News / Media', icon: '📰', desc: 'High-frequency publishing with timely content' },
-    { id: 'business', label: 'Business / Agency', icon: '🏢', desc: 'Company website with pages and services' },
-    { id: 'ecommerce', label: 'eCommerce', icon: '🛒', desc: 'Online store with product pages' },
+    { id: 'blog', label: __('Blog / Personal', 'holvek'), icon: '✍️', desc: __('Content-focused site with regular posts', 'holvek') },
+    { id: 'news', label: __('News / Media', 'holvek'), icon: '📰', desc: __('High-frequency publishing with timely content', 'holvek') },
+    { id: 'business', label: __('Business / Agency', 'holvek'), icon: '🏢', desc: __('Company website with pages and services', 'holvek') },
+    { id: 'ecommerce', label: __('eCommerce', 'holvek'), icon: '🛒', desc: __('Online store with product pages', 'holvek') },
 ];
 
 const SetupWizard = ({ onComplete }) => {
-    const config = window.amEveryWhereAdminConfig || {};
+    const config = window.holvekAdminConfig || {};
     const [step, setStep] = useState(0); // 0 = loading, 1 = configure, 2 = done
     const [autoData, setAutoData] = useState(null);
     const [siteType, setSiteType] = useState('blog');
     const [social, setSocial] = useState({ facebook: '', twitter: '', instagram: '', linkedin: '', youtube: '' });
     const [migrationResults, setMigrationResults] = useState({});
+    const [migrationPreview, setMigrationPreview] = useState({});
     const [isMigrating, setIsMigrating] = useState({});
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState(null);
@@ -36,35 +38,43 @@ const SetupWizard = ({ onComplete }) => {
         });
     }, []);
 
-    const runMigration = async (pluginId, pluginName) => {
+    const runMigration = async (pluginId, confirm) => {
         setIsMigrating(prev => ({ ...prev, [pluginId]: true }));
         try {
             const response = await fetch(`${config.apiUrl}/migration/run`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': config.nonce },
-                body: JSON.stringify({ plugin_id: pluginId })
+                body: JSON.stringify({ plugin_id: pluginId, confirm: !!confirm })
             });
             const result = await response.json();
-            setMigrationResults(prev => ({ ...prev, [pluginId]: result }));
+            if (!confirm) {
+                setMigrationPreview(prev => ({ ...prev, [pluginId]: result }));
+            } else {
+                setMigrationResults(prev => ({ ...prev, [pluginId]: result }));
+            }
         } catch (e) {
-            setMigrationResults(prev => ({ ...prev, [pluginId]: { success: false, message: 'Migration failed.' } }));
+            setMigrationResults(prev => ({ ...prev, [pluginId]: { success: false, message: __('Migration failed.', 'holvek') } }));
         } finally {
             setIsMigrating(prev => ({ ...prev, [pluginId]: false }));
         }
     };
 
-    const finishSetup = async () => {
+    const finishSetup = async (skip) => {
         setIsSaving(true);
         try {
             await fetch(`${config.apiUrl}/setup/complete`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': config.nonce },
-                body: JSON.stringify({ site_type: siteType, social })
+                body: JSON.stringify(skip ? { skip: true } : { site_type: siteType, social })
             });
+            if (skip) {
+                onComplete();
+                return;
+            }
             setStep(2);
             setTimeout(() => onComplete(), 2000);
         } catch (e) {
-            setError('Failed to save. Please try again.');
+            setError(__('Failed to save. Please try again.', 'holvek'));
         } finally {
             setIsSaving(false);
         }
@@ -77,7 +87,7 @@ const SetupWizard = ({ onComplete }) => {
                 <div style={styles.card}>
                     <div style={{ textAlign: 'center', padding: '48px 0' }}>
                         <Spinner />
-                        <p style={{ marginTop: '16px', color: '#64748b' }}>Analyzing your site...</p>
+                        <p style={{ marginTop: '16px', color: '#64748b' }} role="status">{__('Analyzing your site...', 'holvek')}</p>
                     </div>
                 </div>
             </div>
@@ -90,9 +100,9 @@ const SetupWizard = ({ onComplete }) => {
             <div style={styles.container}>
                 <div style={styles.card}>
                     <div style={{ textAlign: 'center', padding: '48px 0' }}>
-                        <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎉</div>
-                        <h2 style={{ margin: '0 0 8px', fontSize: '22px', color: '#0f172a' }}>You're all set!</h2>
-                        <p style={{ margin: 0, color: '#64748b' }}>AmEveryWhere is fully configured and optimizing your site.</p>
+                        <div style={{ fontSize: '48px', marginBottom: '16px' }} aria-hidden="true">🎉</div>
+                        <h2 style={{ margin: '0 0 8px', fontSize: '22px', color: '#0f172a' }}>{__('You are all set.', 'holvek')}</h2>
+                        <p style={{ margin: 0, color: '#64748b' }}>{__('Holvek is using the choices you saved.', 'holvek')}</p>
                     </div>
                 </div>
             </div>
@@ -108,10 +118,10 @@ const SetupWizard = ({ onComplete }) => {
             <div style={styles.card}>
                 {/* Header */}
                 <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-                    <div style={{ fontSize: '36px', marginBottom: '8px' }}>🚀</div>
-                    <h2 style={{ margin: '0 0 4px', fontSize: '22px', color: '#0f172a' }}>Welcome to AmEveryWhere</h2>
+                    <div style={{ fontSize: '36px', marginBottom: '8px' }} aria-hidden="true">🚀</div>
+                    <h2 style={{ margin: '0 0 4px', fontSize: '22px', color: '#0f172a' }}>{__('Welcome to Holvek', 'holvek')}</h2>
                     <p style={{ margin: 0, color: '#64748b', fontSize: '14px' }}>
-                        Everything is already working. Just confirm a few details.
+                        {__('Everything is already working. Just confirm a few details.', 'holvek')}
                     </p>
                 </div>
 
@@ -123,7 +133,7 @@ const SetupWizard = ({ onComplete }) => {
 
                 {/* Section 1: Site Type */}
                 <div style={styles.section}>
-                    <h3 style={styles.sectionTitle}>What type of site is this?</h3>
+                    <h3 style={styles.sectionTitle}>{__('What type of site is this?', 'holvek')}</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                         {SITE_TYPES.map(type => (
                             <button
@@ -135,7 +145,7 @@ const SetupWizard = ({ onComplete }) => {
                                     background: siteType === type.id ? '#eff6ff' : '#fff',
                                 }}
                             >
-                                <span style={{ fontSize: '20px' }}>{type.icon}</span>
+                                <span style={{ fontSize: '20px' }} aria-hidden="true">{type.icon}</span>
                                 <div>
                                     <div style={{ fontWeight: 600, fontSize: '13px', color: '#0f172a' }}>{type.label}</div>
                                     <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>{type.desc}</div>
@@ -148,34 +158,49 @@ const SetupWizard = ({ onComplete }) => {
                 {/* Section 2: Migration (only if plugins detected) */}
                 {detectedPlugins.length > 0 && (
                     <div style={styles.section}>
-                        <h3 style={styles.sectionTitle}>Import existing SEO data</h3>
+                        <h3 style={styles.sectionTitle}>{__('Import existing SEO data', 'holvek')}</h3>
                         <p style={{ fontSize: '13px', color: '#64748b', margin: '0 0 12px' }}>
-                            We detected SEO data from other plugins. Import with one click — your existing data won't be overwritten.
+                            {__('We detected SEO data from other plugins. Preview the counts first. Existing Holvek fields are not overwritten. Deactivate the other plugin after import so both plugins do not print titles and schema.', 'holvek')}
                         </p>
                         {detectedPlugins.map(plugin => (
                             <div key={plugin.id} style={styles.migrationRow}>
                                 <div>
                                     <strong style={{ fontSize: '14px', color: '#0f172a' }}>{plugin.name}</strong>
                                     <span style={{ fontSize: '12px', color: '#64748b', marginLeft: '8px' }}>
-                                        {plugin.posts} posts with data
+                                        {sprintf(
+                                            /* translators: %d: number of posts with imported SEO data. */
+                                            __('%d posts with data', 'holvek'),
+                                            plugin.posts
+                                        )}
                                     </span>
                                 </div>
                                 {migrationResults[plugin.id] ? (
                                     <span style={{
                                         fontSize: '12px', fontWeight: 500,
-                                        color: migrationResults[plugin.id].success ? '#16a34a' : '#dc2626'
+                                        color: migrationResults[plugin.id].success ? '#166534' : '#991b1b'
                                     }}>
-                                        {migrationResults[plugin.id].success ? '✓ ' : '✗ '}
                                         {migrationResults[plugin.id].message}
                                     </span>
+                                ) : migrationPreview[plugin.id] ? (
+                                    <div>
+                                        <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#0f172a' }}>{migrationPreview[plugin.id].message}</p>
+                                        <Button
+                                            isPrimary
+                                            isSmall
+                                            isBusy={isMigrating[plugin.id]}
+                                            onClick={() => runMigration(plugin.id, true)}
+                                        >
+                                            {isMigrating[plugin.id] ? __('Importing...', 'holvek') : __('Confirm import', 'holvek')}
+                                        </Button>
+                                    </div>
                                 ) : (
                                     <Button
                                         isSecondary
                                         isSmall
                                         isBusy={isMigrating[plugin.id]}
-                                        onClick={() => runMigration(plugin.id, plugin.name)}
+                                        onClick={() => runMigration(plugin.id, false)}
                                     >
-                                        {isMigrating[plugin.id] ? 'Importing...' : 'Import'}
+                                        {isMigrating[plugin.id] ? __('Checking...', 'holvek') : __('Preview import', 'holvek')}
                                     </Button>
                                 )}
                             </div>
@@ -186,24 +211,27 @@ const SetupWizard = ({ onComplete }) => {
                 {/* Section 3: Social (collapsed by default, pre-filled) */}
                 <details style={styles.section}>
                     <summary style={{ ...styles.sectionTitle, cursor: 'pointer', userSelect: 'none' }}>
-                        Social Profiles {hasSocialData && <span style={{ fontSize: '12px', color: '#16a34a', fontWeight: 400 }}>(auto-detected)</span>}
+                        {__('Social profiles', 'holvek')} {hasSocialData && <span style={{ fontSize: '12px', color: '#166534', fontWeight: 400 }}>{__('Auto-detected', 'holvek')}</span>}
                     </summary>
                     <div style={{ marginTop: '12px' }}>
-                        <TextControl label="Facebook" value={social.facebook} onChange={v => setSocial({ ...social, facebook: v })} placeholder="https://facebook.com/yourpage" />
-                        <TextControl label="Twitter / X" value={social.twitter} onChange={v => setSocial({ ...social, twitter: v })} placeholder="@yourhandle" />
-                        <TextControl label="Instagram" value={social.instagram} onChange={v => setSocial({ ...social, instagram: v })} placeholder="https://instagram.com/yourpage" />
-                        <TextControl label="LinkedIn" value={social.linkedin} onChange={v => setSocial({ ...social, linkedin: v })} placeholder="https://linkedin.com/company/yours" />
-                        <TextControl label="YouTube" value={social.youtube} onChange={v => setSocial({ ...social, youtube: v })} placeholder="https://youtube.com/@yourchannel" />
+                        <TextControl label={__('Facebook', 'holvek')} value={social.facebook} onChange={v => setSocial({ ...social, facebook: v })} placeholder="https://facebook.com/yourpage" />
+                        <TextControl label={__('Twitter / X', 'holvek')} value={social.twitter} onChange={v => setSocial({ ...social, twitter: v })} placeholder="@yourhandle" />
+                        <TextControl label={__('Instagram', 'holvek')} value={social.instagram} onChange={v => setSocial({ ...social, instagram: v })} placeholder="https://instagram.com/yourpage" />
+                        <TextControl label={__('LinkedIn', 'holvek')} value={social.linkedin} onChange={v => setSocial({ ...social, linkedin: v })} placeholder="https://linkedin.com/company/yours" />
+                        <TextControl label={__('YouTube', 'holvek')} value={social.youtube} onChange={v => setSocial({ ...social, youtube: v })} placeholder="https://youtube.com/@yourchannel" />
                     </div>
                 </details>
 
                 {/* Finish Button */}
                 <div style={{ marginTop: '24px', textAlign: 'center' }}>
-                    <Button isPrimary isBusy={isSaving} onClick={finishSetup} style={{ padding: '8px 40px', fontSize: '14px' }}>
-                        {isSaving ? 'Saving...' : 'Finish Setup'}
+                    <Button isPrimary isBusy={isSaving} onClick={() => finishSetup(false)} style={{ padding: '8px 40px', fontSize: '14px' }}>
+                        {isSaving ? __('Saving...', 'holvek') : __('Finish setup', 'holvek')}
                     </Button>
-                    <p style={{ fontSize: '12px', color: '#94a3b8', marginTop: '8px' }}>
-                        You can change any of these later in Settings.
+                    <Button isSecondary onClick={() => finishSetup(true)} style={{ marginLeft: '8px' }}>
+                        {__('Skip setup', 'holvek')}
+                    </Button>
+                    <p style={{ fontSize: '12px', color: '#475569', marginTop: '8px' }}>
+                        {__('You can change any of these later in Settings. Skip leaves the current defaults in place.', 'holvek')}
                     </p>
                 </div>
             </div>

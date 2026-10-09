@@ -1,136 +1,116 @@
-# AmEveryWhere Features
+# Holvek features
 
-AmEveryWhere is a WordPress SEO plugin built to help websites rank well on traditional search engines like Google and Bing, as well as modern AI search tools.
+Holvek writes SEO titles, meta descriptions, schema, the sitemap, and robots.txt on this WordPress site. A Holvek account is optional.
 
-Below is a complete list of features currently implemented and working in the plugin.
+Technical SEO, structured data, sitemaps, redirects, and indexing tools for WordPress.
 
----
+The screens below are the feature set for this release. The same names are used in `readme.txt` and the admin UI.
 
-## 1. Content & Editor Tools (Gutenberg)
+## Editor
 
-- **On-Page SEO Checklist:** Analyzes your post as you write, checking title length, meta description length, keyword usage, headings, and image alt text.
-- **Readability Checker:** Measures how easy your text is to read using the Flesch-Kincaid scale. Highlights long sentences and excessive passive voice.
-- **Search Result Preview:** Shows an accurate preview of how your page will look in Google search results on both desktop and mobile screens.
-- **Social Media Previews:** Shows how your post will look when shared on Facebook and Twitter/X.
-- **Custom Canonical URLs:** Allows you to set a custom canonical URL to prevent duplicate content issues.
-- **Robots Meta Controls:** Set individual pages to `noindex`, `nofollow`, `noarchive`, `nosnippet`, or `noimageindex` directly from the editor sidebar.
-- **FAQ Schema Builder:** Add questions and answers directly in the sidebar to automatically create structured FAQ schema for rich search results.
-- **AI Writing Assistant:** Suggests SEO titles and meta descriptions using your connected AI key (OpenAI, Anthropic, Ollama, or the AmEveryWhere remote API).
-- **Internal Link Suggestions:** Suggests relevant articles on your site that you can link to from the current post.
-- **Cornerstone Content:** Flag your most important articles as cornerstone content. The plugin notifies you if these articles have not been updated in over 180 days.
+The post editor includes:
 
----
+- SEO titles and meta descriptions
+- Readability
+- A search-result preview
+- Social metadata for Facebook, X, LinkedIn, and Pinterest
+- Canonical URLs and robots meta
+- FAQ schema
+- Internal link suggestions
+- A notice when cornerstone content has not been updated for 180 days
+- PageSpeed for the post you are editing
 
-## 2. Structured Data & Schema Markup
+The writing assistant uses an OpenAI, Anthropic, or Ollama key saved on this site. A remote Ollama host receives the text you submit.
 
-AmEveryWhere automatically adds valid Schema.org JSON-LD code to your pages so search engines can better understand your content.
+## Schema Markup
 
-Supported schema types include:
-- **Article & Blog Post:** Includes author, publication date, last modified date, and featured image.
-- **News Article:** Formatted specifically for Google News standards.
-- **WebPage & WebSite:** Includes site search box markup.
-- **Breadcrumb Navigation:** Displays clear breadcrumb trails in search results.
-- **FAQ Page:** Displays accordion-style answers in search snippets.
-- **How-To:** Formats step-by-step instructions.
-- **Local Business:** Adds business name, address, phone number, and operating hours.
-- **Recipe:** Formats recipe ingredients, cooking time, and nutrition info.
-- **Event:** Formats event dates, venue, and attendance mode.
-- **Product:** Integrates with WooCommerce to output price, currency, and stock availability.
-- **Custom Schema:** Paste any custom JSON-LD schema directly into a page when you need specialized markup.
+Schema Markup can describe a page as Article, NewsArticle, WebPage, BreadcrumbList, FAQ, HowTo, LocalBusiness, Recipe, Event, Product, VideoObject, Person, or Organization. You can also add one custom JSON-LD node.
 
----
+When WooCommerce is active, product schema can include an aggregate rating if that product has reviews. Structured data does not guarantee a rich result.
 
-## 3. XML & HTML Sitemaps
+## XML Sitemaps and the HTML Sitemap
 
-- **XML Sitemap Index (`/sitemap.xml`):** Generates clean, search-engine-ready sitemaps with automatic monthly chunking for sites with many posts.
-- **Google News Sitemap (`/sitemap-news.xml`):** Automatically creates a news sitemap containing articles published in the last 48 hours, following Google News technical guidelines.
-- **Video Sitemap (`/video-sitemap.xml`):** Finds embedded videos (YouTube, Vimeo, self-hosted MP4) and includes them in a dedicated video sitemap.
-- **Sitemap Controls:** Choose which post types and taxonomies to include or exclude, and exclude specific post IDs.
-- **HTML Sitemap Shortcode:** Use `[ameverywhere_sitemap]` to display a clean, organized site map on any page for your visitors.
+- The sitemap index is `/sitemap.xml`.
+- The news sitemap is `/sitemap-news.xml` and `/news-sitemap.xml`.
+- The video sitemap is `/video-sitemap.xml`.
+- `[holvek_sitemap]` prints an HTML Sitemap.
 
----
+## Technical SEO
 
-## 4. Instant Search Engine Indexing
+The Technical SEO screen includes the Redirects Manager. A redirect can be 301, 302, 307, or 410, including a regular expression, and you can import rules from CSV. The 404 log records missing URLs.
 
-- **IndexNow Integration:** Instantly notifies Bing, Yandex, and Seznam whenever you publish, update, or delete a post.
-- **Google Indexing API:** Optional submission for pages that meet Google's documented JobPosting or eligible livestream requirements; it is disabled by default and does not guarantee indexing.
-- **Indexing Dashboard:** View submission logs, daily quota usage, and response statuses.
+robots.txt starts from the file WordPress already generated. Holvek appends its lines unless an administrator confirms a full replacement.
 
----
+The `.htaccess` editor stays off until an administrator turns it on. It does not run when WordPress file editing is disabled. Nginx does not read `.htaccess`.
 
-## 5. Technical SEO & Server Tools
+## Technical SEO Audit
 
-- **Redirect Manager:** Set up 301 (permanent), 302 (temporary), and 307 redirects with full support for regular expressions (Regex).
-- **404 Error Monitor:** Automatically logs missing pages that visitors or bots try to open. See the URL, hit count, referrer, and turn any 404 into a 301 redirect with one click.
-- **Robots.txt Editor:** View and customize your site's `robots.txt` file directly inside WordPress with live syntax checking.
-- **.htaccess Editor:** Safely edit your Apache `.htaccess` file from the admin area, with automatic backups made before every save.
-- **Favicon & Icon Checker:** Checks that your site has the required icons for browser tabs, mobile bookmarks, and web apps.
+This audit runs on this site. It checks meta descriptions, image alt text, 404s, redirect chains, orphaned pages, noindex directives, the sitemap, robots.txt, the site icon, SSL, schema, duplicate titles, cornerstone staleness, and canonicals. It does not score AI mentions, Google presence, or competitors.
 
----
+The site icon check is part of this audit. Holvek does not include a separate favicon tool.
 
-## 6. AI Crawler Guide (`llms.txt`)
+## Link Health and the Broken Link Checker
 
-- **Dynamic `llms.txt` and `llms-full.txt`:** Generates standard text files at your domain root that guide AI models and web crawlers (like ChatGPT, Claude, and Perplexity) on how to understand and cite your site's content.
-- **Customizable Summary:** Set a concise description of your website, list key pages, and define guidelines for AI scrapers.
+Link Health lists internal links and orphaned pages. The Broken Link Checker scans published content in small batches.
 
----
+## llms.txt
 
-## 7. Link Health & Broken Link Monitoring
+Holvek publishes an llms.txt file on this site. It does not submit the site to ChatGPT, Perplexity, or Claude, and it does not check whether they mention it.
 
-- **Internal Link Index:** Maps all internal links across your site into an organized table to analyze site architecture.
-- **Orphaned Content Finder:** Detects published posts and pages that have zero incoming internal links, helping you find and fix neglected content.
-- **Broken Link Checker:** Scans your published content for broken internal and external links in small batches, showing HTTP error codes and letting you re-check or fix them.
+## Image SEO
 
----
+Image SEO lists images that have no alternative text, can rename new uploads to lowercase hyphenated file names, and can add image schema.
 
-## 8. Analytics & Performance
+## Bulk Meta Editor
 
-- **Google Search Console Integration:** View search clicks, impressions, click-through rates (CTR), and average rankings right in your WordPress dashboard.
-- **Keyword Cannibalization Alert:** Highlights queries where multiple pages on your site compete against each other for the same search term.
-- **Google Analytics 4 (GA4) Reports:** View session trends, top landing pages, and traffic channels without leaving your site.
-- **PageSpeed Insights:** Check mobile and desktop performance scores and Core Web Vitals directly from WordPress, with results cached for 7 days.
-- **Keyword Rank Tracker:** Add target keywords to track their Google ranking position over time via SerpApi, with 7-day, 30-day, and 90-day history charts.
+The Bulk Meta Editor edits SEO titles and meta descriptions for many posts.
 
----
+## cookie notice
 
-## 9. Media & Image SEO
+The cookie notice records a visitor choice. It does not block third-party scripts and is not a consent-management platform. Holvek can also add an AI content disclosure.
 
-- **Image Alt Text Audit:** Identifies all images in your media library that are missing alt text and provides quick links to add them.
-- **Clean Filename Enforcer:** Automatically cleans and renames uploaded media files into lowercase, hyphen-separated filenames for better image search performance.
-- **Image Schema:** Automatically includes image dimensions and metadata in structured data.
+## Roles & Capabilities
 
----
+Roles & Capabilities control who can manage redirects, edit SEO meta, and open SEO screens. An audit log records changes to titles, descriptions, and settings.
 
-## 10. Privacy & Compliance
+## Google Analytics 4, Google Search Console, and IndexNow
 
-- **Cookie Notice:** Built-in first-party notice that records a visitor choice. It does not discover or block third-party scripts and is not a substitute for a consent-management platform.
-- **AI Content Disclosure:** Add clear notices when content is generated or assisted by artificial intelligence.
+Google Analytics 4 and Google Search Console load after you connect them. Search Console can list queries matched by more than one page.
 
----
+IndexNow sends published URLs only after an administrator saves a key and turns notifications on. IndexNow does not guarantee indexing. The Google Indexing API is optional, applies to eligible JobPosting or livestream pages, and does not guarantee indexing.
 
-## 11. User Roles & Team Access
+The Keyword Rank Tracker uses a SerpApi key saved on this site.
 
-- **Granular SEO Permissions:** Control which user roles (Administrator, Editor, Author, Contributor) can manage redirects, edit meta tags, or view SEO reports.
-- **Audit History Log:** Keeps a clear record of every change made to SEO titles, descriptions, and plugin settings, showing which user made each change and when.
+A Bing Webmaster tools verification code can be saved in settings. Holvek does not include a Bing traffic screen.
 
----
+Social posting can send to Facebook, X, LinkedIn, and Pinterest. Instagram and YouTube can be stored as profile URLs. Holvek does not post to Instagram or TikTok.
 
-## 12. WordPress Multisite Support
+## Setup, import, multisite, and headless
 
-- Manage SEO settings and verification codes across all sites in a WordPress Multisite network from one place.
+The setup wizard can store a site type and profile URLs. Titles and the sitemap already work before you finish it.
 
----
+Holvek can import titles, descriptions, and settings from Yoast SEO, Rank Math, and All in One SEO. The import shows how many fields it will copy and does not write until you confirm.
 
-## 13. Headless WordPress REST API
+On a multisite network, a network screen is available. It is not shown on a single site.
 
-- Clean REST endpoints (`/ameverywhere/v1/seo/{post_id}` and `/ameverywhere/v1/seo/global`) to read and write SEO data in headless setups (Next.js, Gatsby, Nuxt).
+The REST API can read public SEO fields for a published post. Writing SEO data requires a user who can edit that post.
 
----
+## Connecting Holvek
 
-## 14. Setup Wizard & Competitor Migration
+A Holvek account is optional. The settings screen cannot change the Holvek API host.
 
-- **Guided Setup:** A simple 3-step setup process to configure site type, social links, and basic defaults in under a minute.
-- **One-Click Migration:** Automatically detects and imports existing titles, descriptions, and settings from:
-  - Yoast SEO
-  - Rank Math
-  - All in One SEO (AIOSEO)
+An administrator can paste a site token or an authorization code. Holvek sends that request only to `https://api.holvek.com`. The base address is `https://api.holvek.com/v1` unless code overrides it with the `holvek_backend_api_url` filter.
+
+A site token is JSON posted to `/auth/site-token` with `grant_type` set to `site_token`, the pasted `site_token`, and `site_url` set to this site's home address. An authorization code is JSON posted to `/auth/token` with `grant_type` set to `authorization_code`, `code`, and the same `site_url`. Holvek does not store the pasted token or code. It stores the returned access token only after `GET /auth/verify` says `active` is true.
+
+Each of these requests waits 10 seconds. Holvek tries once more when the connection fails, or when the response is HTTP 408, 429, or 500 or higher. A rejected credential is not tried again, and nothing is saved.
+
+Checking the saved credential sends `GET /auth/verify`. Rotating it sends `POST /auth/rotate` with the saved credential and `site_url`. The replacement is stored only after it verifies. If that fails, the saved credential stays.
+
+Disconnect sends `POST /auth/revoke`, then deletes the credential stored on this site. If Holvek cannot be reached, the credential is still removed here. Titles, the sitemap, redirects, and 404 logs are kept. The remote token can remain valid until Holvek is reachable.
+
+A page view does not call Holvek. A tier comes from the verification response and expires. The settings screen cannot set it.
+
+## What this release leaves out
+
+It does not score AI mentions, Google presence, or competitors. It does not include a client reporting portal or a multi-brand workspace.

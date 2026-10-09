@@ -61,11 +61,11 @@ $png_id = insert_fixture($png_path, 'image/png');
 $gif_id = insert_fixture($gif_path, 'image/gif');
 $corrupt_id = insert_fixture($corrupt_path, 'image/jpeg'); // Claims JPEG but is corrupt
 
-$compressor = new \AmEveryWhere\Modules\ImageSeo\ImageCompressor();
+$compressor = new \Holvek\WordPress\Modules\ImageSeo\ImageCompressor();
 
 // 2. Test Configuration Constraints
 echo "Testing configuration limits (Acknowledgement)...\n";
-$req = new \WP_REST_Request('PUT', '/ameverywhere/v1/image-seo/compression');
+$req = new \WP_REST_Request('PUT', '/holvek/v1/image-seo/compression');
 $req->set_param('enabled', true);
 $res = $compressor->saveSettings($req);
 if (!is_wp_error($res) && isset($res->get_data()['success'])) {
@@ -81,7 +81,7 @@ if (is_wp_error($res)) {
 
 // 3. Test Bulk Processing
 echo "Testing bulk compression processing...\n";
-$req = new \WP_REST_Request('POST', '/ameverywhere/v1/image-seo/bulk-compress');
+$req = new \WP_REST_Request('POST', '/holvek/v1/image-seo/bulk-compress');
 $req->set_param('batch_size', 10);
 $res = $compressor->bulkCompress($req);
 
@@ -98,27 +98,27 @@ if (empty($data['success'])) {
 echo "Verifying processed states and backups...\n";
 
 // JPEG should be processed and backed up
-$jpeg_status = get_post_meta($jpeg_id, '_ameverywhere_compressed', true);
-$jpeg_backup = get_post_meta($jpeg_id, '_ameverywhere_original_file', true);
+$jpeg_status = get_post_meta($jpeg_id, '_holvek_compressed', true);
+$jpeg_backup = get_post_meta($jpeg_id, '_holvek_original_file', true);
 if ($jpeg_status !== 'yes' || !file_exists($jpeg_backup)) {
     die("ERROR: JPEG was not processed successfully or backup is missing.\n");
 }
 
 // PNG should be processed and backed up
-$png_status = get_post_meta($png_id, '_ameverywhere_compressed', true);
-$png_backup = get_post_meta($png_id, '_ameverywhere_original_file', true);
+$png_status = get_post_meta($png_id, '_holvek_compressed', true);
+$png_backup = get_post_meta($png_id, '_holvek_original_file', true);
 if ($png_status !== 'yes' || !file_exists($png_backup)) {
     die("ERROR: PNG was not processed successfully or backup is missing.\n");
 }
 
 // GIF should be skipped
-$gif_status = get_post_meta($gif_id, '_ameverywhere_compressed', true);
+$gif_status = get_post_meta($gif_id, '_holvek_compressed', true);
 if ($gif_status !== '') {
     die("ERROR: GIF was incorrectly processed ($gif_status).\n");
 }
 
 // Corrupt JPEG should FAIL, backup shouldn't be left around, and original should be intact
-$corrupt_status = get_post_meta($corrupt_id, '_ameverywhere_compressed', true);
+$corrupt_status = get_post_meta($corrupt_id, '_holvek_compressed', true);
 if ($corrupt_status !== 'failed') {
     die("ERROR: Corrupt image did not register as 'failed'. Status: $corrupt_status\n");
 }
@@ -128,7 +128,7 @@ if (file_get_contents($corrupt_path) !== 'This is not an image') {
 
 // 5. Test Restoration
 echo "Testing restoration of original images...\n";
-$req = new \WP_REST_Request('POST', '/ameverywhere/v1/image-seo/restore');
+$req = new \WP_REST_Request('POST', '/holvek/v1/image-seo/restore');
 $req->set_param('attachment_id', $jpeg_id);
 $res = $compressor->restoreAttachment($req);
 if (is_wp_error($res)) {
@@ -139,10 +139,10 @@ if (is_wp_error($res)) {
 if (file_exists($jpeg_backup)) {
     die("ERROR: Backup file was not deleted after restoration.\n");
 }
-if (get_post_meta($jpeg_id, '_ameverywhere_original_file', true)) {
+if (get_post_meta($jpeg_id, '_holvek_original_file', true)) {
     die("ERROR: Backup meta key was not deleted after restoration.\n");
 }
-if (get_post_meta($jpeg_id, '_ameverywhere_compressed', true)) {
+if (get_post_meta($jpeg_id, '_holvek_compressed', true)) {
     die("ERROR: Processed meta key was not deleted after restoration.\n");
 }
 

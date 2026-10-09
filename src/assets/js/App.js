@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from '@wordpress/element';
+import { __ } from '@wordpress/i18n';
 import { Button, TextControl, TextareaControl, Notice, Spinner, ToggleControl } from '@wordpress/components';
 
 import SetupWizard from './components/SetupWizard';
@@ -6,13 +7,51 @@ import GscTrendChart from './components/GscTrendChart';
 import Ga4TrendChart from './components/Ga4TrendChart';
 import Ga4ChannelChart from './components/Ga4ChannelChart';
 
-const App = () => {
-    const amEveryWhereAdminConfig = window.amEveryWhereAdminConfig || {};
-    const shouldShowSetup = window.location.hash === '#setup' || (typeof amEveryWhereAdminConfig !== 'undefined' && amEveryWhereAdminConfig.setupComplete === '0');
-    const [showSetup, setShowSetup] = useState(shouldShowSetup);
-    const [activeTab, setActiveTab] = useState('dashboard');
+function ollamaHostIsLoopback(url) {
+    try {
+        const parsed = new URL(url);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+            return false;
+        }
+        const host = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+        if (host === 'localhost' || host.endsWith('.localhost') || host === '::1') {
+            return true;
+        }
+        if (host.startsWith('::ffff:')) {
+            return ollamaHostIsLoopback(`${parsed.protocol}//${host.slice(7)}`);
+        }
+        const parts = host.split('.');
+        if (parts.length === 4 && parts.every((part) => /^\d+$/.test(part) && Number(part) >= 0 && Number(part) <= 255)) {
+            return Number(parts[0]) === 127;
+        }
+        return false;
+    } catch (error) {
+        return false;
+    }
+}
 
-    // GSC Dashboard
+const App = () => {
+    const holvekAdminConfig = window.holvekAdminConfig || {};
+    const [showSetup, setShowSetup] = useState(window.location.hash === '#setup');
+    const [setupFinished, setSetupFinished] = useState(holvekAdminConfig.setupComplete === '1');
+    const [activeTab, setActiveTab] = useState('dashboard');
+    const [focusIndexing, setFocusIndexing] = useState(false);
+    const [showHolvekNote, setShowHolvekNote] = useState(false);
+    const [connection, setConnection] = useState(null);
+    const [connectionLoading, setConnectionLoading] = useState(false);
+    const [connectionError, setConnectionError] = useState('');
+    const [connectionMessage, setConnectionMessage] = useState('');
+    const [connectionBusy, setConnectionBusy] = useState(false);
+    const [siteToken, setSiteToken] = useState('');
+    const [authorizationCode, setAuthorizationCode] = useState('');
+    const canConnectHolvek = !!(holvekAdminConfig.capabilities && holvekAdminConfig.capabilities.manage_options === true);
+
+    const [standalone, setStandalone] = useState(null);
+    const [standaloneLoading, setStandaloneLoading] = useState(false);
+    const [standaloneError, setStandaloneError] = useState('');
+
+    // GSC Dashboard — loaded only after the user asks for it.
+    const [gscOpen, setGscOpen]         = useState(false);
     const [gscData, setGscData]         = useState(null);
     const [gscLoading, setGscLoading]   = useState(false);
     const [gscError, setGscError]       = useState(null);
@@ -56,6 +95,7 @@ const App = () => {
         openai_key: '',
         anthropic_key: '',
         ollama_url: 'http://localhost:11434',
+        ollama_remote_confirmed: false,
         default_share_image: '',
     });
 
@@ -66,17 +106,18 @@ const App = () => {
         setIsTestingAi(true);
         setAiTestResult(null);
         try {
-            const response = await fetch(`${amEveryWhereAdminConfig.apiUrl}/settings/ai/test-connection`, {
+            const response = await fetch(`${holvekAdminConfig.apiUrl}/settings/ai/test-connection`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-WP-Nonce': amEveryWhereAdminConfig.nonce,
+                    'X-WP-Nonce': holvekAdminConfig.nonce,
                 },
                 body: JSON.stringify({
                     ai_provider: settings.ai_provider,
                     openai_key: settings.openai_key,
                     anthropic_key: settings.anthropic_key,
-                    ollama_url: settings.ollama_url
+                    ollama_url: settings.ollama_url,
+                    ollama_remote_confirmed: Boolean(settings.ollama_remote_confirmed)
                 })
             });
             const data = await response.json();
@@ -111,13 +152,125 @@ const App = () => {
     const [isLoadingSettings, setIsLoadingSettings] = useState(true);
 
     useEffect(() => {
-        // GSC Dashboard — fetch real data
-        if (activeTab === 'dashboard' && !gscData && !gscLoading) {
+        if (activeTab !== 'dashboard' || standalone || standaloneLoading) {
+            return;
+        }
+        setStandaloneLoading(true);
+        setStandaloneError('');
+        fetch(`${holvekAdminConfig.apiUrl}/dashboard/standalone`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } })
+            .then(r => r.json().then(d => ({ ok: r.ok, d })))
+            .then(({ ok, d }) => {
+                if (!ok || d.code) {
+                    setStandaloneError(d.message || __('The local results could not be loaded.', 'holvek'));
+                    return;
+                }
+                if (d.next_step === 'active') {
+                    setSetupFinished(true);
+                }
+                setStandalone(current => (current && current.next_step === 'active' ? current : d));
+            })
+            .catch(() => setStandaloneError(__('The local results could not be loaded.', 'holvek')))
+            .finally(() => setStandaloneLoading(false));
+    }, [activeTab]);
+
+    useEffect(() => {
+        if (!showHolvekNote || !canConnectHolvek) {
+            return;
+        }
+        let cancelled = false;
+        setConnectionLoading(true);
+        setConnectionError('');
+        fetch(`${holvekAdminConfig.apiUrl}/connection`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } })
+            .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+            .then(({ ok, data }) => {
+                if (cancelled) {
+                    return;
+                }
+                if (!ok || data.code) {
+                    setConnectionError(data.message || __('The Holvek connection could not be loaded.', 'holvek'));
+                    return;
+                }
+                setConnection(data);
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setConnectionError(__('The Holvek connection could not be loaded.', 'holvek'));
+                }
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setConnectionLoading(false);
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [showHolvekNote, canConnectHolvek]);
+
+    const postConnection = (path, body) => {
+        setConnectionBusy(true);
+        setConnectionError('');
+        setConnectionMessage('');
+        const options = {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-WP-Nonce': holvekAdminConfig.nonce,
+            },
+        };
+        if (body) {
+            options.body = JSON.stringify(body);
+        }
+        fetch(`${holvekAdminConfig.apiUrl}${path}`, options)
+            .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+            .then(({ ok, data }) => {
+                if (!ok || data.code) {
+                    setConnectionError(data.message || __('Holvek did not accept this credential. Nothing was saved.', 'holvek'));
+                    if (data.code === 'holvek_not_verified') {
+                        setConnection((current) => (current ? { ...current, connected: false, tier: '' } : current));
+                    }
+                    return;
+                }
+                if (data.disconnected) {
+                    setConnection((current) => ({
+                        connected: false,
+                        credential_saved: false,
+                        tier: '',
+                        host: 'https://api.holvek.com',
+                        api_base: current && current.api_base ? current.api_base : '',
+                    }));
+                    setConnectionMessage(data.message || __('The Holvek credential was removed from this site. SEO data was kept.', 'holvek'));
+                    setSiteToken('');
+                    setAuthorizationCode('');
+                    return;
+                }
+                setConnection(data);
+                setConnectionMessage(__('This site is connected to Holvek.', 'holvek'));
+                setSiteToken('');
+                setAuthorizationCode('');
+            })
+            .catch(() => setConnectionError(__('Holvek could not be reached. This site keeps working without an account.', 'holvek')))
+            .finally(() => setConnectionBusy(false));
+    };
+
+    useEffect(() => {
+        if (activeTab !== 'settings' || !focusIndexing || isLoadingSettings) {
+            return;
+        }
+        const node = document.getElementById('holvek-search-engine-notifications');
+        if (node && typeof node.focus === 'function') {
+            node.focus();
+        }
+    }, [activeTab, focusIndexing, isLoadingSettings]);
+
+    useEffect(() => {
+        // Search Console data is optional and stays unloaded until the user opens it.
+        if (activeTab === 'dashboard' && gscOpen && !gscData && !gscLoading) {
             setGscLoading(true); setGscError(null);
-            fetch(`${amEveryWhereAdminConfig.apiUrl}/gsc/dashboard`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } })
+            fetch(`${holvekAdminConfig.apiUrl}/gsc/dashboard`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } })
                 .then(r => r.json())
-                .then(d => { if (d.success) setGscData(d); else setGscError(d.message || 'GSC not connected. Add your Service Account JSON under Settings → Indexing.'); })
-                .catch(() => setGscError('Failed to load GSC data.'))
+                .then(d => { if (d.success) setGscData(d); else setGscError(d.message || __('Google Search Console is not connected. Add the service account JSON under Settings.', 'holvek')); })
+                .catch(() => setGscError(__('Search Console data could not be loaded.', 'holvek')))
                 .finally(() => setGscLoading(false));
         }
 
@@ -125,14 +278,14 @@ const App = () => {
         if (activeTab === 'analytics') {
             if (!ga4Report && !ga4Loading) {
                 setGa4Loading(true); setGa4Error(null);
-                fetch(`${amEveryWhereAdminConfig.apiUrl}/ga4/report`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } })
+                fetch(`${holvekAdminConfig.apiUrl}/ga4/report`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } })
                     .then(r => r.json())
                     .then(d => { if (d.success) setGa4Report(d); else setGa4Error(d.message || 'GA4 not configured.'); })
                     .catch(() => setGa4Error('Failed to load GA4 data.'))
                     .finally(() => setGa4Loading(false));
             }
             if (!ga4Settings.measurement_id && !ga4Settings.credentials_set) {
-                fetch(`${amEveryWhereAdminConfig.apiUrl}/settings/ga4`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } })
+                fetch(`${holvekAdminConfig.apiUrl}/settings/ga4`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } })
                     .then(r => r.json()).then(d => setGa4Settings(prev => ({ ...prev, ...d, credentials: '' })));
             }
         }
@@ -140,13 +293,11 @@ const App = () => {
         // Link Health
         if (activeTab === 'links') {
             if (!orphanData && !orphanLoading) {
-                setOrphanLoading(true);
-                fetch(`${amEveryWhereAdminConfig.apiUrl}/links/orphans`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } })
-                    .then(r => r.json()).then(d => { if (d.success) setOrphanData(d); }).finally(() => setOrphanLoading(false));
+                loadOrphans(1);
             }
             if (!linkStats && !linkStatsLoading) {
                 setLinkStatsLoading(true);
-                fetch(`${amEveryWhereAdminConfig.apiUrl}/links/stats`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } })
+                fetch(`${holvekAdminConfig.apiUrl}/links/stats`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } })
                     .then(r => r.json()).then(d => { if (d.success) setLinkStats(d); }).finally(() => setLinkStatsLoading(false));
             }
         }
@@ -154,23 +305,23 @@ const App = () => {
         if (activeTab === 'settings' && isLoadingSettings) {
             fetchSettings();
         }
-    }, [activeTab]);
+    }, [activeTab, gscOpen]);
 
     // Cannibalization lazy-load only when sub-tab is selected
     useEffect(() => {
-        if (activeTab === 'dashboard' && gscSubTab === 'cannibalization' && !cannData && !cannLoading) {
+        if (activeTab === 'dashboard' && gscOpen && gscSubTab === 'cannibalization' && !cannData && !cannLoading) {
             setCannLoading(true);
-            fetch(`${amEveryWhereAdminConfig.apiUrl}/gsc/cannibalization`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } })
+            fetch(`${holvekAdminConfig.apiUrl}/gsc/cannibalization`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } })
                 .then(r => r.json()).then(d => { if (d.success) setCannData(d); }).finally(() => setCannLoading(false));
         }
-    }, [activeTab, gscSubTab]);
+    }, [activeTab, gscOpen, gscSubTab]);
 
     const saveGa4Settings = useCallback(async () => {
         setGa4Saving(true); setGa4SaveMsg(null);
         try {
-            const res = await fetch(`${amEveryWhereAdminConfig.apiUrl}/settings/ga4`, {
+            const res = await fetch(`${holvekAdminConfig.apiUrl}/settings/ga4`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify(ga4Settings),
             });
             const d = await res.json();
@@ -209,26 +360,21 @@ const App = () => {
     useEffect(() => {
         if (activeTab === 'html_sitemap' && !sitemapCfg && !sitemapLoading) {
             setSitemapLoading(true);
-            fetch(`${amEveryWhereAdminConfig.apiUrl}/html-sitemap`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } })
+            fetch(`${holvekAdminConfig.apiUrl}/html-sitemap`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } })
                 .then(r => r.json()).then(d => setSitemapCfg(d)).finally(() => setSitemapLoading(false));
-        }
-        if (activeTab === 'technical' && !htaccess && !htaccessLoading) {
-            setHtaccessLoading(true);
-            fetch(`${amEveryWhereAdminConfig.apiUrl}/htaccess`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } })
-                .then(r => r.json()).then(d => { setHtaccess(d); if (d.content) setHtaccessContent(d.content); }).finally(() => setHtaccessLoading(false));
         }
     }, [activeTab]);
 
     const loadSitemapPreview = useCallback(() => {
-        fetch(`${amEveryWhereAdminConfig.apiUrl}/html-sitemap/preview`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } })
+        fetch(`${holvekAdminConfig.apiUrl}/html-sitemap/preview`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } })
             .then(r => r.json()).then(d => setSitemapPreview(d));
     }, []);
 
     const saveSitemapCfg = useCallback(async () => {
         setSitemapSaving(true); setSitemapSaveMsg(null);
         try {
-            const res = await fetch(`${amEveryWhereAdminConfig.apiUrl}/html-sitemap`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+            const res = await fetch(`${holvekAdminConfig.apiUrl}/html-sitemap`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify(sitemapCfg),
             });
             const d = await res.json();
@@ -241,27 +387,70 @@ const App = () => {
     const saveHtaccess = useCallback(async () => {
         setHtaccessSaving(true); setHtaccessMsg(null);
         try {
-            const res = await fetch(`${amEveryWhereAdminConfig.apiUrl}/htaccess`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+            const res = await fetch(`${holvekAdminConfig.apiUrl}/htaccess`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify({ content: htaccessContent }),
             });
             const d = await res.json();
-            setHtaccessMsg(d.success ? { type: 'success', text: d.message } : { type: 'error', text: d.message || 'Save failed.' });
-            if (d.success) setHtaccess(prev => ({ ...prev, has_backup: true }));
+            if (!res.ok || !d.success) {
+                setHtaccessMsg({ type: 'error', text: d.message || 'Save failed.' });
+                return;
+            }
+            setHtaccess(d);
+            if (typeof d.content === 'string') setHtaccessContent(d.content);
+            setHtaccessMsg({ type: 'success', text: d.notice || 'The .htaccess file was saved.' });
         } catch (e) { setHtaccessMsg({ type: 'error', text: 'Network error.' }); }
         finally { setHtaccessSaving(false); }
     }, [htaccessContent]);
 
+    const setHtaccessEnabled = useCallback(async (enabled) => {
+        setHtaccessSaving(true); setHtaccessMsg(null);
+        try {
+            const res = await fetch(`${holvekAdminConfig.apiUrl}/htaccess/access`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
+                body: JSON.stringify({ enabled }),
+            });
+            const d = await res.json();
+            if (!res.ok) {
+                setHtaccessMsg({ type: 'error', text: d.message || 'Could not update the editor.' });
+                return;
+            }
+            setHtaccess(d);
+            setHtaccessContent(typeof d.content === 'string' ? d.content : '');
+        } catch (e) { setHtaccessMsg({ type: 'error', text: 'Network error.' }); }
+        finally { setHtaccessSaving(false); }
+    }, []);
+
+    const restoreHtaccessBackup = useCallback(async (filename) => {
+        if (!window.confirm('Replace the current .htaccess file with this backup?')) return;
+        setHtaccessSaving(true); setHtaccessMsg(null);
+        try {
+            const res = await fetch(`${holvekAdminConfig.apiUrl}/htaccess/restore`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
+                body: JSON.stringify({ filename }),
+            });
+            const d = await res.json();
+            if (!res.ok || !d.success) {
+                setHtaccessMsg({ type: 'error', text: d.message || 'Restore failed.' });
+                return;
+            }
+            setHtaccess(d);
+            if (typeof d.content === 'string') setHtaccessContent(d.content);
+            setHtaccessMsg({ type: 'success', text: d.notice || 'The backup was restored.' });
+        } catch (e) { setHtaccessMsg({ type: 'error', text: 'Network error.' }); }
+        finally { setHtaccessSaving(false); }
+    }, []);
+
     const downloadExport = useCallback(async () => {
         setExportMsg(null);
         try {
-            const res = await fetch(`${amEveryWhereAdminConfig.apiUrl}/settings/export`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } });
+            const res = await fetch(`${holvekAdminConfig.apiUrl}/settings/export`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } });
             const d = await res.json();
             if (!d.success) { setExportMsg({ type: 'error', text: 'Export failed.' }); return; }
             const blob = new Blob([JSON.stringify(d.data, null, 2)], { type: 'application/json' });
             const url  = URL.createObjectURL(blob);
             const a    = document.createElement('a');
-            a.href = url; a.download = `ameverywhere-settings-${new Date().toISOString().slice(0,10)}.json`; a.click();
+            a.href = url; a.download = `holvek-settings-${new Date().toISOString().slice(0,10)}.json`; a.click();
             URL.revokeObjectURL(url);
             setExportMsg({ type: 'success', text: 'Settings file downloaded.' });
         } catch (e) { setExportMsg({ type: 'error', text: 'Export error.' }); }
@@ -273,8 +462,8 @@ const App = () => {
         try {
             const text = await file.text();
             const json = JSON.parse(text);
-            const res  = await fetch(`${amEveryWhereAdminConfig.apiUrl}/settings/import`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+            const res  = await fetch(`${holvekAdminConfig.apiUrl}/settings/import`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify(json),
             });
             const d = await res.json();
@@ -287,9 +476,9 @@ const App = () => {
 
     const fetchSettings = async () => {
         try {
-            const response = await fetch(`${amEveryWhereAdminConfig.apiUrl}/settings`, {
+            const response = await fetch(`${holvekAdminConfig.apiUrl}/settings`, {
                 headers: {
-                    'X-WP-Nonce': amEveryWhereAdminConfig.nonce,
+                    'X-WP-Nonce': holvekAdminConfig.nonce,
                 }
             });
             if (response.ok) {
@@ -313,6 +502,7 @@ const App = () => {
                     openai_key: data.openai_key || '',
                     anthropic_key: data.anthropic_key || '',
                     ollama_url: data.ollama_url || 'http://localhost:11434',
+                    ollama_remote_confirmed: Boolean(data.ollama_remote_ack),
                     default_share_image: data.default_share_image || '',
                 });
             }
@@ -336,6 +526,9 @@ const App = () => {
         if (settings.ai_provider === 'ollama' && !settings.ollama_url.trim()) {
             errors.ollama_url = 'Ollama URL is required when Ollama is selected as the provider.';
         }
+        if (settings.ai_provider === 'ollama' && settings.ollama_url.trim() && !ollamaHostIsLoopback(settings.ollama_url) && !settings.ollama_remote_confirmed) {
+            errors.ollama_url = 'Confirm that this remote Ollama host may receive post content.';
+        }
         return errors;
     };
 
@@ -350,11 +543,11 @@ const App = () => {
         setIsSaving(true);
         setSaveStatus(null);
         try {
-            const response = await fetch(`${amEveryWhereAdminConfig.apiUrl}/settings`, {
+            const response = await fetch(`${holvekAdminConfig.apiUrl}/settings`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-WP-Nonce': amEveryWhereAdminConfig.nonce,
+                    'X-WP-Nonce': holvekAdminConfig.nonce,
                 },
                 body: JSON.stringify(settings)
             });
@@ -376,6 +569,7 @@ const App = () => {
 
     // Robots.txt State
     const [robotsTxt, setRobotsTxt] = useState('');
+    const [robotsReplace, setRobotsReplace] = useState(false);
     const [blockAiBots, setBlockAiBots] = useState(false);
     const [isLoadingRobots, setIsLoadingRobots] = useState(false);
     const [robotsLoaded, setRobotsLoaded] = useState(false);
@@ -385,12 +579,13 @@ const App = () => {
     useEffect(() => {
         if (activeTab === 'technical' && !robotsLoaded) {
             setIsLoadingRobots(true);
-            fetch(`${amEveryWhereAdminConfig.apiUrl}/robots-txt`, {
-                headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce }
+            fetch(`${holvekAdminConfig.apiUrl}/robots-txt`, {
+                headers: { 'X-WP-Nonce': holvekAdminConfig.nonce }
             })
             .then(r => r.json())
             .then(data => {
                 setRobotsTxt(data.content || '');
+                setRobotsReplace(!!data.replace_generated);
                 setBlockAiBots(!!data.block_ai_bots);
                 setRobotsLoaded(true);
             })
@@ -403,14 +598,28 @@ const App = () => {
         setIsSavingRobots(true);
         setRobotsStatus(null);
         try {
-            const response = await fetch(`${amEveryWhereAdminConfig.apiUrl}/robots-txt`, {
+            const replaceGenerated = robotsReplace && robotsTxt.trim() !== '';
+            const response = await fetch(`${holvekAdminConfig.apiUrl}/robots-txt`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
-                body: JSON.stringify({ content: robotsTxt, block_ai_bots: blockAiBots })
+                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
+                body: JSON.stringify({
+                    content: robotsTxt,
+                    block_ai_bots: blockAiBots,
+                    replace_generated: replaceGenerated,
+                })
             });
+            const data = await response.json().catch(() => ({}));
+            if (response.ok) {
+                setRobotsReplace(!!data.replace_generated);
+            }
             setRobotsStatus(response.ok
-                ? { type: 'success', message: 'robots.txt and AI Crawler rules saved successfully!' }
-                : { type: 'error', message: 'Failed to save settings.' }
+                ? {
+                    type: 'success',
+                    message: data.replace_generated
+                        ? 'Custom robots.txt now replaces the generated file.'
+                        : 'Saved. Holvek keeps the generated robots.txt and adds its own rules.',
+                }
+                : { type: 'error', message: data.message || 'Failed to save settings.' }
             );
         } catch (error) {
             setRobotsStatus({ type: 'error', message: 'An error occurred.' });
@@ -421,6 +630,36 @@ const App = () => {
 
     // Technical SEO Sub-Tabs
     const [techSubTab, setTechSubTab] = useState('robots');
+
+    useEffect(() => {
+        if (activeTab !== 'technical' || techSubTab !== 'htaccess' || htaccess || htaccessLoading) {
+            return;
+        }
+        setHtaccessLoading(true);
+        fetch(`${holvekAdminConfig.apiUrl}/htaccess`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } })
+            .then(async (r) => {
+                const d = await r.json();
+                if (!r.ok) {
+                    setHtaccess({
+                        enabled: false,
+                        locked: false,
+                        forbidden: true,
+                        message: d.message || 'You do not have permission to edit the server configuration.',
+                        backups: [],
+                    });
+                    return;
+                }
+                setHtaccess(d);
+                if (typeof d.content === 'string') setHtaccessContent(d.content);
+            })
+            .catch(() => setHtaccess({
+                enabled: false,
+                locked: false,
+                message: 'The .htaccess editor could not be loaded.',
+                backups: [],
+            }))
+            .finally(() => setHtaccessLoading(false));
+    }, [activeTab, techSubTab, htaccess, htaccessLoading]);
 
     // Sitemaps State
     const [sitemapsData, setSitemapsData] = useState({
@@ -450,9 +689,9 @@ const App = () => {
     const fetchSchemaRules = async () => {
         setIsLoadingSchemaRules(true);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/schema/global-rules`, {
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/schema/global-rules`, {
                 headers: {
-                    'X-WP-Nonce': amEveryWhereAdminConfig.nonce
+                    'X-WP-Nonce': holvekAdminConfig.nonce
                 }
             });
             const data = await r.json();
@@ -471,11 +710,11 @@ const App = () => {
         setIsSavingSchemaRules(true);
         setSchemaRulesStatus(null);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/schema/global-rules`, {
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/schema/global-rules`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-WP-Nonce': amEveryWhereAdminConfig.nonce
+                    'X-WP-Nonce': holvekAdminConfig.nonce
                 },
                 body: JSON.stringify({ rules: newRules })
             });
@@ -505,8 +744,8 @@ const App = () => {
     const fetchSocialAccounts = async () => {
         setIsLoadingSocial(true);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/social/accounts`, {
-                headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce }
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/social/accounts`, {
+                headers: { 'X-WP-Nonce': holvekAdminConfig.nonce }
             });
             const data = await r.json();
             if (data) {
@@ -515,8 +754,8 @@ const App = () => {
                 setSocialCategories(data.categories || []);
             }
             
-            const rSettings = await fetch(`${amEveryWhereAdminConfig.apiUrl}/social/settings`, {
-                headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce }
+            const rSettings = await fetch(`${holvekAdminConfig.apiUrl}/social/settings`, {
+                headers: { 'X-WP-Nonce': holvekAdminConfig.nonce }
             });
             const settingsData = await rSettings.json();
             if (settingsData && settingsData.apps) {
@@ -529,9 +768,9 @@ const App = () => {
     const updateSocialAccount = async (id, payload) => {
         setIsSavingAccount(true);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/social/accounts/${id}`, {
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/social/accounts/${id}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify(payload)
             });
             const data = await r.json();
@@ -546,9 +785,9 @@ const App = () => {
     const deleteSocialAccount = async (id) => {
         if (!confirm('Are you sure you want to disconnect this account?')) return;
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/social/accounts/${id}`, {
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/social/accounts/${id}`, {
                 method: 'DELETE',
-                headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce }
+                headers: { 'X-WP-Nonce': holvekAdminConfig.nonce }
             });
             const data = await r.json();
             if (data.success) {
@@ -560,9 +799,9 @@ const App = () => {
     const toggleGlobalAutoShare = async (val) => {
         setGlobalAutoShare(val);
         try {
-            await fetch(`${amEveryWhereAdminConfig.apiUrl}/social/accounts`, {
+            await fetch(`${holvekAdminConfig.apiUrl}/social/accounts`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify({ global_auto_share: val })
             });
         } catch (e) {}
@@ -575,11 +814,11 @@ const App = () => {
         }
 
         try {
-            const res = await fetch(`${amEveryWhereAdminConfig.apiUrl}/social/oauth-init`, {
+            const res = await fetch(`${holvekAdminConfig.apiUrl}/social/oauth-init`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-WP-Nonce': amEveryWhereAdminConfig.nonce,
+                    'X-WP-Nonce': holvekAdminConfig.nonce,
                 },
                 body: JSON.stringify({ network })
             });
@@ -597,9 +836,9 @@ const App = () => {
     const saveSocialSettings = async () => {
         setIsSavingSocialApps(true);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/social/settings`, {
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/social/settings`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify(socialApps)
             });
             const data = await r.json();
@@ -612,12 +851,16 @@ const App = () => {
 
     // Redirects State
     const [redirects, setRedirects] = useState([]);
+    const [redirectPage, setRedirectPage] = useState(1);
+    const [redirectTotalPages, setRedirectTotalPages] = useState(1);
     const [isLoadingRedirects, setIsLoadingRedirects] = useState(false);
     const [newRedirect, setNewRedirect] = useState({ source: '', target: '', code: 301, is_regex: false });
     const [redirectsStatus, setRedirectsStatus] = useState(null);
 
     // 404 logs State
     const [logs404, setLogs404] = useState([]);
+    const [logs404Page, setLogs404Page] = useState(1);
+    const [logs404TotalPages, setLogs404TotalPages] = useState(1);
     const [isLoading404, setIsLoading404] = useState(false);
 
     // Custom 404 page selector state
@@ -658,8 +901,8 @@ const App = () => {
     const fetchSitemapsSettings = async () => {
         setIsLoadingSitemaps(true);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/settings/sitemaps`, {
-                headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce }
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/settings/sitemaps`, {
+                headers: { 'X-WP-Nonce': holvekAdminConfig.nonce }
             });
             if (r.ok) {
                 const data = await r.json();
@@ -674,9 +917,9 @@ const App = () => {
         setIsSavingSitemaps(true);
         setSitemapsStatus(null);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/settings/sitemaps`, {
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/settings/sitemaps`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify(sitemapsData)
             });
             if (r.ok) {
@@ -695,7 +938,7 @@ const App = () => {
     const loadCustom404 = async () => {
         setIsLoading404Page(true);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/settings/404-page`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } });
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/settings/404-page`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } });
             const d = await r.json();
             setCustom404PageId(d.page_id || 0);
             setAvailable404Pages(d.pages || []);
@@ -706,8 +949,8 @@ const App = () => {
     const saveCustom404Page = async () => {
         setIsSaving404Page(true); setCustom404Msg(null);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/settings/404-page`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/settings/404-page`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify({ page_id: custom404PageId }),
             });
             const d = await r.json();
@@ -720,7 +963,7 @@ const App = () => {
     const loadCookieBanner = async () => {
         setIsLoadingCookieBanner(true);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/settings/cookie-banner`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } });
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/settings/cookie-banner`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } });
             const d = await r.json();
             setCookieBanner(d);
         } catch(e) {}
@@ -730,8 +973,8 @@ const App = () => {
     const saveCookieBanner = async () => {
         setIsSavingCookieBanner(true); setCookieBannerMsg(null);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/settings/cookie-banner`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/settings/cookie-banner`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify(cookieBanner),
             });
             const d = await r.json();
@@ -745,9 +988,9 @@ const App = () => {
         setIsLoadingCompression(true);
         try {
             const [statsRes, cfgRes, backupsRes] = await Promise.all([
-                fetch(`${amEveryWhereAdminConfig.apiUrl}/images/compression-stats`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } }),
-                fetch(`${amEveryWhereAdminConfig.apiUrl}/settings/image-compression`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } }),
-                fetch(`${amEveryWhereAdminConfig.apiUrl}/images/compression-backups`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } }),
+                fetch(`${holvekAdminConfig.apiUrl}/images/compression-stats`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } }),
+                fetch(`${holvekAdminConfig.apiUrl}/settings/image-compression`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } }),
+                fetch(`${holvekAdminConfig.apiUrl}/images/compression-backups`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } }),
             ]);
             const [stats, cfg, backups] = await Promise.all([statsRes.json(), cfgRes.json(), backupsRes.json()]);
             setCompressionStats(stats); setCompressionConfig(cfg); setCompressionAcknowledged(Boolean(cfg.enabled)); setCompressionBackups(backups.items || []);
@@ -758,8 +1001,8 @@ const App = () => {
     const saveCompressionConfig = async () => {
         setIsSavingCompression(true); setCompressionMsg(null);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/settings/image-compression`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/settings/image-compression`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify({ ...compressionConfig, acknowledge_reversible_processing: compressionAcknowledged }),
             });
             const d = await r.json();
@@ -772,8 +1015,8 @@ const App = () => {
         setIsBulkCompressing(true); setCompressionProgress(null);
         const processNext = async () => {
             try {
-                const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/images/compress-bulk`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+                const r = await fetch(`${holvekAdminConfig.apiUrl}/images/compress-bulk`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                     body: JSON.stringify({ batch_size: 20 }),
                 });
                 const d = await r.json();
@@ -788,8 +1031,8 @@ const App = () => {
     const restoreCompressedImage = async (attachmentId) => {
         setCompressionMsg(null);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/images/${attachmentId}/restore`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/images/${attachmentId}/restore`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify({}),
             });
             const d = await r.json();
@@ -806,7 +1049,7 @@ const App = () => {
     const loadAltAudit = async (page = 1) => {
         setIsLoadingAltAudit(true); setAltAuditMsg(null);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/images/missing-alt?page=${page}&per_page=20`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } });
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/images/missing-alt?page=${page}&per_page=20`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } });
             const d = await r.json();
             setAltAuditItems(d.items || []); setAltAuditTotal(d.total || 0); setAltAuditPage(page);
         } catch(e) {}
@@ -816,8 +1059,8 @@ const App = () => {
     const autoFillAltText = async () => {
         setIsAutoFillingAlt(true); setAltAuditMsg(null);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/images/auto-fill-alt`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/images/auto-fill-alt`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify({}),
             });
             const d = await r.json();
@@ -831,8 +1074,8 @@ const App = () => {
         const items = Object.entries(altEdits).map(([id, alt]) => ({ id: Number(id), alt }));
         if (!items.length) return;
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/images/bulk-alt`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/images/bulk-alt`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify({ items }),
             });
             const d = await r.json();
@@ -851,8 +1094,8 @@ const App = () => {
     const loadRoles = async () => {
         setRolesLoading(true);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/roles/capabilities`, {
-                headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/roles/capabilities`, {
+                headers: { 'X-WP-Nonce': holvekAdminConfig.nonce },
             });
             const d = await r.json();
             setRolesData(d);
@@ -869,9 +1112,9 @@ const App = () => {
     const saveRoles = async () => {
         setRolesSaving(true); setRolesMsg(null);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/roles/capabilities`, {
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/roles/capabilities`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify(roleEdits),
             });
             const d = await r.json();
@@ -889,7 +1132,7 @@ const App = () => {
     };
 
     // ── Network SEO (Multisite) ───────────────────────────────────────────────
-    const isMultisite = amEveryWhereAdminConfig.isMultisite === '1';
+    const isMultisite = holvekAdminConfig.isMultisite === '1';
     const [networkSettings, setNetworkSettings]     = useState(null);
     const [networkSites, setNetworkSites]           = useState([]);
     const [networkLoading, setNetworkLoading]       = useState(false);
@@ -900,8 +1143,8 @@ const App = () => {
         setNetworkLoading(true);
         try {
             const [settingsRes, sitesRes] = await Promise.all([
-                fetch(`${amEveryWhereAdminConfig.apiUrl}/network/settings`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } }),
-                fetch(`${amEveryWhereAdminConfig.apiUrl}/network/sites`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } }),
+                fetch(`${holvekAdminConfig.apiUrl}/network/settings`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } }),
+                fetch(`${holvekAdminConfig.apiUrl}/network/sites`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } }),
             ]);
             const [settings, sites] = await Promise.all([settingsRes.json(), sitesRes.json()]);
             setNetworkSettings(settings);
@@ -913,9 +1156,9 @@ const App = () => {
     const saveNetworkSettings = async () => {
         setNetworkSaving(true); setNetworkMsg(null);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/network/settings`, {
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/network/settings`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify(networkSettings),
             });
             const d = await r.json();
@@ -932,7 +1175,7 @@ const App = () => {
 
     const loadAuditResults = async () => {
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/audit/technical`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } });
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/audit/technical`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } });
             const d = await r.json();
             if (d.checks) setAuditResults(d);
         } catch(e) {}
@@ -942,13 +1185,13 @@ const App = () => {
         setAuditRunning(true); setAuditResults(null);
         setAuditProgress({ status: 'running', percent: 0, current_check: 'Starting…' });
         try {
-            await fetch(`${amEveryWhereAdminConfig.apiUrl}/audit/technical/run`, {
-                method: 'POST', headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+            await fetch(`${holvekAdminConfig.apiUrl}/audit/technical/run`, {
+                method: 'POST', headers: { 'X-WP-Nonce': holvekAdminConfig.nonce },
             });
             // Poll progress every 3s until done
             const poll = setInterval(async () => {
                 try {
-                    const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/audit/technical/progress`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } });
+                    const r = await fetch(`${holvekAdminConfig.apiUrl}/audit/technical/progress`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } });
                     const d = await r.json();
                     setAuditProgress(d);
                     if (d.status === 'done') {
@@ -975,8 +1218,8 @@ const App = () => {
     const loadBlcResults = async (page = 1, resolved = false) => {
         setBlcLoading(true);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/broken-links?per_page=20&page=${page}&resolved=${resolved ? 1 : 0}`, {
-                headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/broken-links?per_page=20&page=${page}&resolved=${resolved ? 1 : 0}`, {
+                headers: { 'X-WP-Nonce': holvekAdminConfig.nonce },
             });
             const d = await r.json();
             setBlcResults(d.items || []); setBlcTotal(d.total || 0); setBlcPage(page);
@@ -986,7 +1229,7 @@ const App = () => {
 
     const loadBlcProgress = async () => {
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/broken-links/progress`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } });
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/broken-links/progress`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } });
             const d = await r.json();
             setBlcProgress(d);
             return d.status;
@@ -997,8 +1240,8 @@ const App = () => {
         setBlcScanning(true); setBlcMsg(null);
         setBlcProgress({ status: 'running', scanned: 0, total: 0, found: 0 });
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/broken-links/scan`, {
-                method: 'POST', headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/broken-links/scan`, {
+                method: 'POST', headers: { 'X-WP-Nonce': holvekAdminConfig.nonce },
             });
             const d = await r.json();
             if (d.success) {
@@ -1018,8 +1261,8 @@ const App = () => {
 
     const resolveBlcLink = async (id) => {
         try {
-            await fetch(`${amEveryWhereAdminConfig.apiUrl}/broken-links/${id}/resolve`, {
-                method: 'POST', headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+            await fetch(`${holvekAdminConfig.apiUrl}/broken-links/${id}/resolve`, {
+                method: 'POST', headers: { 'X-WP-Nonce': holvekAdminConfig.nonce },
             });
             loadBlcResults(blcPage, blcShowResolved);
         } catch(e) {}
@@ -1028,11 +1271,15 @@ const App = () => {
     const recheckBlcLink = async (id, url) => {
         setBlcMsg({ type: 'info', text: `Rechecking ${url}…` });
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/broken-links/recheck`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/broken-links/recheck`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify({ id, url }),
             });
             const d = await r.json();
+            if (d.queued) {
+                setBlcMsg({ type: 'info', text: d.message || 'Recheck queued.' });
+                return;
+            }
             setBlcMsg({ type: d.broken ? 'error' : 'success', text: `Status: HTTP ${d.http_code} — ${d.broken ? 'Still broken' : 'Now reachable'}` });
             loadBlcResults(blcPage, blcShowResolved);
         } catch(e) { setBlcMsg({ type: 'error', text: 'Recheck failed.' }); }
@@ -1053,14 +1300,14 @@ const App = () => {
         setRankLoading(true);
         try {
             const [kwRes, histRes] = await Promise.all([
-                fetch(`${amEveryWhereAdminConfig.apiUrl}/rank-tracker/keywords`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } }),
-                fetch(`${amEveryWhereAdminConfig.apiUrl}/rank-tracker/history?days=${rankDays}`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } }),
+                fetch(`${holvekAdminConfig.apiUrl}/rank-tracker/keywords`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } }),
+                fetch(`${holvekAdminConfig.apiUrl}/rank-tracker/history?days=${rankDays}`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } }),
             ]);
             const [kw, hist] = await Promise.all([kwRes.json(), histRes.json()]);
             setRankKeywords(kw.keywords || []);
             setRankHistory(hist.history || {});
             // Load SerpApi key from settings
-            const sRes = await fetch(`${amEveryWhereAdminConfig.apiUrl}/settings`, { headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce } });
+            const sRes = await fetch(`${holvekAdminConfig.apiUrl}/settings`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } });
             const s = await sRes.json();
             setSerpApiKey(s.serpapi_key || '');
         } catch(e) {}
@@ -1070,8 +1317,8 @@ const App = () => {
     const saveRankKeywords = async (keywords) => {
         setRankSaving(true); setRankMsg(null);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/rank-tracker/keywords`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/rank-tracker/keywords`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify({ keywords }),
             });
             const d = await r.json();
@@ -1084,13 +1331,21 @@ const App = () => {
     const checkRankNow = async (keyword = null) => {
         setRankChecking(true); setRankMsg(null);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/rank-tracker/check-now`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/rank-tracker/check-now`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify(keyword ? { keyword } : {}),
             });
             const d = await r.json();
+            if (!r.ok || d.code) {
+                setRankMsg({ type: 'error', text: d.message || __('This site is not connected to Holvek, so cloud rank tracking is unavailable. You can keep using Holvek on this site.', 'holvek') });
+                return;
+            }
+            if (d.queued) {
+                setRankMsg({ type: 'info', text: d.message || 'Rank check queued.' });
+                return;
+            }
             if (d.results) {
-                const errors = Object.values(d.results).filter(r => r.error);
+                const errors = Object.values(d.results).filter(row => row.error);
                 if (errors.length) {
                     setRankMsg({ type: 'error', text: errors[0].error });
                 } else {
@@ -1099,7 +1354,7 @@ const App = () => {
                 }
             }
         } catch(e) { setRankMsg({ type: 'error', text: 'Check failed.' }); }
-        setRankChecking(false);
+        finally { setRankChecking(false); }
     };
 
     const addKeyword = () => {
@@ -1113,15 +1368,18 @@ const App = () => {
     const removeKeyword = (kw) => saveRankKeywords(rankKeywords.filter(k => k !== kw));
 
     // Fetch Redirects
-    const fetchRedirects = async () => {
+    const fetchRedirects = async (page = 1) => {
+        const nextPage = Math.max(1, page);
         setIsLoadingRedirects(true);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/redirects`, {
-                headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce }
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/redirects?page=${nextPage}&per_page=50`, {
+                headers: { 'X-WP-Nonce': holvekAdminConfig.nonce }
             });
             if (r.ok) {
                 const data = await r.json();
-                setRedirects(data);
+                setRedirects(Array.isArray(data) ? data : (data.items || []));
+                setRedirectPage(data.page || nextPage);
+                setRedirectTotalPages(data.total_pages || 1);
             }
         } catch (e) {}
         setIsLoadingRedirects(false);
@@ -1135,16 +1393,16 @@ const App = () => {
             return;
         }
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/redirects`, {
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/redirects`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify(newRedirect)
             });
             const res = await r.json();
             if (r.ok) {
-                setRedirects(res.redirects || []);
                 setNewRedirect({ source: '', target: '', code: 301, is_regex: false });
                 setRedirectsStatus({ type: 'success', message: 'Redirect rule added successfully!' });
+                fetchRedirects(redirectPage);
             } else {
                 setRedirectsStatus({ type: 'error', message: res.message || 'Failed to add redirect.' });
             }
@@ -1157,29 +1415,33 @@ const App = () => {
     const deleteRedirect = async (id) => {
         setRedirectsStatus(null);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/redirects/delete`, {
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/redirects/delete`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify({ id })
             });
             const res = await r.json();
             if (r.ok) {
-                setRedirects(res.redirects || []);
                 setRedirectsStatus({ type: 'success', message: 'Redirect rule deleted.' });
+                fetchRedirects(redirectPage);
             }
         } catch (e) {}
     };
 
     // Fetch 404 Logs
-    const fetch404Logs = async () => {
+    const fetch404Logs = async (page = 1) => {
+        const nextPage = Math.max(1, page);
         setIsLoading404(true);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/errors/404`, {
-                headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce }
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/errors/404?page=${nextPage}&per_page=50`, {
+                headers: { 'X-WP-Nonce': holvekAdminConfig.nonce }
             });
             if (r.ok) {
                 const data = await r.json();
-                setLogs404(data);
+                const rows = Array.isArray(data) ? data : (data.items || data.logs || []);
+                setLogs404(rows);
+                setLogs404Page(data.page || nextPage);
+                setLogs404TotalPages(data.total_pages || 1);
             }
         } catch (e) {}
         setIsLoading404(false);
@@ -1188,14 +1450,14 @@ const App = () => {
     // Clear specific 404 Log
     const delete404Log = async (id) => {
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/errors/404`, {
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/errors/404`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify({ id })
             });
             const res = await r.json();
             if (r.ok) {
-                setLogs404(res.logs || []);
+                fetch404Logs(logs404Page);
             }
         } catch (e) {}
     };
@@ -1203,16 +1465,27 @@ const App = () => {
     // Clear all 404 Logs
     const clearAll404Logs = async () => {
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/errors/404`, {
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/errors/404`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify({})
             });
             const res = await r.json();
             if (r.ok) {
                 setLogs404(res.logs || []);
+                setLogs404Page(1);
+                setLogs404TotalPages(1);
             }
         } catch (e) {}
+    };
+
+    const loadOrphans = (page = 1) => {
+        const nextPage = Math.max(1, page);
+        setOrphanLoading(true);
+        fetch(`${holvekAdminConfig.apiUrl}/links/orphans?page=${nextPage}&per_page=50`, { headers: { 'X-WP-Nonce': holvekAdminConfig.nonce } })
+            .then(r => r.json())
+            .then(d => { if (d.success) setOrphanData(d); })
+            .finally(() => setOrphanLoading(false));
     };
 
     // Quick add 404 URL to Redirect creation
@@ -1237,8 +1510,8 @@ const App = () => {
     const fetchLlmsSettings = async () => {
         setIsLoadingLlms(true);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/llms-txt/config`, {
-                headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce }
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/llms-txt/config`, {
+                headers: { 'X-WP-Nonce': holvekAdminConfig.nonce }
             });
             if (r.ok) {
                 const data = await r.json();
@@ -1252,9 +1525,9 @@ const App = () => {
         setIsSavingLlms(true);
         setLlmsStatus(null);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/llms-txt/config`, {
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/llms-txt/config`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify(llmsData)
             });
             if (r.ok) {
@@ -1282,8 +1555,8 @@ const App = () => {
         setIsLoadingBulkMeta(true);
         try {
             const params = new URLSearchParams(bulkMetaParams).toString();
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/bulk-meta?${params}`, {
-                headers: { 'X-WP-Nonce': amEveryWhereAdminConfig.nonce }
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/bulk-meta?${params}`, {
+                headers: { 'X-WP-Nonce': holvekAdminConfig.nonce }
             });
             if (r.ok) {
                 const data = await r.json();
@@ -1307,9 +1580,9 @@ const App = () => {
         setIsSavingBulkMeta(true);
         setBulkMetaStatus(null);
         try {
-            const r = await fetch(`${amEveryWhereAdminConfig.apiUrl}/bulk-meta`, {
+            const r = await fetch(`${holvekAdminConfig.apiUrl}/bulk-meta`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': amEveryWhereAdminConfig.nonce },
+                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': holvekAdminConfig.nonce },
                 body: JSON.stringify({ updates })
             });
             if (r.ok) {
@@ -1358,58 +1631,215 @@ const App = () => {
         }
     }, [activeTab, techSubTab, bulkMetaParams.page, bulkMetaParams.post_type]);
 
+    const navItems = [
+        { id: 'dashboard', label: __('Dashboard', 'holvek') },
+        { id: 'analytics', label: __('Google Analytics 4', 'holvek') },
+        { id: 'links', label: __('Link Health', 'holvek') },
+        { id: 'settings', label: __('Settings & Integrations', 'holvek') },
+        { id: 'technical', label: __('Technical SEO', 'holvek') },
+        { id: 'sitemaps', label: __('XML Sitemaps', 'holvek') },
+        { id: 'schema', label: __('Schema Markup', 'holvek') },
+        { id: 'social', label: __('Social & Sharing', 'holvek') },
+        { id: 'llms', label: __('LLM Agent Config', 'holvek') },
+        { id: 'bulk_meta', label: __('Bulk Meta Editor', 'holvek') },
+        { id: 'html_sitemap', label: __('HTML Sitemap', 'holvek') },
+        { id: 'image_seo', label: __('Image SEO', 'holvek') },
+        { id: 'compliance', label: __('Cookie & Compliance', 'holvek') },
+        { id: 'roles', label: __('Roles & Capabilities', 'holvek') },
+        { id: 'site_audit', label: __('Site Audit', 'holvek') },
+        { id: 'broken_links', label: __('Broken Links', 'holvek') },
+        { id: 'rank_tracker', label: __('Rank Tracker', 'holvek') },
+    ];
+    if (isMultisite) {
+        navItems.push({ id: 'network_seo', label: __('Network SEO', 'holvek') });
+    }
+    const activeNav = navItems.find((item) => item.id === activeTab) || navItems[0];
+    const onNavKeyDown = (event) => {
+        if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+            return;
+        }
+        event.preventDefault();
+        const index = navItems.findIndex((item) => item.id === activeTab);
+        let next = index < 0 ? 0 : index;
+        if (event.key === 'ArrowDown') {
+            next = (index + 1) % navItems.length;
+        } else if (event.key === 'ArrowUp') {
+            next = (index - 1 + navItems.length) % navItems.length;
+        } else if (event.key === 'Home') {
+            next = 0;
+        } else if (event.key === 'End') {
+            next = navItems.length - 1;
+        }
+        const nextId = navItems[next].id;
+        setActiveTab(nextId);
+        window.requestAnimationFrame(() => {
+            const button = document.getElementById(`holvek-tab-${nextId}`);
+            if (button) {
+                button.focus();
+            }
+        });
+    };
+
+    const summary = standalone?.summary || __('Holvek writes titles, meta descriptions, schema, the sitemap, and robots.txt on this site. Redirects and 404 logs stay on this site. A Holvek account is optional.', 'holvek');
+    const nextMessage = setupFinished
+        ? __('Your titles and sitemap are already active.', 'holvek')
+        : (standalone?.next_step_message || __('Set up Holvek to choose a site type. Titles and the sitemap already work.', 'holvek'));
+
     return (
         <>
-        {showSetup && (
-            <div className="ameverywhere-wrapper mt-5 p-6 bg-white rounded-lg shadow-sm border border-gray-200">
-                <SetupWizard onComplete={() => { setShowSetup(false); window.location.hash = ''; }} />
-            </div>
-        )}
-        {!showSetup && (
-        <div className="ameverywhere-wrapper mt-5 p-6 bg-white rounded-lg shadow-sm border border-gray-200">
-            <header className="mb-8 border-b pb-4 flex justify-between items-center">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900 m-0">AmEveryWhere</h1>
-                    <p className="text-slate-500 m-0 mt-1">AI-First Search Engine Optimization</p>
-                </div>
-                <div className="flex gap-2">
-                    <button className="px-4 py-2 bg-brand-500 text-white rounded font-medium hover:bg-brand-600 transition-colors">
-                        Run Audit
-                    </button>
-                </div>
+        <div className="holvek-wrapper mt-5 p-6 bg-white rounded-lg shadow-sm border border-gray-200">
+            <header className="mb-8 border-b pb-4">
+                <h1 className="text-2xl font-bold text-slate-900 m-0">Holvek</h1>
+                <p className="text-slate-500 m-0 mt-1">{__('Technical SEO, structured data, sitemaps, redirects, and indexing tools for WordPress.', 'holvek')}</p>
             </header>
 
             <div className="flex gap-6">
                 <aside className="w-64 flex-shrink-0">
-                    <nav className="flex flex-col gap-1" role="tablist" aria-orientation="vertical" aria-label="AmEveryWhere Settings">
-                        <NavItem label="📊 Dashboard & GSC" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-                        <NavItem label="📈 Analytics (GA4)" active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} />
-                        <NavItem label="🔗 Link Health" active={activeTab === 'links'} onClick={() => setActiveTab('links')} />
-                        <NavItem label="Settings & Integrations" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
-                        <NavItem label="Technical SEO" active={activeTab === 'technical'} onClick={() => setActiveTab('technical')} />
-                        <NavItem label="XML Sitemaps" active={activeTab === 'sitemaps'} onClick={() => setActiveTab('sitemaps')} />
-                        <NavItem label="Schema Markup" active={activeTab === 'schema'} onClick={() => setActiveTab('schema')} />
-                        <NavItem label="Social & Sharing" active={activeTab === 'social'} onClick={() => setActiveTab('social')} />
-                        <NavItem label="LLM Agent Config" active={activeTab === 'llms'} onClick={() => setActiveTab('llms')} />
-                        <NavItem label="Bulk Meta Editor" active={activeTab === 'bulk_meta'} onClick={() => setActiveTab('bulk_meta')} />
-                        <NavItem label="🗺 HTML Sitemap" active={activeTab === 'html_sitemap'} onClick={() => setActiveTab('html_sitemap')} />
-                        <NavItem label="🖼 Image SEO" active={activeTab === 'image_seo'} onClick={() => setActiveTab('image_seo')} />
-                        <NavItem label="🍪 Cookie & Compliance" active={activeTab === 'compliance'} onClick={() => setActiveTab('compliance')} />
-                        <NavItem label="🔐 Roles & Capabilities" active={activeTab === 'roles'} onClick={() => setActiveTab('roles')} />
-                        {isMultisite && <NavItem label="🌐 Network SEO" active={activeTab === 'network_seo'} onClick={() => setActiveTab('network_seo')} />}
-                        <NavItem label="🔍 Site Audit" active={activeTab === 'site_audit'} onClick={() => setActiveTab('site_audit')} />
-                        <NavItem label="🔗 Broken Links" active={activeTab === 'broken_links'} onClick={() => setActiveTab('broken_links')} />
-                        <NavItem label="📈 Rank Tracker" active={activeTab === 'rank_tracker'} onClick={() => setActiveTab('rank_tracker')} />
+                    <nav className="flex flex-col gap-1" role="tablist" aria-orientation="vertical" aria-label={__('Holvek settings', 'holvek')}>
+                        {navItems.map((item) => (
+                            <NavItem
+                                key={item.id}
+                                id={item.id}
+                                label={item.label}
+                                active={activeTab === item.id}
+                                onClick={() => setActiveTab(item.id)}
+                                onKeyDown={onNavKeyDown}
+                            />
+                        ))}
                     </nav>
                 </aside>
 
-                <main className="flex-1" role="tabpanel" aria-label="Settings Panel">
+                <main id="holvek-tabpanel" className="flex-1" role="tabpanel" aria-labelledby={`holvek-tab-${activeNav.id}`}>
+                <p className="holvek-sr" role="status" aria-live="polite">{activeNav.label}</p>
                 {/* ══════════════ GSC DASHBOARD ══════════════ */}
                     {activeTab === 'dashboard' && (
                         <div className="space-y-6">
+                            <section className="space-y-4" aria-labelledby="holvek-site-heading">
+                                <div>
+                                    <h2 id="holvek-site-heading" className="text-xl font-semibold m-0 text-slate-800">{__('This site', 'holvek')}</h2>
+                                    <p className="text-sm text-slate-600 mt-2 mb-0">{summary}</p>
+                                </div>
+                                <p className="text-sm text-slate-800 m-0">{nextMessage}</p>
+                                {!setupFinished && (
+                                    <button type="button" onClick={() => setShowSetup(true)} className="px-4 py-2 bg-brand-500 text-white rounded font-medium">
+                                        {__('Set up Holvek', 'holvek')}
+                                    </button>
+                                )}
+                                {showSetup && (
+                                    <SetupWizard onComplete={() => {
+                                        setShowSetup(false);
+                                        setSetupFinished(true);
+                                        window.location.hash = '';
+                                    }} />
+                                )}
+                                {standaloneLoading && <p role="status" className="text-sm text-slate-500 m-0">{__('Loading the local results.', 'holvek')}</p>}
+                                {standaloneError && <p role="alert" className="text-sm text-amber-800 m-0">{standaloneError}</p>}
+                                {standalone && (
+                                    <dl className="grid grid-cols-1 md:grid-cols-2 gap-4 m-0">
+                                        <div className="border rounded-lg p-4">
+                                            <dt className="text-sm font-medium text-slate-500">{__('Indexability', 'holvek')}</dt>
+                                            <dd className="text-sm text-slate-900 mt-1 mb-0">{standalone.indexability}</dd>
+                                        </div>
+                                        <div className="border rounded-lg p-4">
+                                            <dt className="text-sm font-medium text-slate-500">{__('Sitemap', 'holvek')}</dt>
+                                            <dd className="text-sm mt-1 mb-0 break-all">
+                                                <a href={standalone.sitemap_url} className="text-indigo-700 underline">{standalone.sitemap_url}</a>
+                                            </dd>
+                                        </div>
+                                        <div className="border rounded-lg p-4">
+                                            <dt className="text-sm font-medium text-slate-500">{__('Missing titles', 'holvek')}</dt>
+                                            <dd className="text-sm text-slate-900 mt-1 mb-0">{standalone.missing_titles_label}</dd>
+                                        </div>
+                                        <div className="border rounded-lg p-4">
+                                            <dt className="text-sm font-medium text-slate-500">{__('Missing alt text', 'holvek')}</dt>
+                                            <dd className="text-sm text-slate-900 mt-1 mb-0">{standalone.missing_alt_label}</dd>
+                                        </div>
+                                        <div className="border rounded-lg p-4">
+                                            <dt className="text-sm font-medium text-slate-500">{__('Redirects', 'holvek')}</dt>
+                                            <dd className="text-sm text-slate-900 mt-1 mb-0">{standalone.redirects_label}</dd>
+                                        </div>
+                                        <div className="border rounded-lg p-4">
+                                            <dt className="text-sm font-medium text-slate-500">{__('Not found', 'holvek')}</dt>
+                                            <dd className="text-sm text-slate-900 mt-1 mb-0">{standalone.not_found_label}</dd>
+                                        </div>
+                                    </dl>
+                                )}
+                                <div className="border rounded-lg p-4 space-y-3">
+                                    <h3 className="text-base font-semibold text-slate-800 m-0">{__('Optional next step', 'holvek')}</h3>
+                                    <p className="text-sm text-slate-600 m-0">{__('Connect Google Search Console, or connect Holvek. Neither one is required.', 'holvek')}</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button type="button" onClick={() => { setActiveTab('settings'); setFocusIndexing(true); }} className="px-4 py-2 bg-white border border-slate-300 rounded font-medium text-slate-800">
+                                            {__('Connect Google Search Console', 'holvek')}
+                                        </button>
+                                        <button type="button" aria-expanded={showHolvekNote} aria-controls="holvek-connect-note" onClick={() => setShowHolvekNote(open => !open)} className="px-4 py-2 bg-white border border-slate-300 rounded font-medium text-slate-800">
+                                            {__('Connect Holvek', 'holvek')}
+                                        </button>
+                                    </div>
+                                    {showHolvekNote && (
+                                        <div id="holvek-connect-note" className="space-y-3">
+                                            <p className="text-sm text-slate-700 m-0">{__('Connecting Holvek is optional. This site keeps titles, the sitemap, redirects, and 404 logs without an account.', 'holvek')}</p>
+                                            <p id="holvek-connect-host" className="text-sm text-slate-700 m-0">{__('The settings screen cannot change the Holvek API host.', 'holvek')}</p>
+                                            {canConnectHolvek && (
+                                                <div className="space-y-3">
+                                                    {connectionLoading && <p role="status" className="text-sm text-slate-500 m-0">{__('Loading the Holvek connection.', 'holvek')}</p>}
+                                                    {connectionError && <p role="alert" className="text-sm text-amber-800 m-0">{connectionError}</p>}
+                                                    {connectionMessage && <p role="status" className="text-sm text-slate-700 m-0">{connectionMessage}</p>}
+                                                    {connection && connection.api_base && (
+                                                        <p className="text-sm text-slate-700 m-0 break-all">{__('Holvek requests use this address:', 'holvek')} {connection.api_base}</p>
+                                                    )}
+                                                    {connection && connection.connected && <p className="text-sm text-slate-800 m-0">{__('This site is connected to Holvek.', 'holvek')}</p>}
+                                                    {connection && !connection.connected && <p className="text-sm text-slate-700 m-0">{__('No Holvek credential is saved as connected on this site.', 'holvek')}</p>}
+                                                    <div className="space-y-2">
+                                                        <label htmlFor="holvek-site-token" className="block text-sm font-medium text-slate-800">{__('Site token', 'holvek')}</label>
+                                                        <input id="holvek-site-token" type="password" autoComplete="off" spellCheck={false} aria-describedby="holvek-connect-host" value={siteToken} onChange={(event) => setSiteToken(event.target.value)} className="w-full border border-slate-200 rounded px-3 py-2 text-sm" />
+                                                        <button type="button" disabled={connectionBusy || siteToken.trim() === ''} onClick={() => postConnection('/connection/site-token', { site_token: siteToken.trim() })} className="px-4 py-2 bg-white border border-slate-300 rounded font-medium text-slate-800 disabled:opacity-50">
+                                                            {__('Connect with site token', 'holvek')}
+                                                        </button>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label htmlFor="holvek-authorization-code" className="block text-sm font-medium text-slate-800">{__('Authorization code', 'holvek')}</label>
+                                                        <input id="holvek-authorization-code" type="password" autoComplete="off" spellCheck={false} aria-describedby="holvek-connect-host" value={authorizationCode} onChange={(event) => setAuthorizationCode(event.target.value)} className="w-full border border-slate-200 rounded px-3 py-2 text-sm" />
+                                                        <button type="button" disabled={connectionBusy || authorizationCode.trim() === ''} onClick={() => postConnection('/connection/authorization-code', { code: authorizationCode.trim() })} className="px-4 py-2 bg-white border border-slate-300 rounded font-medium text-slate-800 disabled:opacity-50">
+                                                            {__('Connect with authorization code', 'holvek')}
+                                                        </button>
+                                                    </div>
+                                                    {connection && connection.credential_saved && (
+                                                        <div className="flex flex-wrap gap-2">
+                                                            <button type="button" disabled={connectionBusy} onClick={() => postConnection('/connection/verify')} className="px-4 py-2 bg-white border border-slate-300 rounded font-medium text-slate-800 disabled:opacity-50">
+                                                                {__('Check saved credential', 'holvek')}
+                                                            </button>
+                                                            <button type="button" disabled={connectionBusy} onClick={() => postConnection('/connection/rotate')} className="px-4 py-2 bg-white border border-slate-300 rounded font-medium text-slate-800 disabled:opacity-50">
+                                                                {__('Rotate credential', 'holvek')}
+                                                            </button>
+                                                            <button type="button" disabled={connectionBusy} onClick={() => postConnection('/connection/revoke')} className="px-4 py-2 bg-white border border-slate-300 rounded font-medium text-slate-800 disabled:opacity-50">
+                                                                {__('Disconnect', 'holvek')}
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </section>
+
+                            <section className="space-y-4 border rounded-lg p-4" aria-labelledby="holvek-gsc-heading">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <h2 className="text-xl font-semibold m-0 text-slate-800">Google Search Console</h2>
+                                    <h3 id="holvek-gsc-heading" className="text-base font-semibold m-0 text-slate-800">{__('Search Console', 'holvek')}</h3>
+                                    <p className="text-sm text-slate-600 mt-1 mb-0">{__('Search Console is optional. Titles, the sitemap, and robots.txt are already published without it.', 'holvek')}</p>
+                                </div>
+                            </div>
+                            {!gscOpen && (
+                                <button type="button" onClick={() => setGscOpen(true)} className="px-4 py-2 bg-white border border-slate-300 rounded font-medium text-slate-800">
+                                    {__('Show Search Console', 'holvek')}
+                                </button>
+                            )}
+                            {gscOpen && (
+                            <>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-semibold m-0 text-slate-800">{__('Google Search Console', 'holvek')}</p>
                                     {gscData?.period && <p className="text-sm text-slate-500 mt-1 mb-0">{gscData.period.start} → {gscData.period.end} &nbsp;·&nbsp; {gscData.cached ? '⚡ Cached' : '🔄 Live'}</p>}
                                 </div>
                                 <button type="button" onClick={() => { setGscData(null); setCannData(null); }} className="text-xs text-indigo-600 hover:underline bg-transparent border-none cursor-pointer p-0">↺ Refresh</button>
@@ -1533,6 +1963,9 @@ const App = () => {
                                     ))}
                                 </div>
                             )}
+                            </>
+                            )}
+                            </section>
                         </div>
                     )}
 
@@ -1704,6 +2137,13 @@ const App = () => {
                                                     </table>
                                                 </div>
                                             )}
+                                            {orphanData.total_pages > 1 && (
+                                                <div className="flex items-center justify-between">
+                                                    <button type="button" className="px-3 py-1 text-sm border rounded disabled:opacity-40" disabled={(orphanData.page || 1) <= 1} onClick={() => loadOrphans((orphanData.page || 1) - 1)}>Previous page</button>
+                                                    <span className="text-xs text-slate-500">Page {orphanData.page || 1} of {orphanData.total_pages}</span>
+                                                    <button type="button" className="px-3 py-1 text-sm border rounded disabled:opacity-40" disabled={(orphanData.page || 1) >= orphanData.total_pages} onClick={() => loadOrphans((orphanData.page || 1) + 1)}>Next page</button>
+                                                </div>
+                                            )}
                                         </>
                                     )}
                                 </div>
@@ -1763,7 +2203,7 @@ const App = () => {
                                     )}
 
                                     {/* ── SECTION 1: Search Engine APIs ── */}
-                                    <div>
+                                    <div id="holvek-search-engine-notifications" tabIndex={-1}>
                                         <h3 className="text-lg font-semibold text-slate-800 mb-2">Search Engine Notifications</h3>
                                         <p className="text-sm text-slate-500 mb-4">IndexNow can notify participating search engines of published URLs. Google Indexing API access is restricted to eligible JobPosting and livestream pages and never guarantees indexing.</p>
                                         
@@ -1846,14 +2286,14 @@ const App = () => {
                                             </select>
                                         </div>
                                         <p className="text-xs text-slate-400">
-                                            You can manually place breadcrumbs anywhere in your template files with: <code>&lt;?php ameverywhere_breadcrumbs(); ?&gt;</code> or shortcode: <code>[ameverywhere_breadcrumbs]</code>.
+                                            You can manually place breadcrumbs anywhere in your template files with: <code>&lt;?php holvek_breadcrumbs(); ?&gt;</code> or shortcode: <code>[holvek_breadcrumbs]</code>.
                                         </p>
                                     </div>
 
                                     {/* ── SECTION 4: AI Integration Vault ── */}
                                     <div className="pt-6 border-t border-slate-200">
                                         <h3 className="text-lg font-semibold text-slate-800 mb-2">AI Integration Vault</h3>
-                                        <p className="text-sm text-slate-500 mb-4">Select your active AI provider and supply securely encrypted credentials to unlock real-time AEO suggestions.</p>
+                                        <p className="text-sm text-slate-500 mb-4">{__('The writing assistant uses an OpenAI, Anthropic, or Ollama key saved on this site.', 'holvek')}</p>
                                         
                                         {aiTestResult && (
                                             <Notice status={aiTestResult.type} isDismissible={true} onRemove={() => setAiTestResult(null)} className="mb-4">
@@ -1882,9 +2322,9 @@ const App = () => {
                                                     type="password"
                                                     onChange={(val) => { setSettings({ ...settings, openai_key: val }); setFormErrors(e => ({ ...e, openai_key: '' })); }}
                                                     placeholder="sk-..."
-                                                    className={formErrors.openai_key ? 'aew-field-error' : ''}
+                                                    className={formErrors.openai_key ? 'holvek-field-error' : ''}
                                                 />
-                                                {formErrors.openai_key && <p style={{ color: '#dc2626', fontSize: '12px', margin: '-8px 0 8px' }}>{formErrors.openai_key}</p>}
+                                                {formErrors.openai_key && <p role="alert" style={{ color: '#991b1b', fontSize: '12px', margin: '-8px 0 8px' }}>{formErrors.openai_key}</p>}
                                             </div>
                                         )}
 
@@ -1896,9 +2336,9 @@ const App = () => {
                                                     type="password"
                                                     onChange={(val) => { setSettings({ ...settings, anthropic_key: val }); setFormErrors(e => ({ ...e, anthropic_key: '' })); }}
                                                     placeholder="sk-ant-..."
-                                                    className={formErrors.anthropic_key ? 'aew-field-error' : ''}
+                                                    className={formErrors.anthropic_key ? 'holvek-field-error' : ''}
                                                 />
-                                                {formErrors.anthropic_key && <p style={{ color: '#dc2626', fontSize: '12px', margin: '-8px 0 8px' }}>{formErrors.anthropic_key}</p>}
+                                                {formErrors.anthropic_key && <p role="alert" style={{ color: '#991b1b', fontSize: '12px', margin: '-8px 0 8px' }}>{formErrors.anthropic_key}</p>}
                                             </div>
                                         )}
 
@@ -1907,11 +2347,26 @@ const App = () => {
                                                 <TextControl
                                                     label="Ollama Host URL"
                                                     value={settings.ollama_url}
-                                                    onChange={(val) => { setSettings({ ...settings, ollama_url: val }); setFormErrors(e => ({ ...e, ollama_url: '' })); }}
+                                                    onChange={(val) => { setSettings({ ...settings, ollama_url: val, ollama_remote_confirmed: ollamaHostIsLoopback(val) ? false : settings.ollama_remote_confirmed }); setFormErrors(e => ({ ...e, ollama_url: '' })); }}
                                                     placeholder="http://localhost:11434"
-                                                    className={formErrors.ollama_url ? 'aew-field-error' : ''}
+                                                    aria-describedby="holvek-ollama-help"
+                                                    className={formErrors.ollama_url ? 'holvek-field-error' : ''}
                                                 />
-                                                {formErrors.ollama_url && <p style={{ color: '#dc2626', fontSize: '12px', margin: '-8px 0 8px' }}>{formErrors.ollama_url}</p>}
+                                                <p id="holvek-ollama-help" style={{ color: '#64748b', fontSize: '12px', margin: '0 0 8px' }}>
+                                                    Ollama stays on this server at http://localhost:11434 unless you choose another host. A remote host receives the post title and content you send for suggestions.
+                                                </p>
+                                                {settings.ollama_url.trim() !== '' && !ollamaHostIsLoopback(settings.ollama_url) && (
+                                                    <label htmlFor="holvek-ollama-remote" style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: '13px', marginBottom: '8px' }}>
+                                                        <input
+                                                            id="holvek-ollama-remote"
+                                                            type="checkbox"
+                                                            checked={!!settings.ollama_remote_confirmed}
+                                                            onChange={(event) => setSettings({ ...settings, ollama_remote_confirmed: event.target.checked })}
+                                                        />
+                                                        <span>Send post content to this remote Ollama host.</span>
+                                                    </label>
+                                                )}
+                                                {formErrors.ollama_url && <p role="alert" style={{ color: '#991b1b', fontSize: '12px', margin: '-8px 0 8px' }}>{formErrors.ollama_url}</p>}
                                             </div>
                                         )}
 
@@ -1951,7 +2406,7 @@ const App = () => {
 
                                     <div className="pt-4 border-t border-slate-200">
                                         <h3 className="text-lg font-semibold text-slate-800 mb-2">Uninstall data</h3>
-                                        <ToggleControl label="Delete AmEveryWhere data when the plugin is deleted" help="Disabled by default. Enable only if you want plugin settings, SEO metadata, logs, and plugin tables permanently removed on uninstall." checked={settings.delete_data_on_uninstall} onChange={(val) => setSettings({ ...settings, delete_data_on_uninstall: val })} />
+                                        <ToggleControl label="Delete Holvek data when the plugin is deleted" help="Disabled by default. Enable only if you want plugin settings, SEO metadata, logs, and plugin tables permanently removed on uninstall." checked={settings.delete_data_on_uninstall} onChange={(val) => setSettings({ ...settings, delete_data_on_uninstall: val })} />
                                     </div>
 
                                     <div className="pt-4 border-t border-slate-200">
@@ -1973,7 +2428,7 @@ const App = () => {
                                     {/* Export */}
                                     <div className="space-y-3">
                                         <h4 className="text-sm font-semibold text-slate-700 m-0">Export</h4>
-                                        <p className="text-xs text-slate-500 m-0">Download all AmEveryWhere settings as a JSON file. Save it as a backup or use it to clone settings to another site.</p>
+                                        <p className="text-xs text-slate-500 m-0">Download all Holvek settings as a JSON file. Save it as a backup or use it to clone settings to another site.</p>
                                         {exportMsg && <div className={`text-xs px-3 py-2 rounded ${exportMsg.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>{exportMsg.text}</div>}
                                         <button type="button" onClick={downloadExport} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700">
                                             ⬇ Download Settings JSON
@@ -1983,7 +2438,7 @@ const App = () => {
                                     {/* Import */}
                                     <div className="space-y-3">
                                         <h4 className="text-sm font-semibold text-slate-700 m-0">Import</h4>
-                                        <p className="text-xs text-slate-500 m-0">Upload a previously exported AmEveryWhere settings file to restore or copy configuration. Existing API keys will not be overwritten.</p>
+                                        <p className="text-xs text-slate-500 m-0">Upload a previously exported Holvek settings file to restore or copy configuration. Existing API keys will not be overwritten.</p>
                                         {importMsg && <div className={`text-xs px-3 py-2 rounded ${importMsg.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>{importMsg.text}</div>}
                                         <label className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded cursor-pointer border-2 border-dashed border-slate-300 hover:border-indigo-400 text-slate-600 hover:text-indigo-600 transition-colors ${importBusy ? 'opacity-50 pointer-events-none' : ''}`}>
                                             <input type="file" accept=".json,application/json" className="hidden" onChange={e => handleImportFile(e.target.files?.[0])} />
@@ -2038,7 +2493,7 @@ const App = () => {
                                 <div className="bg-slate-50 p-6 rounded-lg border border-slate-200">
                                     <h3 className="text-lg font-medium text-slate-800 mb-2">robots.txt Editor</h3>
                                     <p className="text-sm text-slate-500 mb-4">
-                                        Control how search engine crawlers access your site. Changes here override the default WordPress robots.txt.
+                                        WordPress and other plugins build robots.txt. Holvek adds its sitemap lines, and AI crawler rules when you turn those on.
                                     </p>
 
                                     {robotsStatus && (
@@ -2051,7 +2506,11 @@ const App = () => {
                                         <div className="p-8 text-center"><Spinner /></div>
                                     ) : (
                                         <>
+                                            <label htmlFor="holvek-robots-txt" className="block text-sm font-medium text-slate-700 mb-2">
+                                                Custom robots.txt
+                                            </label>
                                             <textarea
+                                                id="holvek-robots-txt"
                                                 value={robotsTxt}
                                                 onChange={(e) => setRobotsTxt(e.target.value)}
                                                 rows={12}
@@ -2061,6 +2520,17 @@ const App = () => {
                                                     background: '#fff', lineHeight: '1.6', resize: 'vertical'
                                                 }}
                                             />
+                                            <label htmlFor="holvek-robots-replace" className="flex items-start gap-2 text-sm text-slate-700 bg-amber-50 border border-amber-200 rounded p-3 mt-4">
+                                                <input
+                                                    id="holvek-robots-replace"
+                                                    type="checkbox"
+                                                    className="mt-1"
+                                                    checked={robotsReplace && robotsTxt.trim() !== ''}
+                                                    disabled={robotsTxt.trim() === ''}
+                                                    onChange={(e) => setRobotsReplace(e.target.checked)}
+                                                />
+                                                <span>Replace the generated robots.txt with this document. Lines from WordPress and other plugins are removed.</span>
+                                            </label>
                                             <div className="mb-4 pt-4 border-t border-slate-200">
                                                 <ToggleControl
                                                     label="AI Crawler Manager (Bot Blocker)"
@@ -2176,6 +2646,13 @@ const App = () => {
                                                 </table>
                                             </div>
                                         )}
+                                        {redirectTotalPages > 1 && (
+                                            <div className="mt-4 flex items-center justify-between">
+                                                <button type="button" className="px-3 py-1 text-sm border rounded disabled:opacity-40" disabled={redirectPage <= 1} onClick={() => fetchRedirects(redirectPage - 1)}>Previous page</button>
+                                                <span className="text-xs text-slate-500">Page {redirectPage} of {redirectTotalPages}</span>
+                                                <button type="button" className="px-3 py-1 text-sm border rounded disabled:opacity-40" disabled={redirectPage >= redirectTotalPages} onClick={() => fetchRedirects(redirectPage + 1)}>Next page</button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -2231,46 +2708,82 @@ const App = () => {
                                             </table>
                                         </div>
                                     )}
+                                    {logs404TotalPages > 1 && (
+                                        <div className="flex items-center justify-between">
+                                            <button type="button" className="px-3 py-1 text-sm border rounded disabled:opacity-40" disabled={logs404Page <= 1} onClick={() => fetch404Logs(logs404Page - 1)}>Previous page</button>
+                                            <span className="text-xs text-slate-500">Page {logs404Page} of {logs404TotalPages}</span>
+                                            <button type="button" className="px-3 py-1 text-sm border rounded disabled:opacity-40" disabled={logs404Page >= logs404TotalPages} onClick={() => fetch404Logs(logs404Page + 1)}>Next page</button>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
                             {/* .htaccess Editor */}
                             {techSubTab === 'htaccess' && (
                                 <div className="space-y-4">
-                                    {htaccessLoading && <div className="flex items-center gap-3 p-6 bg-slate-50 rounded-lg"><Spinner /><span className="text-slate-500">Reading .htaccess…</span></div>}
-                                    {htaccess && !htaccess.success && (
-                                        <div className="p-5 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">⚠ {htaccess.message}</div>
-                                    )}
-                                    {htaccess?.success && (
+                                    <h3 className="text-lg font-medium text-slate-800 m-0">Apache .htaccess</h3>
+                                    {htaccessLoading && <div className="flex items-center gap-3 p-6 bg-slate-50 rounded-lg"><Spinner /><span className="text-slate-500">Checking the .htaccess editor…</span></div>}
+                                    {htaccess && (
                                         <>
-                                            <div className="flex flex-wrap gap-4 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-500">
-                                                <span>📄 <strong className="text-slate-700">.htaccess</strong></span>
-                                                <span>Size: <strong>{htaccess.size} bytes</strong></span>
-                                                <span>Modified: <strong>{htaccess.modified}</strong></span>
-                                                <span className={htaccess.writable ? 'text-green-700' : 'text-red-600'}>{htaccess.writable ? '✓ Writable' : '✗ Read-only'}</span>
-                                                {htaccess.has_backup && <span className="text-indigo-600">🛡 Backup: {htaccess.backup_mtime}</span>}
+                                            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-sm" role="status">
+                                                {htaccess.message}
                                             </div>
-                                            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
-                                                ⚠ <strong>Caution:</strong> Incorrect rules can make your site inaccessible. A backup is created at <code className="font-mono text-xs">.htaccess.ameverywhere.bak</code> before every save. PHP execution directives are blocked.
-                                            </div>
-                                            <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-                                                <div className="flex items-center justify-between px-4 py-2 bg-slate-50 border-b border-slate-200">
-                                                    <span className="text-xs font-mono font-semibold text-slate-600">.htaccess</span>
-                                                    <span className="text-xs text-slate-400">{htaccessContent.split('\n').length} lines</span>
+                                            {htaccessMsg && (
+                                                <div role="status" className={`text-sm px-3 py-2 rounded ${htaccessMsg.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+                                                    {htaccessMsg.text}
                                                 </div>
-                                                <textarea value={htaccessContent} onChange={e => setHtaccessContent(e.target.value)} disabled={!htaccess.writable} rows={20} spellCheck={false}
-                                                    className="w-full font-mono text-xs p-4 border-0 outline-none resize-y bg-slate-900 text-green-300 leading-relaxed"
-                                                    style={{ minHeight: '320px' }} />
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                {htaccessMsg && <span className={`text-sm px-3 py-1.5 rounded ${htaccessMsg.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>{htaccessMsg.text}</span>}
-                                                <button type="button" onClick={saveHtaccess} disabled={htaccessSaving || !htaccess.writable} className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700 disabled:opacity-50">
-                                                    {htaccessSaving ? 'Saving…' : '💾 Save .htaccess'}
+                                            )}
+                                            {!htaccess.forbidden && !htaccess.locked && !htaccess.enabled && (
+                                                <button type="button" onClick={() => setHtaccessEnabled(true)} disabled={htaccessSaving} className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700 disabled:opacity-50">
+                                                    {htaccessSaving ? 'Turning on…' : 'Turn on .htaccess editor'}
                                                 </button>
-                                                {!htaccess.writable && <span className="text-xs text-slate-500">Set permissions to 644 to enable editing.</span>}
-                                            </div>
+                                            )}
+                                            {htaccess.enabled && (
+                                                <>
+                                                    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                                                        <div className="flex items-center justify-between px-4 py-2 bg-slate-50 border-b border-slate-200">
+                                                            <label htmlFor="holvek-htaccess-editor" className="text-xs font-mono font-semibold text-slate-600">.htaccess</label>
+                                                            <span className="text-xs text-slate-400">{htaccessContent.split('\n').length} lines{htaccess.writable ? '' : ' · read only'}</span>
+                                                        </div>
+                                                        <textarea id="holvek-htaccess-editor" value={htaccessContent} onChange={e => setHtaccessContent(e.target.value)} disabled={!htaccess.writable || htaccessSaving} rows={20} spellCheck={false}
+                                                            className="w-full font-mono text-xs p-4 border-0 outline-none resize-y bg-slate-900 text-green-300 leading-relaxed"
+                                                            style={{ minHeight: '320px' }} />
+                                                    </div>
+                                                    {Array.isArray(htaccess.warnings) && htaccess.warnings.length > 0 && (
+                                                        <ul className="m-0 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-sm list-disc pl-8">
+                                                            {htaccess.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+                                                        </ul>
+                                                    )}
+                                                    <div className="flex flex-wrap items-center gap-3">
+                                                        <button type="button" onClick={saveHtaccess} disabled={htaccessSaving || !htaccess.writable} className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700 disabled:opacity-50">
+                                                            {htaccessSaving ? 'Saving…' : 'Save .htaccess'}
+                                                        </button>
+                                                        <button type="button" onClick={() => setHtaccessEnabled(false)} disabled={htaccessSaving} className="px-4 py-2 bg-white text-slate-700 text-sm font-medium rounded border border-slate-300 hover:bg-slate-50 disabled:opacity-50">
+                                                            Turn off editor
+                                                        </button>
+                                                        {!htaccess.writable && <span className="text-xs text-slate-500">The file is not writable, so saving is unavailable.</span>}
+                                                    </div>
+                                                    {Array.isArray(htaccess.backups) && htaccess.backups.length > 0 && (
+                                                        <div className="bg-white border border-slate-200 rounded-lg p-4">
+                                                            <h4 className="text-sm font-semibold text-slate-700 m-0 mb-3">Private backups</h4>
+                                                            <ul className="m-0 p-0 list-none space-y-2">
+                                                                {htaccess.backups.map((backup) => (
+                                                                    <li key={backup.filename} className="flex items-center justify-between gap-3 text-sm">
+                                                                        <span className="text-slate-600">{backup.created_at} · {backup.size} bytes</span>
+                                                                        <button type="button" onClick={() => restoreHtaccessBackup(backup.filename)} disabled={htaccessSaving} className="px-3 py-1.5 bg-slate-100 text-slate-800 text-xs font-medium rounded hover:bg-slate-200 disabled:opacity-50">
+                                                                            Restore
+                                                                        </button>
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        </div>
+                                                    )}
+                                                </>
+                                            )}
                                         </>
                                     )}
+                                </div>
+                            )}
 
                             {/* Custom Error Pages */}
                             {techSubTab === 'custom_pages' && (
@@ -2308,8 +2821,6 @@ const App = () => {
                                     </div>
                                 </div>
                             )}
-                                </div>
-                            )}
                         </div>
                     )}
 
@@ -2318,7 +2829,7 @@ const App = () => {
                         <div className="space-y-6 max-w-3xl">
                             <div>
                                 <h2 className="text-xl font-semibold m-0 text-slate-800">HTML Sitemap Builder</h2>
-                                <p className="text-slate-500 text-sm mt-1">Configure and preview your visual HTML sitemap. Use the shortcode <code className="bg-slate-100 px-1.5 py-0.5 rounded text-indigo-700 font-mono text-xs">[ameverywhere_sitemap]</code> to embed it on any page.</p>
+                                <p className="text-slate-500 text-sm mt-1">Configure and preview your visual HTML sitemap. Use the shortcode <code className="bg-slate-100 px-1.5 py-0.5 rounded text-indigo-700 font-mono text-xs">[holvek_sitemap]</code> to embed it on any page.</p>
                             </div>
 
                             {sitemapLoading && <div className="flex items-center gap-3 p-6 bg-slate-50 rounded-lg"><Spinner /><span className="text-slate-500">Loading sitemap settings…</span></div>}
@@ -2361,8 +2872,8 @@ const App = () => {
                                     {/* Shortcode helper */}
                                     <div className="p-4 bg-slate-50 flex items-center gap-3">
                                         <span className="text-xs text-slate-500">Shortcode:</span>
-                                        <code className="bg-white border border-slate-200 text-indigo-700 font-mono text-xs px-3 py-1.5 rounded select-all">[ameverywhere_sitemap]</code>
-                                        <span className="text-xs text-slate-400">or override per-instance: <code className="font-mono">[ameverywhere_sitemap post_types="post" order="title"]</code></span>
+                                        <code className="bg-white border border-slate-200 text-indigo-700 font-mono text-xs px-3 py-1.5 rounded select-all">[holvek_sitemap]</code>
+                                        <span className="text-xs text-slate-400">or override per-instance: <code className="font-mono">[holvek_sitemap post_types="post" order="title"]</code></span>
                                     </div>
 
                                     {/* Preview */}
@@ -2396,7 +2907,7 @@ const App = () => {
                     {activeTab === 'sitemaps' && (
                         <div className="space-y-6 max-w-3xl">
                                     <h2 className="text-xl font-semibold m-0 text-slate-800">XML Sitemaps</h2>
-                            <p className="text-slate-600">Use this only when you intend AmEveryWhere to provide your sitemap. It is disabled by default so WordPress Core and existing SEO plugins keep control.</p>
+                            <p className="text-slate-600">Use this only when you intend Holvek to provide your sitemap. It is disabled by default so WordPress Core and existing SEO plugins keep control.</p>
 
                             {isLoadingSitemaps ? (
                                 <div className="p-8 text-center"><Spinner /></div>
@@ -2410,7 +2921,7 @@ const App = () => {
 
                                     <div className="space-y-4">
                                         <ToggleControl
-                                            label="Use AmEveryWhere as the sitemap provider"
+                                            label="Use Holvek as the sitemap provider"
                                             help="Disables WordPress Core sitemaps while active. Do not enable when another SEO plugin owns your sitemap."
                                             checked={sitemapsData.enable_index_sitemap}
                                             onChange={(val) => setSitemapsData({ ...sitemapsData, enable_index_sitemap: val })}
@@ -2826,7 +3337,7 @@ const App = () => {
                     {activeTab === 'llms' && (
                         <div className="space-y-6">
                             <h2 className="text-xl font-semibold m-0 text-slate-800">LLM Agent Config (llms.txt)</h2>
-                            <p className="text-slate-600 mb-6">Manage how AI agents (ChatGPT, Perplexity, Claude) interact with and index your site's content via the `/llms.txt` standard.</p>
+                            <p className="text-slate-600 mb-6">{__('Holvek publishes an llms.txt file on this site. It does not submit the site to ChatGPT, Perplexity, or Claude, and it does not check whether they mention it.', 'holvek')}</p>
                             
                             {llmsStatus && <Notice status={llmsStatus.type} onRemove={() => setLlmsStatus(null)}>{llmsStatus.message}</Notice>}
 
@@ -3071,7 +3582,7 @@ const App = () => {
                                 {compressionConfig.enabled && (
                                     <label className="flex items-start gap-2 text-sm text-slate-700 bg-amber-50 border border-amber-200 rounded p-3">
                                         <input type="checkbox" checked={compressionAcknowledged} onChange={e => setCompressionAcknowledged(e.target.checked)} className="mt-1" />
-                                        <span>I understand that compression changes the displayed media file, and that AmEveryWhere will retain an original backup so I can restore it.</span>
+                                        <span>I understand that compression changes the displayed media file, and that Holvek will retain an original backup so I can restore it.</span>
                                     </label>
                                 )}
                                 <div className="flex items-center gap-4">
@@ -3211,7 +3722,7 @@ const App = () => {
                                 <div className="mt-8 bg-slate-50 border border-slate-200 rounded-lg p-6">
                                     <h3 className="text-lg font-semibold text-slate-800 m-0">Third-Party Service Disclosures</h3>
                                     <p className="text-slate-600 text-sm mt-2 mb-4">
-                                        AmEveryWhere integrates with external APIs to provide advanced features. You should update your Privacy Policy if you use these features.
+                                        Holvek integrates with external APIs to provide advanced features. You should update your Privacy Policy if you use these features.
                                     </p>
                                     <ul className="list-disc pl-5 text-sm text-slate-600 space-y-2">
                                         <li><strong>OpenAI / Anthropic:</strong> Receives post excerpts when using the LLM Writing Assistant.</li>
@@ -3220,7 +3731,7 @@ const App = () => {
                                         <li><strong>SerpApi:</strong> Receives your focus keywords for rank tracking.</li>
                                     </ul>
                                     <p className="text-xs text-slate-500 mt-4">
-                                        <em>A complete template has been automatically added to your <a href={amEveryWhereAdminConfig.apiUrl.replace('wp-json/ameverywhere/v1', 'wp-admin/privacy.php')} className="text-indigo-600 underline">WordPress Privacy Policy Guide</a>.</em>
+                                        <em>A complete template has been automatically added to your <a href={holvekAdminConfig.apiUrl.replace('wp-json/holvek/v1', 'wp-admin/privacy.php')} className="text-indigo-600 underline">WordPress Privacy Policy Guide</a>.</em>
                                     </p>
                                 </div>
                                 </>
@@ -3232,7 +3743,7 @@ const App = () => {
                         <div className="space-y-6 max-w-4xl">
                             <div>
                                 <h2 className="text-xl font-semibold m-0 text-slate-800">Roles & Capabilities</h2>
-                                <p className="text-slate-500 text-sm mt-1">Control which WordPress roles can access AmEveryWhere features. Administrators always retain full access.</p>
+                                <p className="text-slate-500 text-sm mt-1">Control which WordPress roles can access Holvek features. Administrators always retain full access.</p>
                             </div>
 
                             {rolesLoading && <div className="flex items-center gap-3 p-6 bg-slate-50 rounded-lg"><Spinner /><span className="text-slate-500">Loading roles…</span></div>}
@@ -3280,7 +3791,7 @@ const App = () => {
 
                                     {/* Capability descriptions */}
                                     <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 grid grid-cols-2 gap-3 text-xs text-slate-500">
-                                        <div>🛡 <strong className="text-slate-700">manage_seo</strong> — Full access to all AmEveryWhere settings, integrations, and configuration</div>
+                                        <div>🛡 <strong className="text-slate-700">manage_seo</strong> — Full access to all Holvek settings, integrations, and configuration</div>
                                         <div>📊 <strong className="text-slate-700">view_seo_reports</strong> — Read-only access to GSC dashboard, GA4 analytics, link health reports</div>
                                         <div>↩️ <strong className="text-slate-700">manage_redirects</strong> — Create, edit, and delete redirect rules; import/export CSV</div>
                                         <div>✏️ <strong className="text-slate-700">edit_seo_meta</strong> — Edit per-post SEO meta title, description, canonical, OG fields</div>
@@ -3340,7 +3851,7 @@ const App = () => {
                                             <div className="space-y-3 pt-2 border-t border-slate-200">
                                                 {[
                                                     ['force_ssl', 'Force HTTPS across all sites', 'Adds HSTS headers and redirects HTTP to HTTPS network-wide'],
-                                                    ['block_ai_bots', 'Block AI bots network-wide', 'Applies the AmEveryWhere AI bot firewall to every site in the network'],
+                                                    ['block_ai_bots', 'Block AI bots network-wide', 'Applies the Holvek AI bot firewall to every site in the network'],
                                                     ['allow_site_overrides', 'Allow site admins to override network defaults', 'When enabled, individual site admins can customize their own SEO settings'],
                                                 ].map(([key, label, help]) => (
                                                     <label key={key} className="flex items-start gap-3 cursor-pointer">
@@ -3393,7 +3904,7 @@ const App = () => {
                             <div className="flex items-start justify-between">
                                 <div>
                                     <h2 className="text-xl font-semibold m-0 text-slate-800">Technical SEO Audit</h2>
-                                    <p className="text-slate-500 text-sm mt-1">Run a 14-point site-wide audit across meta, schema, redirects, robots, SSL, and more.</p>
+                                    <p className="text-slate-500 text-sm mt-1">{__('This audit runs on this site. It checks meta descriptions, image alt text, 404s, redirect chains, orphaned pages, noindex directives, the sitemap, robots.txt, the site icon, SSL, schema, duplicate titles, cornerstone staleness, and canonicals. It does not score AI mentions, Google presence, or competitors.', 'holvek')}</p>
                                 </div>
                                 <button type="button" onClick={runSiteAudit} disabled={auditRunning} className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded hover:bg-indigo-700 disabled:opacity-50 whitespace-nowrap">
                                     {auditRunning ? '⏳ Running…' : '▶ Run Audit'}
@@ -3566,6 +4077,11 @@ const App = () => {
                             <div>
                                 <h2 className="text-xl font-semibold m-0 text-slate-800">Keyword Rank Tracker</h2>
                                 <p className="text-slate-500 text-sm mt-1">Track your Google ranking positions over time. Checks run daily via SerpApi.</p>
+                                {holvekAdminConfig.cloudConfigured !== '1' && (
+                                    <p className="text-sm mt-3 mb-0 p-3 bg-slate-50 border border-slate-200 rounded text-slate-700">
+                                        {__('This site is not connected to Holvek, so cloud rank tracking is unavailable. You can keep using Holvek on this site.', 'holvek')}
+                                    </p>
+                                )}
                             </div>
 
                             {/* SerpApi key notice */}
@@ -3690,7 +4206,6 @@ const App = () => {
                 </main>
             </div>
         </div>
-        )}
         </>
     );
 };
@@ -3779,10 +4294,17 @@ const SchemaRuleForm = ({ postTypes, categories, onAddRule }) => {
     );
 };
 
-const NavItem = ({ label, active, onClick }) => (
-    <button type="button" type="button" role="tab" aria-selected={active}
+const NavItem = ({ id, label, active, onClick, onKeyDown }) => (
+    <button
+        type="button"
+        role="tab"
+        id={`holvek-tab-${id}`}
+        aria-selected={active}
+        aria-controls="holvek-tabpanel"
+        tabIndex={active ? 0 : -1}
         onClick={onClick}
-        className={`text-left px-4 py-2 rounded font-medium transition-colors ${active ? 'bg-slate-100 text-brand-600' : 'text-slate-600 hover:bg-slate-50'}`}
+        onKeyDown={onKeyDown}
+        className={`holvek-tab text-left px-4 py-2 rounded font-medium transition-colors ${active ? 'bg-slate-100 text-brand-600' : 'text-slate-600 hover:bg-slate-50'}`}
     >
         {label}
     </button>

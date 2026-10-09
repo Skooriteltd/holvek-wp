@@ -1,12 +1,12 @@
 <?php
 
-namespace AmEveryWhere\Modules\Ai;
+namespace Holvek\WordPress\Modules\Ai;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use AmEveryWhere\Core\Ai\AiGateway;
+use Holvek\WordPress\Core\Ai\AiGateway;
 
 /**
  * ModelGateway: Unified abstraction layer for routing prompts across
@@ -30,7 +30,7 @@ class ModelGateway {
 		return array(
 			'success'  => $result['success'] ?? false,
 			'content'  => $result['text'] ?? '',
-			'provider' => get_option( 'ameverywhere_ai_provider', 'openai' ),
+			'provider' => get_option( 'holvek_ai_provider', 'openai' ),
 			'error'    => $result['message'] ?? null,
 		);
 	}

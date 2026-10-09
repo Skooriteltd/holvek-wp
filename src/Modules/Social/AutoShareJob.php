@@ -1,14 +1,16 @@
 <?php
 
-namespace AmEveryWhere\Modules\Social;
+namespace Holvek\WordPress\Modules\Social;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use AmEveryWhere\Core\Queue\QueueManager;
+use Holvek\WordPress\Core\Queue\QueueManager;
 
 class AutoShareJob {
+
+	public const ACCOUNT_BATCH = 3;
 
 	private array $data;
 
@@ -31,7 +33,7 @@ class AutoShareJob {
 		}
 
 		// Check if social sharing is explicitly disabled for this post
-		$disableShare = get_post_meta( $postId, '_ameverywhere_disable_social_share', true );
+		$disableShare = get_post_meta( $postId, '_holvek_disable_social_share', true );
 		if ( $disableShare === '1' ) {
 			return;
 		}
@@ -40,7 +42,7 @@ class AutoShareJob {
 		// Unless it's a manual trigger (manual trigger can bypass this by setting 'manual' => true)
 		$isManual = $this->data['manual'] ?? false;
 		if ( ! $isManual ) {
-			$alreadyShared = get_post_meta( $postId, '_ameverywhere_auto_shared', true );
+			$alreadyShared = get_post_meta( $postId, '_holvek_auto_shared', true );
 			if ( $alreadyShared === '1' ) {
 				return;
 			}
@@ -59,24 +61,24 @@ class AutoShareJob {
 		$title = get_the_title( $postId );
 
 		// Custom OG Title
-		$ogTitle = get_post_meta( $postId, '_ameverywhere_og_title', true );
+		$ogTitle = get_post_meta( $postId, '_holvek_og_title', true );
 		if ( ! empty( $ogTitle ) ) {
 			$title = $ogTitle;
 		}
 
 		// Excerpt / OG Desc
-		$description = get_post_meta( $postId, '_ameverywhere_og_description', true );
+		$description = get_post_meta( $postId, '_holvek_og_description', true );
 		if ( empty( $description ) ) {
 			$description = wp_trim_words( get_post_field( 'post_excerpt', $postId ), 25 );
 		}
 
 		// OG Image
-		$image = get_post_meta( $postId, '_ameverywhere_og_image', true );
+		$image = get_post_meta( $postId, '_holvek_og_image', true );
 		if ( empty( $image ) && has_post_thumbnail( $postId ) ) {
 			$image = get_the_post_thumbnail_url( $postId, 'full' );
 		}
 		if ( empty( $image ) ) {
-			$image = get_option( 'ameverywhere_default_share_image', '' );
+			$image = get_option( 'holvek_default_share_image', '' );
 		}
 
 		$payload = array(
@@ -86,41 +88,40 @@ class AutoShareJob {
 			'image'       => $image,
 		);
 
-		$hasFailures = false;
-
-		// Fetch categories attached to the post for matching
+		$hasFailures    = ! empty( $this->data['had_failures'] );
 		$postCategories = wp_get_post_categories( $postId );
+		$eligible       = array();
 
 		foreach ( $accounts as $account ) {
-			// If target account ID is specified, skip others
 			if ( $accountId && $account['id'] !== $accountId ) {
 				continue;
 			}
 
-			// Only share to enabled accounts
 			$enabled = $account['auto_share'] ?? true;
 			if ( ! $enabled && ! $isManual ) {
 				continue;
 			}
 
-			// Category Binding Rules
 			$boundCategories = $account['bound_categories'] ?? array();
 			if ( ! empty( $boundCategories ) ) {
-				// If the account has bound categories, the post MUST belong to at least one of them
 				$intersection = array_intersect( $postCategories, $boundCategories );
 				if ( empty( $intersection ) ) {
-					// No matching category, skip this account
 					continue;
 				}
 			}
 
+			$eligible[] = $account;
+		}
+
+		$offset = $accountId ? 0 : max( 0, (int) ( $this->data['offset'] ?? 0 ) );
+		$slice  = array_slice( $eligible, $offset, $accountId ? 1 : self::ACCOUNT_BATCH );
+
+		foreach ( $slice as $account ) {
 			$response = $apiGateway->share( $account, $payload );
 
 			if ( ! $response['success'] ) {
-				// If it's a rate limit error (429) and we haven't exhausted retries
 				if ( $response['code'] === 429 && $retries < 3 ) {
-					$hasFailures = true;
-					// Log failure for this account so we can retry just this account
+					$hasFailures  = true;
 					$queueManager = new QueueManager();
 					$queueManager->push(
 						self::class,
@@ -132,25 +133,40 @@ class AutoShareJob {
 						)
 					);
 				}
-			} else {
-				// Successfully shared to this network
-				// We could log this to post meta to show on the dashboard
-				$shareLogs = get_post_meta( $postId, '_ameverywhere_share_logs', true );
-				if ( ! is_array( $shareLogs ) ) {
-					$shareLogs = array();
-				}
-				$shareLogs[] = array(
-					'account_id' => $account['id'],
-					'network'    => $account['network'],
-					'timestamp'  => time(),
-				);
-				update_post_meta( $postId, '_ameverywhere_share_logs', $shareLogs );
+				continue;
 			}
+
+			$shareLogs = get_post_meta( $postId, '_holvek_share_logs', true );
+			if ( ! is_array( $shareLogs ) ) {
+				$shareLogs = array();
+			}
+			$shareLogs[] = array(
+				'account_id' => $account['id'],
+				'network'    => $account['network'],
+				'timestamp'  => time(),
+			);
+			update_post_meta( $postId, '_holvek_share_logs', $shareLogs );
+		}
+
+		$next = $offset + count( $slice );
+		if ( ! $accountId && $next < count( $eligible ) ) {
+			$queueManager = new QueueManager();
+			$queueManager->push(
+				self::class,
+				array(
+					'post_id'      => $postId,
+					'retries'      => $retries,
+					'manual'       => $isManual,
+					'offset'       => $next,
+					'had_failures' => $hasFailures,
+				),
+				5
+			);
+			return;
 		}
 
 		if ( ! $hasFailures && ! $isManual ) {
-			// Mark as fully auto-shared
-			update_post_meta( $postId, '_ameverywhere_auto_shared', '1' );
+			update_post_meta( $postId, '_holvek_auto_shared', '1' );
 		}
 	}
 }

@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\ContentAssistant;
+namespace Holvek\WordPress\Modules\ContentAssistant;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -16,27 +16,36 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class AuditScheduler {
 
-	private const RESULTS_OPTION  = 'ameverywhere_last_audit_results';
-	private const HISTORY_OPTION  = 'ameverywhere_audit_history';
-	private const SCHEDULE_OPTION = 'ameverywhere_audit_schedule';
-	private const CRON_HOOK       = 'ameverywhere_scheduled_audit';
+	private const RESULTS_OPTION  = 'holvek_last_audit_results';
+	private const HISTORY_OPTION  = 'holvek_audit_history';
+	private const SCHEDULE_OPTION = 'holvek_audit_schedule';
+	private const CRON_HOOK       = 'holvek_scheduled_audit';
 	private const HISTORY_MAX     = 12;
 
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'registerRoutes' ) );
 		add_action( self::CRON_HOOK, array( $this, 'runScheduledAudit' ) );
 		add_filter( 'cron_schedules', array( $this, 'registerSchedules' ) );
+	}
 
-		if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
-			$config = $this->getConfig();
-			$this->setupSchedule( $config['frequency'] );
+	/**
+	 * Schedule the stored frequency. Activation calls this. The worker calls it again when the event is missing.
+	 */
+	public static function schedule(): void {
+		if ( wp_next_scheduled( self::CRON_HOOK ) ) {
+			return;
 		}
+
+		$config     = ( new self() )->getConfig();
+		$frequency  = ( $config['frequency'] ?? 'weekly' ) === 'monthly' ? 'monthly' : 'weekly';
+		$recurrence = ( $frequency === 'monthly' ) ? 'holvek_monthly' : 'weekly';
+		wp_schedule_event( time() + 60, $recurrence, self::CRON_HOOK );
 	}
 
 	public function registerSchedules( array $schedules ): array {
-		$schedules['ameverywhere_monthly'] = array(
+		$schedules['holvek_monthly'] = array(
 			'interval' => 30 * DAY_IN_SECONDS,
-			'display'  => __( 'Once Monthly', 'ameverywhere' ),
+			'display'  => __( 'Once Monthly', 'holvek' ),
 		);
 		return $schedules;
 	}
@@ -47,7 +56,7 @@ class AuditScheduler {
 		$adminCap = fn() => current_user_can( 'manage_seo' ) || current_user_can( 'manage_options' );
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/audit/schedule',
 			array(
 				array(
@@ -64,7 +73,7 @@ class AuditScheduler {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/audit/results',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -74,7 +83,7 @@ class AuditScheduler {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/audit/run-now',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -96,7 +105,7 @@ class AuditScheduler {
 				'frequency'     => $config['frequency'],
 				'email_enabled' => $config['email_enabled'],
 				'email_address' => $config['email_address'],
-				'next_run'      => $nextRun ? date( 'Y-m-d H:i:s', $nextRun ) : null,
+				'next_run'      => $nextRun ? gmdate( 'Y-m-d H:i:s', $nextRun ) : null,
 				'last_run'      => $lastRun['timestamp'] ?? null,
 			)
 		);
@@ -139,7 +148,7 @@ class AuditScheduler {
 		return rest_ensure_response(
 			array(
 				'success' => true,
-				'message' => 'Audit will run momentarily.',
+				'message' => __( 'Audit will run momentarily.', 'holvek' ),
 			)
 		);
 	}
@@ -147,6 +156,8 @@ class AuditScheduler {
 	// ── Audit logic ───────────────────────────────────────────────────────────
 
 	public function runScheduledAudit(): void {
+		self::schedule();
+
 		$issues   = 0;
 		$warnings = 0;
 		$passed   = 0;
@@ -160,7 +171,7 @@ class AuditScheduler {
 				'posts_per_page' => 1,
 				'meta_query'     => array(
 					array(
-						'key'     => '_ameverywhere_meta_description',
+						'key'     => '_holvek_meta_description',
 						'compare' => 'NOT EXISTS',
 					),
 				),
@@ -193,9 +204,9 @@ class AuditScheduler {
 
 			// 3. 404 count
 			global $wpdb;
-			$logTable    = $wpdb->prefix . 'ameverywhere_404_logs';
+			$logTable    = $wpdb->prefix . 'holvek_404_logs';
 			$tableExists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $logTable ) ) );
-			$count404    = $tableExists ? (int) $wpdb->get_var( "SELECT COUNT(*) FROM $logTable" ) : 0;
+			$count404    = $tableExists ? (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}holvek_404_logs" ) : 0;
 			if ( $count404 > 20 ) {
 				++$issues;
 				$details['404_count'] = $count404; } elseif ( $count404 > 5 ) {
@@ -205,7 +216,7 @@ class AuditScheduler {
 
 						// 4. Noindex on front page
 						$frontPageId  = (int) get_option( 'page_on_front' );
-						$frontNoindex = $frontPageId > 0 ? get_post_meta( $frontPageId, '_ameverywhere_noindex', true ) : '';
+						$frontNoindex = $frontPageId > 0 ? get_post_meta( $frontPageId, '_holvek_noindex', true ) : '';
 						if ( $frontNoindex === 'yes' ) {
 							++$issues;
 							$details['front_page_noindex'] = true; } else {
@@ -227,7 +238,7 @@ class AuditScheduler {
 									'details'   => $details,
 								);
 
-								update_option( self::RESULTS_OPTION, $results );
+								update_option( self::RESULTS_OPTION, $results, false );
 
 								// Append to history (keep last 12)
 								$history   = (array) get_option( self::HISTORY_OPTION, array() );
@@ -235,14 +246,14 @@ class AuditScheduler {
 									'timestamp' => $results['timestamp'],
 									'summary'   => $results['summary'],
 								);
-								update_option( self::HISTORY_OPTION, array_slice( $history, -self::HISTORY_MAX ) );
+								update_option( self::HISTORY_OPTION, array_slice( $history, -self::HISTORY_MAX ), false );
 
 								// Email if enabled
 								$config = $this->getConfig();
 								if ( $config['email_enabled'] ) {
 									wp_mail(
 										$config['email_address'],
-										'[AmEveryWhere] Scheduled SEO Audit Results',
+										'[Holvek] Scheduled SEO Audit Results',
 										$this->formatEmailBody( $results ),
 										array( 'Content-Type: text/html; charset=UTF-8' )
 									);
@@ -258,13 +269,13 @@ class AuditScheduler {
 			wp_unschedule_event( $ts, self::CRON_HOOK );
 		}
 
-		$recurrence = ( $frequency === 'monthly' ) ? 'ameverywhere_monthly' : 'weekly';
+		$recurrence = ( $frequency === 'monthly' ) ? 'holvek_monthly' : 'weekly';
 		wp_schedule_event( time() + 60, $recurrence, self::CRON_HOOK );
 	}
 
 	public function formatEmailBody( array $results ): string {
 		$s     = $results['summary'];
-		$body  = '<h2>AmEveryWhere SEO Audit Results</h2>';
+		$body  = '<h2>Holvek SEO Audit Results</h2>';
 		$body .= "<p>Run at: <strong>{$results['timestamp']}</strong></p>";
 		$body .= '<table border="1" cellpadding="6" style="border-collapse:collapse">';
 		$body .= '<tr><th>Metric</th><th>Count</th></tr>';
@@ -281,7 +292,7 @@ class AuditScheduler {
 			$body .= '</ul>';
 		}
 
-		$body .= '<p><a href="' . esc_url( admin_url( 'admin.php?page=ameverywhere' ) ) . '">View full audit in AmEveryWhere →</a></p>';
+		$body .= '<p><a href="' . esc_url( admin_url( 'admin.php?page=holvek' ) ) . '">View full audit in Holvek →</a></p>';
 		return $body;
 	}
 

@@ -1,16 +1,16 @@
 <?php
 
-namespace AmEveryWhere\Modules\Social;
+namespace Holvek\WordPress\Modules\Social;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use AmEveryWhere\Core\Security\KeyVault;
+use Holvek\WordPress\Core\Security\KeyVault;
 
 class SocialAccountManager {
 
-	private const OPTION_KEY = 'ameverywhere_social_accounts';
+	private const OPTION_KEY = 'holvek_social_accounts';
 
 	public function getAccounts(): array {
 		$accounts = get_option( self::OPTION_KEY, array() );
@@ -26,15 +26,31 @@ class SocialAccountManager {
 		);
 	}
 
-	public function saveAccount( array $accountData ): void {
+	/**
+	 * Store an account. The access token is written only as ciphertext.
+	 *
+	 * @return true|\WP_Error
+	 */
+	public function saveAccount( array $accountData ): true|\WP_Error {
 		$accounts = $this->getAccounts();
 
 		// Use a standard unique ID based on network and uuid
 		$accountId         = $accountData['id'] ?? ( ( $accountData['network'] ?? 'account' ) . '_' . ( function_exists( 'wp_generate_uuid4' ) ? wp_generate_uuid4() : uniqid( '', true ) ) );
 		$accountData['id'] = $accountId;
 
-		if ( ! empty( $accountData['access_token'] ) ) {
-			$accountData['access_token'] = KeyVault::encrypt( $accountData['access_token'] );
+		if ( ! empty( $accountData['access_token'] ) && is_string( $accountData['access_token'] ) ) {
+			$encrypted = KeyVault::encrypt( $accountData['access_token'] );
+			if ( is_wp_error( $encrypted ) || ! is_string( $encrypted ) || ! KeyVault::isCiphertext( $encrypted ) ) {
+				if ( is_wp_error( $encrypted ) ) {
+					return $encrypted;
+				}
+				return new \WP_Error(
+					'holvek_encryption_failed',
+					__( 'Holvek could not encrypt this secret. The value was not saved.', 'holvek' ),
+					array( 'status' => 500 )
+				);
+			}
+			$accountData['access_token'] = $encrypted;
 		}
 
 		// Check if exists, update or append
@@ -51,7 +67,8 @@ class SocialAccountManager {
 			$accounts[] = $accountData;
 		}
 
-		update_option( self::OPTION_KEY, $accounts );
+		update_option( self::OPTION_KEY, $accounts, false );
+		return true;
 	}
 
 	public function deleteAccount( string $accountId ): bool {
@@ -66,7 +83,7 @@ class SocialAccountManager {
 		);
 
 		if ( count( $accounts ) !== $initialCount ) {
-			update_option( self::OPTION_KEY, array_values( $accounts ) );
+			update_option( self::OPTION_KEY, array_values( $accounts ), false );
 			return true;
 		}
 
@@ -88,7 +105,7 @@ class SocialAccountManager {
 		}
 
 		if ( $updated ) {
-			update_option( self::OPTION_KEY, $accounts );
+			update_option( self::OPTION_KEY, $accounts, false );
 			return true;
 		}
 

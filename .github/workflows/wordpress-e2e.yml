@@ -39,19 +39,19 @@ jobs:
     - name: Convert to Multisite if matrix demands
       if: matrix.multisite == true
       run: |
-        wp-env run cli wp core multisite-convert --title="AmEverywhere Network" --base="/" --subdomains=false
+        wp-env run cli wp core multisite-convert --title="Holvek Network" --base="/" --subdomains=false
 
     - name: Test Plugin Activation
       run: |
         if [ "${{ matrix.multisite }}" = "true" ]; then
-          wp-env run cli wp plugin activate ameverywhere-wp --network
+          wp-env run cli wp plugin activate "$(basename "$GITHUB_WORKSPACE")/holvek.php" --network
         else
-          wp-env run cli wp plugin activate ameverywhere-wp
+          wp-env run cli wp plugin activate "$(basename "$GITHUB_WORKSPACE")/holvek.php"
         fi
 
     - name: Verify Tables Created
       run: |
-        wp-env run cli wp db query "SHOW TABLES LIKE '%ameverywhere%';" | grep ameverywhere
+        wp-env run cli wp db query "SHOW TABLES LIKE '%holvek%';" | grep holvek
 
     - name: Run Privacy & Retention E2E Tests
       run: |
@@ -64,14 +64,14 @@ jobs:
     - name: Test Plugin Deactivation
       run: |
         if [ "${{ matrix.multisite }}" = "true" ]; then
-          wp-env run cli wp plugin deactivate ameverywhere-wp --network
+          wp-env run cli wp plugin deactivate "$(basename "$GITHUB_WORKSPACE")/holvek.php" --network
         else
-          wp-env run cli wp plugin deactivate ameverywhere-wp
+          wp-env run cli wp plugin deactivate "$(basename "$GITHUB_WORKSPACE")/holvek.php"
         fi
 
     - name: Test Plugin Uninstall
       run: |
-        wp-env run cli wp plugin uninstall ameverywhere-wp
+        wp-env run cli wp plugin uninstall "$(basename "$GITHUB_WORKSPACE")/holvek.php"
 
     - name: Stop wp-env
       run: wp-env stop

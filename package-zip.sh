@@ -2,7 +2,7 @@
 # Build a WordPress.org distribution from an immutable, clean release tag.
 set -euo pipefail
 
-readonly PLUGIN_SLUG='ameverywhere'
+readonly PLUGIN_SLUG='holvek'
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly OUTPUT_DIR="${SCRIPT_DIR}/dist"
 readonly BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/${PLUGIN_SLUG}-release.XXXXXX")"
@@ -88,7 +88,7 @@ rsync -a --delete \
     --exclude='package-zip.sh' \
     "${SOURCE_DIR}/" "${STAGE_DIR}/"
 
-if [[ ! -f "${STAGE_DIR}/ameverywhere.php" || ! -f "${STAGE_DIR}/vendor/autoload.php" || ! -f "${STAGE_DIR}/build/index.js" ]]; then
+if [[ ! -f "${STAGE_DIR}/holvek.php" || ! -f "${STAGE_DIR}/vendor/autoload.php" || ! -f "${STAGE_DIR}/build/index.js" ]]; then
     echo 'ERROR: The staged plugin is missing a required runtime file.' >&2
     exit 1
 fi

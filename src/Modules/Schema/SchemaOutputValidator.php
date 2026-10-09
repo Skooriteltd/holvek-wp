@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Schema;
+namespace Holvek\WordPress\Modules\Schema;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -46,7 +46,7 @@ class SchemaOutputValidator {
 
 	public function registerRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/schema/validate',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -66,14 +66,14 @@ class SchemaOutputValidator {
 		}
 
 		if ( empty( $url ) ) {
-			return new \WP_Error( 'missing_target', 'Provide post_id or url.', array( 'status' => 400 ) );
+			return new \WP_Error( 'missing_target', __( 'Provide post_id or url.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		if ( ! $this->isLocalUrl( $url ) ) {
-			return new \WP_Error( 'invalid_target', __( 'Schema validation accepts only URLs on this WordPress site.', 'ameverywhere' ), array( 'status' => 400 ) );
+			return new \WP_Error( 'invalid_target', __( 'Schema validation accepts only URLs on this WordPress site.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
-		$cacheKey = 'ameverywhere_schema_validation_' . md5( $url );
+		$cacheKey = 'holvek_schema_validation_' . md5( $url );
 		$cached   = get_transient( $cacheKey );
 		if ( $cached !== false ) {
 			return rest_ensure_response( array_merge( $cached, array( 'cached' => true ) ) );
@@ -95,7 +95,7 @@ class SchemaOutputValidator {
 				'timeout'             => 20,
 				'redirection'         => 3,
 				'limit_response_size' => 2 * MB_IN_BYTES,
-				'user-agent'          => 'AmEveryWhere Schema Validator/1.0',
+				'user-agent'          => 'Holvek Schema Validator/1.0',
 			)
 		);
 
@@ -119,7 +119,13 @@ class SchemaOutputValidator {
 				$schemasFound[] = array(
 					'type'        => 'unknown',
 					'valid'       => false,
-					'errors'      => array( 'Invalid JSON: ' . json_last_error_msg() ),
+					'errors'      => array(
+						sprintf(
+							/* translators: %s: JSON parser error. */
+							__( 'Invalid JSON: %s', 'holvek' ),
+							json_last_error_msg()
+						),
+					),
 					'warnings'    => array(),
 					'raw_snippet' => mb_substr( $json, 0, 200 ),
 				);

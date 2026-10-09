@@ -1,17 +1,17 @@
 <?php
 
-namespace AmEveryWhere\Modules\Indexing;
+namespace Holvek\WordPress\Modules\Indexing;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use AmEveryWhere\Core\Security\KeyVault;
+use Holvek\WordPress\Core\Security\KeyVault;
 
 class GoogleIndexingApi {
 
 	private function getStoredCredentials(): string {
-		$raw = (string) get_option( 'ameverywhere_google_indexing_key', '' );
+		$raw = (string) get_option( 'holvek_google_indexing_key', '' );
 		return KeyVault::decrypt( $raw );
 	}
 
@@ -79,7 +79,7 @@ class GoogleIndexingApi {
 		}
 
 		$schemas   = array();
-		$generated = ( new \AmEveryWhere\Modules\Schema\SchemaGenerator() )->getSchemaForPost( $post->ID );
+		$generated = ( new \Holvek\WordPress\Modules\Schema\SchemaGenerator() )->getSchemaForPost( $post->ID );
 		if ( ! empty( $generated['@graph'] ) && is_array( $generated['@graph'] ) ) {
 			$schemas = $generated['@graph'];
 		}
@@ -182,7 +182,7 @@ class GoogleIndexingApi {
 			}
 		}
 
-		$transientKey = 'ameverywhere_gsc_token';
+		$transientKey = 'holvek_gsc_token';
 		$token        = get_transient( $transientKey );
 		if ( $token ) {
 			return $token;
@@ -205,14 +205,17 @@ class GoogleIndexingApi {
 			)
 		);
 
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Base64 is the JWT wire encoding, not code obfuscation.
 		$base64UrlHeader = str_replace( array( '+', '/', '=' ), array( '-', '_', '' ), base64_encode( $header ) );
-		$base64UrlClaim  = str_replace( array( '+', '/', '=' ), array( '-', '_', '' ), base64_encode( $claim ) );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Base64 is the JWT wire encoding, not code obfuscation.
+		$base64UrlClaim = str_replace( array( '+', '/', '=' ), array( '-', '_', '' ), base64_encode( $claim ) );
 
 		$signature = '';
 		if ( ! openssl_sign( $base64UrlHeader . '.' . $base64UrlClaim, $signature, $jsonKey['private_key'], 'SHA256' ) ) {
 			return null;
 		}
 
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Base64 is the JWT wire encoding, not code obfuscation.
 		$base64UrlSignature = str_replace( array( '+', '/', '=' ), array( '-', '_', '' ), base64_encode( $signature ) );
 		$jwt                = $base64UrlHeader . '.' . $base64UrlClaim . '.' . $base64UrlSignature;
 

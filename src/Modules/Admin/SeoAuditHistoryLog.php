@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Admin;
+namespace Holvek\WordPress\Modules\Admin;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -9,17 +9,59 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * SeoAuditHistoryLog
  *
- * BL-042: Maintains a tamper-evident audit trail of all AmEveryWhere SEO setting
+ * BL-042: Maintains a tamper-evident audit trail of all Holvek SEO setting
  * changes. Records who changed what, when, and what the previous value was.
  */
 class SeoAuditHistoryLog {
 
-	private const TABLE_NAME   = 'ameverywhere_audit_log';
-	private const LOG_MAX_ROWS = 10000;
+	private const TABLE_NAME      = 'holvek_audit_log';
+	private const LOG_MAX_ROWS    = 10000;
+	private const PRUNE_CRON_HOOK = 'holvek_prune_audit_log';
 
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'registerRoutes' ) );
 		$this->hookMetaChanges();
+		add_action( self::PRUNE_CRON_HOOK, array( $this, 'pruneOldEntries' ) );
+	}
+
+	/**
+	 * Schedule the daily prune. Activation calls this. The worker calls it again when the event is missing.
+	 */
+	public static function schedule(): void {
+		if ( wp_next_scheduled( self::PRUNE_CRON_HOOK ) ) {
+			return;
+		}
+
+		wp_schedule_event( time(), 'daily', self::PRUNE_CRON_HOOK );
+	}
+
+	/**
+	 * Prune audit log entries exceeding MAX_ROWS. Called by daily cron.
+	 */
+	public function pruneOldEntries(): void {
+		self::schedule();
+
+		global $wpdb;
+
+		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}holvek_audit_log" );
+		if ( $count <= self::LOG_MAX_ROWS ) {
+			return;
+		}
+
+		$deleteLimit = $count - self::LOG_MAX_ROWS;
+		$wpdb->query(
+			$wpdb->prepare( "DELETE FROM {$wpdb->prefix}holvek_audit_log ORDER BY id ASC LIMIT %d", $deleteLimit )
+		);
+	}
+
+	/**
+	 * Cleanup on plugin deactivation: clear the pruning cron.
+	 */
+	public static function deactivate(): void {
+		$timestamp = wp_next_scheduled( self::PRUNE_CRON_HOOK );
+		if ( $timestamp ) {
+			wp_unschedule_event( $timestamp, self::PRUNE_CRON_HOOK );
+		}
 	}
 
 	public static function createTable(): void {
@@ -48,19 +90,19 @@ class SeoAuditHistoryLog {
 	}
 
 	private function hookMetaChanges(): void {
-		// Track changes to all _ameverywhere_* post meta
+		// Track changes to all _holvek_* post meta
 		add_action( 'updated_post_meta', array( $this, 'onMetaUpdated' ), 10, 4 );
 		add_action( 'added_post_meta', array( $this, 'onMetaAdded' ), 10, 4 );
 		add_action( 'deleted_post_meta', array( $this, 'onMetaDeleted' ), 10, 4 );
 
-		// Track changes to ameverywhere_ options
+		// Track changes to holvek_ options
 		add_action( 'updated_option', array( $this, 'onOptionUpdated' ), 10, 3 );
 	}
 
 	// ── Hooks ─────────────────────────────────────────────────────────────────
 
 	public function onMetaUpdated( $metaId, int $postId, string $metaKey, $newValue ): void {
-		if ( strpos( $metaKey, '_ameverywhere_' ) !== 0 ) {
+		if ( strpos( $metaKey, '_holvek_' ) !== 0 ) {
 			return;
 		}
 
@@ -69,7 +111,7 @@ class SeoAuditHistoryLog {
 	}
 
 	public function onMetaAdded( $metaId, int $postId, string $metaKey, $metaValue ): void {
-		if ( strpos( $metaKey, '_ameverywhere_' ) !== 0 ) {
+		if ( strpos( $metaKey, '_holvek_' ) !== 0 ) {
 			return;
 		}
 
@@ -77,7 +119,7 @@ class SeoAuditHistoryLog {
 	}
 
 	public function onMetaDeleted( $metaIds, int $postId, string $metaKey, $metaValue ): void {
-		if ( strpos( $metaKey, '_ameverywhere_' ) !== 0 ) {
+		if ( strpos( $metaKey, '_holvek_' ) !== 0 ) {
 			return;
 		}
 
@@ -85,12 +127,12 @@ class SeoAuditHistoryLog {
 	}
 
 	public function onOptionUpdated( string $option, $oldValue, $newValue ): void {
-		if ( strpos( $option, 'ameverywhere_' ) !== 0 ) {
+		if ( strpos( $option, 'holvek_' ) !== 0 ) {
 			return;
 		}
 
 		// Skip high-frequency transients
-		if ( strpos( $option, 'ameverywhere_audit_log' ) !== false ) {
+		if ( strpos( $option, 'holvek_audit_log' ) !== false ) {
 			return;
 		}
 
@@ -103,7 +145,7 @@ class SeoAuditHistoryLog {
 		$adminCap = fn() => current_user_can( 'manage_seo' ) || current_user_can( 'manage_options' );
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/audit-log',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -127,7 +169,7 @@ class SeoAuditHistoryLog {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/audit-log/export',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -139,7 +181,6 @@ class SeoAuditHistoryLog {
 
 	public function getLogs( \WP_REST_Request $request ): \WP_REST_Response {
 		global $wpdb;
-		$table   = $wpdb->prefix . self::TABLE_NAME;
 		$postId  = (int) $request->get_param( 'post_id' );
 		$page    = max( 1, (int) $request->get_param( 'page' ) );
 		$perPage = min( 200, max( 1, (int) $request->get_param( 'per_page' ) ) );
@@ -147,11 +188,11 @@ class SeoAuditHistoryLog {
 
 		if ( $postId > 0 ) {
 			$total = (int) $wpdb->get_var(
-				$wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE post_id = %d", $postId )
+				$wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}holvek_audit_log WHERE post_id = %d", $postId )
 			);
 			$rows  = $wpdb->get_results(
 				$wpdb->prepare(
-					"SELECT * FROM {$table} WHERE post_id = %d ORDER BY created_at DESC LIMIT %d OFFSET %d",
+					"SELECT * FROM {$wpdb->prefix}holvek_audit_log WHERE post_id = %d ORDER BY created_at DESC LIMIT %d OFFSET %d",
 					$postId,
 					$perPage,
 					$offset
@@ -159,10 +200,10 @@ class SeoAuditHistoryLog {
 				ARRAY_A
 			);
 		} else {
-			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}holvek_audit_log" );
 			$rows  = $wpdb->get_results(
 				$wpdb->prepare(
-					"SELECT * FROM {$table} ORDER BY created_at DESC LIMIT %d OFFSET %d",
+					"SELECT * FROM {$wpdb->prefix}holvek_audit_log ORDER BY created_at DESC LIMIT %d OFFSET %d",
 					$perPage,
 					$offset
 				),
@@ -187,17 +228,41 @@ class SeoAuditHistoryLog {
 
 	public function exportCsv( \WP_REST_Request $request ): \WP_REST_Response {
 		global $wpdb;
-		$table = $wpdb->prefix . self::TABLE_NAME;
-		$rows  = $wpdb->get_results( "SELECT * FROM {$table} ORDER BY created_at DESC LIMIT 5000", ARRAY_A );
 
-		$lines = array( 'id,user_id,post_id,action,field,old_value,new_value,context,created_at' );
-		foreach ( $rows as $r ) {
-			$lines[] = implode( ',', array_map( fn( $v ) => '"' . str_replace( '"', '""', (string) $v ) . '"', $r ) );
+		$perPage = (int) $request->get_param( 'per_page' );
+		if ( $perPage < 1 ) {
+			$perPage = 200;
 		}
+		$perPage       = min( 200, $perPage );
+		$requestedPage = (int) $request->get_param( 'page' );
+		$lines         = array( 'id,user_id,post_id,action,field,old_value,new_value,context,created_at' );
+		$page          = $requestedPage > 0 ? $requestedPage : 1;
+		$lastPage      = $requestedPage > 0 ? $requestedPage : 50;
+		$fetched       = 0;
+
+		do {
+			$offset = ( $page - 1 ) * $perPage;
+			$rows   = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT id, user_id, post_id, action, field, old_value, new_value, context, created_at FROM {$wpdb->prefix}holvek_audit_log ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d",
+					$perPage,
+					$offset
+				),
+				ARRAY_A
+			);
+			if ( ! is_array( $rows ) ) {
+				$rows = array();
+			}
+			foreach ( $rows as $r ) {
+				$lines[] = implode( ',', array_map( fn( $v ) => '"' . str_replace( '"', '""', (string) $v ) . '"', $r ) );
+			}
+			$fetched = count( $rows );
+			++$page;
+		} while ( $requestedPage < 1 && $fetched === $perPage && $page <= $lastPage );
 
 		$response = rest_ensure_response( implode( "\n", $lines ) );
 		$response->header( 'Content-Type', 'text/csv; charset=utf-8' );
-		$response->header( 'Content-Disposition', 'attachment; filename=ameverywhere-audit-log.csv' );
+		$response->header( 'Content-Disposition', 'attachment; filename=holvek-audit-log.csv' );
 		return $response;
 	}
 
@@ -221,13 +286,7 @@ class SeoAuditHistoryLog {
 			)
 		);
 
-		// Prune oldest rows if table grows too large
-		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
-		if ( $count > self::LOG_MAX_ROWS ) {
-			$deleteLimit = (int) ( $count - self::LOG_MAX_ROWS + 1 );
-			$wpdb->query(
-				$wpdb->prepare( "DELETE FROM {$table} ORDER BY id ASC LIMIT %d", $deleteLimit )
-			);
-		}
+		// Pruning is handled by the daily cron job (holvek_prune_audit_log)
+		// to avoid expensive COUNT+DELETE queries on every meta write.
 	}
 }

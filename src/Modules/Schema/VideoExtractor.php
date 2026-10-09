@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Schema;
+namespace Holvek\WordPress\Modules\Schema;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -22,14 +22,14 @@ class VideoExtractor {
 		}
 
 		// Check if there is manual video metadata first
-		$manualVideoUrl = get_post_meta( $postId, '_ameverywhere_video_url', true );
+		$manualVideoUrl = get_post_meta( $postId, '_holvek_video_url', true );
 		$videoObjects   = array();
 
 		if ( ! empty( $manualVideoUrl ) ) {
-			$thumbnail   = get_post_meta( $postId, '_ameverywhere_video_thumbnail', true ) ?: get_the_post_thumbnail_url( $postId, 'full' );
-			$title       = get_post_meta( $postId, '_ameverywhere_video_title', true ) ?: get_the_title( $postId );
-			$desc        = get_post_meta( $postId, '_ameverywhere_video_description', true ) ?: wp_strip_all_tags( get_the_excerpt( $postId ) );
-			$durationRaw = get_post_meta( $postId, '_ameverywhere_video_duration', true );
+			$thumbnail   = get_post_meta( $postId, '_holvek_video_thumbnail', true ) ?: get_the_post_thumbnail_url( $postId, 'full' );
+			$title       = get_post_meta( $postId, '_holvek_video_title', true ) ?: get_the_title( $postId );
+			$desc        = get_post_meta( $postId, '_holvek_video_description', true ) ?: wp_strip_all_tags( get_the_excerpt( $postId ) );
+			$durationRaw = get_post_meta( $postId, '_holvek_video_duration', true );
 
 			$duration = 'PT1M'; // default fallback
 			if ( ! empty( $durationRaw ) ) {

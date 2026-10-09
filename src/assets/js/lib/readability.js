@@ -1,5 +1,5 @@
 /**
- * AmEveryWhere Readability Analysis Engine
+ * Holvek Readability Analysis Engine
  * 
  * Implements Flesch Reading Ease, sentence analysis, passive voice detection,
  * transition word checks, and subheading distribution analysis.

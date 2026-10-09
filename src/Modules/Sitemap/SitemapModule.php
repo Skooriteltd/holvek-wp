@@ -1,12 +1,12 @@
 <?php
 
-namespace AmEveryWhere\Modules\Sitemap;
+namespace Holvek\WordPress\Modules\Sitemap;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use AmEveryWhere\Core\Event\EventManager;
+use Holvek\WordPress\Core\Event\EventManager;
 
 /**
  * Boots the sitemap module, registers REST endpoints for sitemaps config,
@@ -38,7 +38,7 @@ class SitemapModule {
 		$this->eventManager->addAction( 'template_redirect', array( $this->routeManager, 'handleSitemapRequests' ), 0 );
 
 		// Ensure rewrite rules are flushed on activation
-		$this->eventManager->addAction( 'ameverywhere_activation', array( $this->routeManager, 'flushRules' ) );
+		$this->eventManager->addAction( 'holvek_activation', array( $this->routeManager, 'flushRules' ) );
 
 		// Clear sitemap cache when content changes
 		$this->eventManager->addAction( 'save_post', array( SitemapGenerator::class, 'clearCache' ) );
@@ -51,6 +51,145 @@ class SitemapModule {
 
 		// Register configuration routes
 		$this->eventManager->addAction( 'rest_api_init', array( $this, 'registerRoutes' ) );
+
+		// Another SEO plugin's sitemap is a Holvek-screen warning, not a front-end hook.
+		$this->eventManager->addAction( 'admin_notices', array( $this, 'renderConflictNotice' ) );
+		add_action( 'wp_ajax_holvek_dismiss_sitemap_conflict', array( $this, 'dismissConflictNotice' ) );
+	}
+
+	/**
+	 * SEO plugins that publish their own sitemap alongside Holvek.
+	 *
+	 * @return array<string, string> Plugin file => short name.
+	 */
+	private static function knownSitemapPlugins(): array {
+		return array(
+			'wordpress-seo/wp-seo.php'                    => 'Yoast SEO',
+			'wordpress-seo-premium/wp-seo-premium.php'    => 'Yoast SEO',
+			'seo-by-rank-math/rank-math.php'              => 'Rank Math',
+			'seo-by-rank-math-pro/rank-math-pro.php'      => 'Rank Math',
+			'all-in-one-seo-pack/all_in_one_seo_pack.php' => 'All in One SEO',
+			'all-in-one-seo-pack-pro/all_in_one_seo_pack.php' => 'All in One SEO',
+			'wp-seopress/seopress.php'                    => 'SEOPress',
+			'wp-seopress-pro/seopress-pro.php'            => 'SEOPress',
+		);
+	}
+
+	/**
+	 * Names of other active SEO plugins that also publish a sitemap.
+	 *
+	 * @return array<int, string>
+	 */
+	public static function conflictingSitemapPlugins(): array {
+		$active = get_option( 'active_plugins', array() );
+		if ( ! is_array( $active ) ) {
+			$active = array();
+		}
+		if ( function_exists( 'get_site_option' ) ) {
+			$network = get_site_option( 'active_sitewide_plugins', array() );
+			if ( is_array( $network ) ) {
+				$active = array_merge( $active, array_keys( $network ) );
+			}
+		}
+
+		$names = array();
+		foreach ( self::knownSitemapPlugins() as $file => $label ) {
+			if ( in_array( $file, $active, true ) && ! in_array( $label, $names, true ) ) {
+				$names[] = $label;
+			}
+		}
+
+		if ( defined( 'WPSEO_VERSION' ) && ! in_array( 'Yoast SEO', $names, true ) ) {
+			$names[] = 'Yoast SEO';
+		}
+		if ( defined( 'RANK_MATH_VERSION' ) && ! in_array( 'Rank Math', $names, true ) ) {
+			$names[] = 'Rank Math';
+		}
+		if ( defined( 'AIOSEO_VERSION' ) && ! in_array( 'All in One SEO', $names, true ) ) {
+			$names[] = 'All in One SEO';
+		}
+		if ( defined( 'SEOPRESS_VERSION' ) && ! in_array( 'SEOPress', $names, true ) ) {
+			$names[] = 'SEOPress';
+		}
+
+		$filtered = apply_filters( 'holvek_sitemap_conflicting_plugins', $names );
+		if ( ! is_array( $filtered ) ) {
+			return array();
+		}
+
+		$clean = array();
+		foreach ( $filtered as $name ) {
+			$name = sanitize_text_field( (string) $name );
+			if ( $name !== '' && ! in_array( $name, $clean, true ) ) {
+				$clean[] = $name;
+			}
+		}
+		return $clean;
+	}
+
+	/**
+	 * Notice text when Holvek and another SEO plugin would both publish a sitemap.
+	 */
+	public function conflictNoticeText(): string {
+		if ( SitemapSettings::get( 'enable_index_sitemap', 'no' ) !== 'yes' ) {
+			return '';
+		}
+
+		$names = self::conflictingSitemapPlugins();
+		if ( $names === array() ) {
+			return '';
+		}
+
+		return sprintf(
+			/* translators: %s: names of the other SEO plugins. */
+			__( 'Another SEO plugin is also publishing a sitemap (%s). Disable the Holvek XML sitemap or disable the sitemap in the other plugin so search engines receive one sitemap.', 'holvek' ),
+			implode( ', ', $names )
+		);
+	}
+
+	/**
+	 * Tell an SEO manager, on a Holvek screen, to leave only one sitemap published.
+	 */
+	public function renderConflictNotice(): void {
+		if ( ! current_user_can( 'manage_seo' ) && ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		if ( ! function_exists( 'get_current_screen' ) ) {
+			return;
+		}
+
+		$screen = get_current_screen();
+		if ( ! is_object( $screen ) || ! isset( $screen->id ) || ! str_contains( (string) $screen->id, 'holvek' ) ) {
+			return;
+		}
+
+		$text = $this->conflictNoticeText();
+		if ( $text === '' || get_user_meta( get_current_user_id(), 'holvek_sitemap_conflict_dismissed', true ) ) {
+			return;
+		}
+
+		$nonce = wp_create_nonce( 'holvek_dismiss_sitemap_conflict' );
+		printf(
+			'<div class="notice notice-warning is-dismissible holvek-sitemap-conflict-notice" data-nonce="%1$s"><p>%2$s</p></div>',
+			esc_attr( $nonce ),
+			esc_html( $text )
+		);
+		echo '<script>document.addEventListener("DOMContentLoaded",function(){var el=document.querySelector(".holvek-sitemap-conflict-notice");if(!el){return;}el.addEventListener("click",function(e){if(!e.target.classList.contains("notice-dismiss")){return;}var body=new FormData();body.append("action","holvek_dismiss_sitemap_conflict");body.append("_ajax_nonce",el.dataset.nonce);fetch(window.ajaxurl,{method:"POST",body:body});});});</script>';
+	}
+
+	/**
+	 * Keep the sitemap conflict notice dismissed for this user.
+	 */
+	public function dismissConflictNotice(): void {
+		check_ajax_referer( 'holvek_dismiss_sitemap_conflict' );
+		if ( ! current_user_can( 'manage_seo' ) && ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error(
+				array( 'message' => __( 'Sorry, you are not allowed to do that.', 'holvek' ) ),
+				403
+			);
+		}
+		update_user_meta( get_current_user_id(), 'holvek_sitemap_conflict_dismissed', '1' );
+		wp_send_json_success();
 	}
 
 	/**
@@ -58,7 +197,7 @@ class SitemapModule {
 	 */
 	public function registerRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/settings/sitemaps',
 			array(
 				array(
@@ -113,6 +252,7 @@ class SitemapModule {
 				'sitemap_priority_post'   => SitemapSettings::get( 'sitemap_priority_post', '0.6' ),
 				'sitemap_priority_page'   => SitemapSettings::get( 'sitemap_priority_page', '0.8' ),
 				'available_types'         => $typesList,
+				'sitemap_conflict'        => $this->conflictNoticeText(),
 			)
 		);
 	}

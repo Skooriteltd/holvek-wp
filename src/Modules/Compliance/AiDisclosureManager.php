@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Compliance;
+namespace Holvek\WordPress\Modules\Compliance;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -10,16 +10,16 @@ if ( ! defined( 'ABSPATH' ) ) {
  * AiDisclosureManager
  *
  * Injects FTC-compliant AI content disclosure notices on posts flagged with
- * `_ameverywhere_ai_generated = 'yes'`. Also adds a visible indicator column
+ * `_holvek_ai_generated = 'yes'`. Also adds a visible indicator column
  * in the WordPress post list table.
  *
  * BL-016
  */
 class AiDisclosureManager {
 
-	private const AI_META_KEY     = '_ameverywhere_ai_generated';
-	private const DISCLOSURE_TEXT = 'ameverywhere_ai_disclosure_text';
-	private const DISCLOSURE_POS  = 'ameverywhere_ai_disclosure_position';
+	private const AI_META_KEY     = '_holvek_ai_generated';
+	private const DISCLOSURE_TEXT = 'holvek_ai_disclosure_text';
+	private const DISCLOSURE_POS  = 'holvek_ai_disclosure_position';
 
 	private const DEFAULT_TEXT = 'This article contains material generated with the assistance of Artificial Intelligence (AI). All AI-generated content has been fact-checked, edited, and approved by a human editor.';
 
@@ -53,10 +53,10 @@ class AiDisclosureManager {
 		$position = get_option( self::DISCLOSURE_POS, 'after' );
 
 		$notice = sprintf(
-			'<aside class="ameverywhere-ai-disclosure" aria-label="%s" role="note" style="padding:12px 16px;margin:16px 0;border-left:4px solid #4f46e5;background:#f5f3ff;font-size:0.875em;">'
+			'<aside class="holvek-ai-disclosure" aria-label="%s" role="note" style="padding:12px 16px;margin:16px 0;border-left:4px solid #4f46e5;background:#f5f3ff;font-size:0.875em;">'
 			. '<p style="margin:0;">🤖 %s</p>'
 			. '</aside>',
-			esc_attr__( 'AI Content Disclosure', 'ameverywhere' ),
+			esc_attr__( 'AI Content Disclosure', 'holvek' ),
 			esc_html( $text )
 		);
 
@@ -68,12 +68,12 @@ class AiDisclosureManager {
 	// ── Post list column ──────────────────────────────────────────────────────
 
 	public function addPostColumn( array $columns ): array {
-		$columns['ameverywhere_ai'] = '🤖 AI';
+		$columns['holvek_ai'] = '🤖 AI';
 		return $columns;
 	}
 
 	public function outputPostColumn( string $column, int $postId ): void {
-		if ( $column !== 'ameverywhere_ai' ) {
+		if ( $column !== 'holvek_ai' ) {
 			return;
 		}
 
@@ -89,7 +89,7 @@ class AiDisclosureManager {
 
 	public function registerRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/settings/ai-disclosure',
 			array(
 				array(

@@ -1,289 +1,357 @@
 <?php
 
-namespace AmEveryWhere\Modules\Social;
+namespace Holvek\WordPress\Modules\Social;
 
-if (!defined('ABSPATH')) {
-    exit;
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
 }
 
-use AmEveryWhere\Core\Security\KeyVault;
+use Holvek\WordPress\Core\Security\KeyVault;
 
-class SocialApiGateway
-{
-    /**
-     * Dispatch the post to the specified network using the account details.
-     */
-    public function share(array $account, array $payload): array
-    {
-        $network = $account['network'] ?? 'unknown';
-        $encryptedToken = $account['access_token'] ?? '';
+class SocialApiGateway {
 
-        if (empty($encryptedToken)) {
-            return [
-                'success' => false,
-                'message' => 'No access token available for this account.',
-                'code' => 401
-            ];
-        }
+	/**
+	 * Dispatch the post to the specified network using the account details.
+	 */
+	public function share( array $account, array $payload ): array {
+		$network        = $account['network'] ?? 'unknown';
+		$encryptedToken = $account['access_token'] ?? '';
 
-        // Decrypt the token before making the call
-        $token = KeyVault::decrypt($encryptedToken);
-        if (empty($token)) {
-             return [
-                'success' => false,
-                'message' => 'Failed to decrypt access token.',
-                'code' => 401
-            ];
-        }
+		if ( empty( $encryptedToken ) ) {
+			return array(
+				'success' => false,
+				'message' => __( 'No access token available for this account.', 'holvek' ),
+				'code'    => 401,
+			);
+		}
 
-        // Validate payload content
-        if (empty($payload['url'])) {
-            return [
-                'success' => false,
-                'message' => 'Cannot share without a URL.',
-                'code' => 400
-            ];
-        }
+		// Decrypt the token before making the call
+		$token = KeyVault::decrypt( $encryptedToken );
+		if ( empty( $token ) ) {
+			return array(
+				'success' => false,
+				'message' => __( 'Failed to decrypt access token.', 'holvek' ),
+				'code'    => 401,
+			);
+		}
 
-        $message = sanitize_textarea_field($payload['message'] ?? '');
-        $url = esc_url_raw($payload['url']);
+		// Validate payload content
+		if ( empty( $payload['url'] ) ) {
+			return array(
+				'success' => false,
+				'message' => __( 'Cannot share without a URL.', 'holvek' ),
+				'code'    => 400,
+			);
+		}
 
-        switch ($network) {
-            case 'facebook':
-                return $this->shareFacebook($token, $message, $url);
-            case 'linkedin':
-                return $this->shareLinkedIn($token, $message, $url);
-            case 'twitter':
-                return $this->shareTwitter($token, $message, $url);
-            case 'pinterest':
-                return $this->sharePinterest($token, $message, $url);
-            default:
-                return [
-                    'success' => false,
-                    'message' => 'Unsupported network.',
-                    'code' => 400
-                ];
-        }
-    }
+		$message = sanitize_textarea_field( $payload['message'] ?? '' );
+		$url     = esc_url_raw( $payload['url'] );
 
-    private function shareFacebook(string $token, string $message, string $url): array
-    {
-        // Facebook Graph API v19.0 endpoint for Page Feed
-        $apiUrl = 'https://graph.facebook.com/v19.0/me/feed';
-        
-        $body = [
-            'message' => $message,
-            'link' => $url,
-            'access_token' => $token
-        ];
+		switch ( $network ) {
+			case 'facebook':
+				return $this->shareFacebook( $token, $message, $url );
+			case 'linkedin':
+				return $this->shareLinkedIn( $token, $message, $url );
+			case 'twitter':
+				return $this->shareTwitter( $token, $message, $url );
+			case 'pinterest':
+				return $this->sharePinterest( $token, $message, $url );
+			default:
+				return array(
+					'success' => false,
+					'message' => __( 'Unsupported network.', 'holvek' ),
+					'code'    => 400,
+				);
+		}
+	}
 
-        $response = wp_safe_remote_post($apiUrl, [
-            'body' => $body
-        ]);
+	private function shareFacebook( string $token, string $message, string $url ): array {
+		// Facebook Graph API v19.0 endpoint for Page Feed
+		$apiUrl = 'https://graph.facebook.com/v19.0/me/feed';
 
-        if (is_wp_error($response)) {
-            return ['success' => false, 'message' => $response->get_error_message(), 'code' => 500];
-        }
+		$body = array(
+			'message'      => $message,
+			'link'         => $url,
+			'access_token' => $token,
+		);
 
-        $responseCode = wp_remote_retrieve_response_code($response);
-        $responseBody = json_decode(wp_remote_retrieve_body($response), true);
+		$response = wp_safe_remote_post(
+			$apiUrl,
+			array(
+				'body' => $body,
+			)
+		);
 
-        if ($responseCode >= 200 && $responseCode < 300) {
-            return ['success' => true, 'post_id' => $responseBody['id'] ?? '', 'code' => $responseCode];
-        }
+		if ( is_wp_error( $response ) ) {
+			return array(
+				'success' => false,
+				'message' => $response->get_error_message(),
+				'code'    => 500,
+			);
+		}
 
-        return [
-            'success' => false,
-            'message' => $responseBody['error']['message'] ?? 'Unknown Facebook error',
-            'code' => $responseCode
-        ];
-    }
+		$responseCode = wp_remote_retrieve_response_code( $response );
+		$responseBody = json_decode( wp_remote_retrieve_body( $response ), true );
 
-    private function shareTwitter(string $token, string $message, string $url): array
-    {
-        // Twitter API v2
-        $apiUrl = 'https://api.twitter.com/2/tweets';
-        
-        $body = [
-            'text' => $message . "\n" . $url
-        ];
+		if ( $responseCode >= 200 && $responseCode < 300 ) {
+			return array(
+				'success' => true,
+				'post_id' => $responseBody['id'] ?? '',
+				'code'    => $responseCode,
+			);
+		}
 
-        $response = wp_safe_remote_post($apiUrl, [
-            'headers' => [
-                'Authorization' => 'Bearer ' . $token,
-                'Content-Type' => 'application/json'
-            ],
-            'body' => wp_json_encode($body)
-        ]);
+		return array(
+			'success' => false,
+			'message' => $responseBody['error']['message'] ?? 'Unknown Facebook error',
+			'code'    => $responseCode,
+		);
+	}
 
-        if (is_wp_error($response)) {
-            return ['success' => false, 'message' => $response->get_error_message(), 'code' => 500];
-        }
+	private function shareTwitter( string $token, string $message, string $url ): array {
+		// Twitter API v2
+		$apiUrl = 'https://api.twitter.com/2/tweets';
 
-        $responseCode = wp_remote_retrieve_response_code($response);
-        $responseBody = json_decode(wp_remote_retrieve_body($response), true);
+		$body = array(
+			'text' => $message . "\n" . $url,
+		);
 
-        if ($responseCode >= 200 && $responseCode < 300) {
-            return ['success' => true, 'post_id' => $responseBody['data']['id'] ?? '', 'code' => $responseCode];
-        }
+		$response = wp_safe_remote_post(
+			$apiUrl,
+			array(
+				'headers' => array(
+					'Authorization' => 'Bearer ' . $token,
+					'Content-Type'  => 'application/json',
+				),
+				'body'    => wp_json_encode( $body ),
+			)
+		);
 
-        return [
-            'success' => false,
-            'message' => $responseBody['detail'] ?? 'Unknown Twitter error',
-            'code' => $responseCode
-        ];
-    }
+		if ( is_wp_error( $response ) ) {
+			return array(
+				'success' => false,
+				'message' => $response->get_error_message(),
+				'code'    => 500,
+			);
+		}
 
-    private function shareLinkedIn(string $token, string $message, string $url): array
-    {
-        $meResponse = wp_safe_remote_get('https://api.linkedin.com/v2/userinfo', [
-            'headers' => ['Authorization' => 'Bearer ' . $token]
-        ]);
-        
-        if (is_wp_error($meResponse)) {
-             return ['success' => false, 'message' => 'Failed to fetch LinkedIn profile.', 'code' => 500];
-        }
-        $meBody = json_decode(wp_remote_retrieve_body($meResponse), true);
-        $urn = $meBody['sub'] ?? '';
-        
-        if (!$urn) {
-             return ['success' => false, 'message' => 'Could not determine LinkedIn author URN.', 'code' => 400];
-        }
+		$responseCode = wp_remote_retrieve_response_code( $response );
+		$responseBody = json_decode( wp_remote_retrieve_body( $response ), true );
 
-        // Try modern LinkedIn /v2/posts API first
-        $apiUrl = 'https://api.linkedin.com/v2/posts';
-        $body   = [
-            'author'     => 'urn:li:person:' . $urn,
-            'commentary' => $message,
-            'visibility' => 'PUBLIC',
-            'distribution' => [
-                'feedDistribution'                => 'MAIN_FEED',
-                'targetEntities'                  => [],
-                'thirdPartyDistributionChannels' => [],
-            ],
-            'content' => [
-                'article' => [
-                    'source' => $url,
-                    'title'  => substr($message, 0, 100),
-                ],
-            ],
-            'lifecycleState'            => 'PUBLISHED',
-            'isReshareDisabledByAuthor' => false,
-        ];
+		if ( $responseCode >= 200 && $responseCode < 300 ) {
+			return array(
+				'success' => true,
+				'post_id' => $responseBody['data']['id'] ?? '',
+				'code'    => $responseCode,
+			);
+		}
 
-        $response = wp_safe_remote_post($apiUrl, [
-            'headers' => [
-                'Authorization'            => 'Bearer ' . $token,
-                'Content-Type'             => 'application/json',
-                'LinkedIn-Version'         => '202401',
-                'X-Restli-Protocol-Version'=> '2.0.0',
-            ],
-            'body'    => wp_json_encode($body),
-            'timeout' => 20,
-        ]);
+		return array(
+			'success' => false,
+			'message' => $responseBody['detail'] ?? 'Unknown Twitter error',
+			'code'    => $responseCode,
+		);
+	}
 
-        if (!is_wp_error($response) && wp_remote_retrieve_response_code($response) >= 200 && wp_remote_retrieve_response_code($response) < 300) {
-            $headers = wp_remote_retrieve_headers($response);
-            $postId  = $headers['x-restli-id'] ?? $headers['x-linkedin-id'] ?? '';
-            return ['success' => true, 'post_id' => $postId, 'code' => wp_remote_retrieve_response_code($response)];
-        }
+	private function shareLinkedIn( string $token, string $message, string $url ): array {
+		$meResponse = wp_safe_remote_get(
+			'https://api.linkedin.com/v2/userinfo',
+			array(
+				'headers' => array( 'Authorization' => 'Bearer ' . $token ),
+			)
+		);
 
-        // Fallback to legacy ugcPosts API
-        $legacyApiUrl = 'https://api.linkedin.com/v2/ugcPosts';
-        $legacyBody   = [
-            'author'         => 'urn:li:person:' . $urn,
-            'lifecycleState' => 'PUBLISHED',
-            'specificContent'=> [
-                'com.linkedin.ugc.ShareContent' => [
-                    'shareCommentary'    => ['text' => $message],
-                    'shareMediaCategory' => 'ARTICLE',
-                    'media'              => [
-                        [
-                            'status'      => 'READY',
-                            'originalUrl' => $url,
-                        ],
-                    ],
-                ],
-            ],
-            'visibility' => ['com.linkedin.ugc.MemberNetworkVisibility' => 'PUBLIC'],
-        ];
+		if ( is_wp_error( $meResponse ) ) {
+			return array(
+				'success' => false,
+				'message' => __( 'Failed to fetch LinkedIn profile.', 'holvek' ),
+				'code'    => 500,
+			);
+		}
+		$meBody = json_decode( wp_remote_retrieve_body( $meResponse ), true );
+		$urn    = $meBody['sub'] ?? '';
 
-        $legacyResponse = wp_safe_remote_post($legacyApiUrl, [
-            'headers' => [
-                'Authorization'            => 'Bearer ' . $token,
-                'Content-Type'             => 'application/json',
-                'X-Restli-Protocol-Version'=> '2.0.0',
-            ],
-            'body'    => wp_json_encode($legacyBody),
-            'timeout' => 20,
-        ]);
+		if ( ! $urn ) {
+			return array(
+				'success' => false,
+				'message' => __( 'Could not determine LinkedIn author URN.', 'holvek' ),
+				'code'    => 400,
+			);
+		}
 
-        if (is_wp_error($legacyResponse)) {
-            return ['success' => false, 'message' => $legacyResponse->get_error_message(), 'code' => 500];
-        }
+		// Try modern LinkedIn /v2/posts API first
+		$apiUrl = 'https://api.linkedin.com/v2/posts';
+		$body   = array(
+			'author'                    => 'urn:li:person:' . $urn,
+			'commentary'                => $message,
+			'visibility'                => 'PUBLIC',
+			'distribution'              => array(
+				'feedDistribution'               => 'MAIN_FEED',
+				'targetEntities'                 => array(),
+				'thirdPartyDistributionChannels' => array(),
+			),
+			'content'                   => array(
+				'article' => array(
+					'source' => $url,
+					'title'  => substr( $message, 0, 100 ),
+				),
+			),
+			'lifecycleState'            => 'PUBLISHED',
+			'isReshareDisabledByAuthor' => false,
+		);
 
-        $responseCode = wp_remote_retrieve_response_code($legacyResponse);
-        if ($responseCode >= 200 && $responseCode < 300) {
-            $headers = wp_remote_retrieve_headers($legacyResponse);
-            $postId  = $headers['x-linkedin-id'] ?? '';
-            return ['success' => true, 'post_id' => $postId, 'code' => $responseCode];
-        }
+		$response = wp_safe_remote_post(
+			$apiUrl,
+			array(
+				'headers' => array(
+					'Authorization'             => 'Bearer ' . $token,
+					'Content-Type'              => 'application/json',
+					'LinkedIn-Version'          => '202401',
+					'X-Restli-Protocol-Version' => '2.0.0',
+				),
+				'body'    => wp_json_encode( $body ),
+				'timeout' => 20,
+			)
+		);
 
-        $responseBody = json_decode(wp_remote_retrieve_body($legacyResponse), true);
-        return [
-            'success' => false,
-            'message' => $responseBody['message'] ?? 'Unknown LinkedIn error',
-            'code'    => $responseCode,
-        ];
-    }
+		if ( ! is_wp_error( $response ) && wp_remote_retrieve_response_code( $response ) >= 200 && wp_remote_retrieve_response_code( $response ) < 300 ) {
+			$headers = wp_remote_retrieve_headers( $response );
+			$postId  = $headers['x-restli-id'] ?? $headers['x-linkedin-id'] ?? '';
+			return array(
+				'success' => true,
+				'post_id' => $postId,
+				'code'    => wp_remote_retrieve_response_code( $response ),
+			);
+		}
 
-    private function sharePinterest(string $token, string $message, string $url): array
-    {
-        $boardsRes = wp_safe_remote_get('https://api.pinterest.com/v5/boards', [
-             'headers' => ['Authorization' => 'Bearer ' . $token]
-        ]);
-        if (is_wp_error($boardsRes)) {
-            return ['success' => false, 'message' => 'Failed to fetch Pinterest boards.', 'code' => 500];
-        }
-        
-        $boardsBody = json_decode(wp_remote_retrieve_body($boardsRes), true);
-        $boardId = $boardsBody['items'][0]['id'] ?? '';
-        
-        if (!$boardId) {
-             return ['success' => false, 'message' => 'No Pinterest boards found to pin to.', 'code' => 400];
-        }
-        
-        $apiUrl = 'https://api.pinterest.com/v5/pins';
-        $body = [
-            'board_id' => $boardId,
-            'title' => substr($message, 0, 100),
-            'description' => $message,
-            'link' => $url
-        ];
+		// Fallback to legacy ugcPosts API
+		$legacyApiUrl = 'https://api.linkedin.com/v2/ugcPosts';
+		$legacyBody   = array(
+			'author'          => 'urn:li:person:' . $urn,
+			'lifecycleState'  => 'PUBLISHED',
+			'specificContent' => array(
+				'com.linkedin.ugc.ShareContent' => array(
+					'shareCommentary'    => array( 'text' => $message ),
+					'shareMediaCategory' => 'ARTICLE',
+					'media'              => array(
+						array(
+							'status'      => 'READY',
+							'originalUrl' => $url,
+						),
+					),
+				),
+			),
+			'visibility'      => array( 'com.linkedin.ugc.MemberNetworkVisibility' => 'PUBLIC' ),
+		);
 
-        $response = wp_safe_remote_post($apiUrl, [
-            'headers' => [
-                'Authorization' => 'Bearer ' . $token,
-                'Content-Type' => 'application/json'
-            ],
-            'body' => wp_json_encode($body)
-        ]);
+		$legacyResponse = wp_safe_remote_post(
+			$legacyApiUrl,
+			array(
+				'headers' => array(
+					'Authorization'             => 'Bearer ' . $token,
+					'Content-Type'              => 'application/json',
+					'X-Restli-Protocol-Version' => '2.0.0',
+				),
+				'body'    => wp_json_encode( $legacyBody ),
+				'timeout' => 20,
+			)
+		);
 
-        if (is_wp_error($response)) {
-            return ['success' => false, 'message' => $response->get_error_message(), 'code' => 500];
-        }
+		if ( is_wp_error( $legacyResponse ) ) {
+			return array(
+				'success' => false,
+				'message' => $legacyResponse->get_error_message(),
+				'code'    => 500,
+			);
+		}
 
-        $responseCode = wp_remote_retrieve_response_code($response);
-        $responseBody = json_decode(wp_remote_retrieve_body($response), true);
+		$responseCode = wp_remote_retrieve_response_code( $legacyResponse );
+		if ( $responseCode >= 200 && $responseCode < 300 ) {
+			$headers = wp_remote_retrieve_headers( $legacyResponse );
+			$postId  = $headers['x-linkedin-id'] ?? '';
+			return array(
+				'success' => true,
+				'post_id' => $postId,
+				'code'    => $responseCode,
+			);
+		}
 
-        if ($responseCode >= 200 && $responseCode < 300) {
-            return ['success' => true, 'post_id' => $responseBody['id'] ?? '', 'code' => $responseCode];
-        }
+		$responseBody = json_decode( wp_remote_retrieve_body( $legacyResponse ), true );
+		return array(
+			'success' => false,
+			'message' => $responseBody['message'] ?? 'Unknown LinkedIn error',
+			'code'    => $responseCode,
+		);
+	}
 
-        return [
-            'success' => false,
-            'message' => $responseBody['message'] ?? 'Unknown Pinterest error',
-            'code' => $responseCode
-        ];
-    }
+	private function sharePinterest( string $token, string $message, string $url ): array {
+		$boardsRes = wp_safe_remote_get(
+			'https://api.pinterest.com/v5/boards',
+			array(
+				'headers' => array( 'Authorization' => 'Bearer ' . $token ),
+			)
+		);
+		if ( is_wp_error( $boardsRes ) ) {
+			return array(
+				'success' => false,
+				'message' => __( 'Failed to fetch Pinterest boards.', 'holvek' ),
+				'code'    => 500,
+			);
+		}
+
+		$boardsBody = json_decode( wp_remote_retrieve_body( $boardsRes ), true );
+		$boardId    = $boardsBody['items'][0]['id'] ?? '';
+
+		if ( ! $boardId ) {
+			return array(
+				'success' => false,
+				'message' => __( 'No Pinterest boards found to pin to.', 'holvek' ),
+				'code'    => 400,
+			);
+		}
+
+		$apiUrl = 'https://api.pinterest.com/v5/pins';
+		$body   = array(
+			'board_id'    => $boardId,
+			'title'       => substr( $message, 0, 100 ),
+			'description' => $message,
+			'link'        => $url,
+		);
+
+		$response = wp_safe_remote_post(
+			$apiUrl,
+			array(
+				'headers' => array(
+					'Authorization' => 'Bearer ' . $token,
+					'Content-Type'  => 'application/json',
+				),
+				'body'    => wp_json_encode( $body ),
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return array(
+				'success' => false,
+				'message' => $response->get_error_message(),
+				'code'    => 500,
+			);
+		}
+
+		$responseCode = wp_remote_retrieve_response_code( $response );
+		$responseBody = json_decode( wp_remote_retrieve_body( $response ), true );
+
+		if ( $responseCode >= 200 && $responseCode < 300 ) {
+			return array(
+				'success' => true,
+				'post_id' => $responseBody['id'] ?? '',
+				'code'    => $responseCode,
+			);
+		}
+
+		return array(
+			'success' => false,
+			'message' => $responseBody['message'] ?? 'Unknown Pinterest error',
+			'code'    => $responseCode,
+		);
+	}
 }

@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Analytics;
+namespace Holvek\WordPress\Modules\Analytics;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -15,16 +15,77 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class MultisiteNetworkSeo {
 
-	private const NETWORK_OPTION = 'ameverywhere_network_seo_settings';
+	private const NETWORK_OPTION = 'holvek_network_seo_settings';
 
 	public function register(): void {
 		if ( ! is_multisite() ) {
 			return;
 		}
 
+		// Existing sites are installed by network activation. A site created later
+		// still needs tables and capabilities while this plugin stays network-active.
+		add_action( 'wp_initialize_site', array( $this, 'initializeNewSite' ) );
 		add_action( 'rest_api_init', array( $this, 'registerRoutes' ) );
 		add_action( 'network_admin_menu', array( $this, 'addNetworkMenu' ) );
-		add_filter( 'ameverywhere_get_option', array( $this, 'maybeUseNetworkDefault' ), 10, 2 );
+		add_filter( 'holvek_get_option', array( $this, 'maybeUseNetworkDefault' ), 10, 2 );
+	}
+
+	/**
+	 * Install this plugin on a new site only when it is active for the network.
+	 *
+	 * WordPress has already switched to the new site when this hook runs. Switch
+	 * again only if the caller invokes the method directly.
+	 *
+	 * @param mixed $newSite Site object with blog_id, or a numeric site id.
+	 */
+	public function initializeNewSite( $newSite ): void {
+		if ( ! is_multisite() || ! $this->isNetworkActive() ) {
+			return;
+		}
+
+		$siteId = 0;
+		if ( is_object( $newSite ) && isset( $newSite->blog_id ) ) {
+			$siteId = (int) $newSite->blog_id;
+		} elseif ( is_numeric( $newSite ) ) {
+			$siteId = (int) $newSite;
+		}
+		if ( $siteId < 1 ) {
+			return;
+		}
+
+		$switched = false;
+		if ( get_current_blog_id() !== $siteId ) {
+			switch_to_blog( $siteId );
+			$switched = true;
+		}
+
+		\Holvek\WordPress\Plugin::activate( false );
+
+		if ( $switched ) {
+			restore_current_blog();
+		}
+	}
+
+	private function isNetworkActive(): bool {
+		if ( ! defined( 'HOLVEK_PLUGIN_FILE' ) ) {
+			return false;
+		}
+
+		$basename = plugin_basename( HOLVEK_PLUGIN_FILE );
+		if ( function_exists( 'is_plugin_active_for_network' ) ) {
+			return (bool) is_plugin_active_for_network( $basename );
+		}
+
+		$active = get_site_option( 'active_sitewide_plugins', array() );
+		return is_array( $active ) && isset( $active[ $basename ] );
+	}
+
+	private function networkForbidden(): \WP_Error {
+		return new \WP_Error(
+			'rest_forbidden',
+			__( 'Sorry, you are not allowed to do that.', 'holvek' ),
+			array( 'status' => 403 )
+		);
 	}
 
 	public function registerRoutes(): void {
@@ -33,7 +94,7 @@ class MultisiteNetworkSeo {
 
 		// Network defaults (super admin only)
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/network/settings',
 			array(
 				array(
@@ -51,7 +112,7 @@ class MultisiteNetworkSeo {
 
 		// Per-site override status
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/network/site-overrides',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -62,7 +123,7 @@ class MultisiteNetworkSeo {
 
 		// List all network sites with basic SEO health
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/network/sites',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -72,21 +133,30 @@ class MultisiteNetworkSeo {
 		);
 	}
 
-	public function getNetworkSettings( \WP_REST_Request $request ): \WP_REST_Response {
+	public function getNetworkSettings( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		unset( $request );
+
 		if ( ! is_multisite() ) {
-			return new \WP_Error( 'not_multisite', 'Not a multisite network.', array( 'status' => 400 ) );
+			return new \WP_Error( 'not_multisite', __( 'Not a multisite network.', 'holvek' ), array( 'status' => 400 ) );
+		}
+		if ( ! current_user_can( 'manage_network_options' ) ) {
+			return $this->networkForbidden();
 		}
 
 		$settings = get_site_option( self::NETWORK_OPTION, $this->getDefaults() );
 		return rest_ensure_response( $settings );
 	}
 
-	public function saveNetworkSettings( \WP_REST_Request $request ): \WP_REST_Response {
+	public function saveNetworkSettings( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		if ( ! is_multisite() ) {
-			return new \WP_Error( 'not_multisite', 'Not a multisite network.', array( 'status' => 400 ) );
+			return new \WP_Error( 'not_multisite', __( 'Not a multisite network.', 'holvek' ), array( 'status' => 400 ) );
+		}
+		if ( ! current_user_can( 'manage_network_options' ) ) {
+			return $this->networkForbidden();
 		}
 
 		$params   = $request->get_json_params();
+		$params   = is_array( $params ) ? $params : array();
 		$settings = array(
 			'default_schema_type'  => sanitize_text_field( $params['default_schema_type'] ?? 'Article' ),
 			'force_ssl'            => (bool) ( $params['force_ssl'] ?? true ),
@@ -107,11 +177,11 @@ class MultisiteNetworkSeo {
 
 	public function getSiteOverrides( \WP_REST_Request $request ): \WP_REST_Response {
 		if ( ! is_multisite() ) {
-			return new \WP_Error( 'not_multisite', 'Not a multisite network.', array( 'status' => 400 ) );
+			return new \WP_Error( 'not_multisite', __( 'Not a multisite network.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		$networkSettings = get_site_option( self::NETWORK_OPTION, $this->getDefaults() );
-		$siteOverrides   = get_option( 'ameverywhere_site_overrides', array() );
+		$siteOverrides   = get_option( 'holvek_site_overrides', array() );
 
 		return rest_ensure_response(
 			array(
@@ -122,9 +192,14 @@ class MultisiteNetworkSeo {
 		);
 	}
 
-	public function getNetworkSites( \WP_REST_Request $request ): \WP_REST_Response {
+	public function getNetworkSites( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		unset( $request );
+
 		if ( ! is_multisite() ) {
-			return new \WP_Error( 'not_multisite', 'Not a multisite network.', array( 'status' => 400 ) );
+			return new \WP_Error( 'not_multisite', __( 'Not a multisite network.', 'holvek' ), array( 'status' => 400 ) );
+		}
+		if ( ! current_user_can( 'manage_network_options' ) ) {
+			return $this->networkForbidden();
 		}
 
 		$sites  = get_sites( array( 'number' => 100 ) );
@@ -152,10 +227,10 @@ class MultisiteNetworkSeo {
 
 	public function addNetworkMenu(): void {
 		add_menu_page(
-			'AmEveryWhere Network',
-			'AmEveryWhere',
+			'Holvek Network',
+			'Holvek',
 			'manage_network_options',
-			'ameverywhere-network',
+			'holvek-network',
 			array( $this, 'renderNetworkAdminPage' ),
 			'dashicons-chart-area',
 			30
@@ -163,7 +238,7 @@ class MultisiteNetworkSeo {
 	}
 
 	public function renderNetworkAdminPage(): void {
-		echo '<div id="ameverywhere-network-admin"><!-- React renders here --></div>';
+		echo '<div id="holvek-network-admin"><!-- React renders here --></div>';
 	}
 
 	/**
@@ -175,7 +250,7 @@ class MultisiteNetworkSeo {
 		}
 
 		$networkSettings = get_site_option( self::NETWORK_OPTION, array() );
-		$networkKey      = str_replace( 'ameverywhere_', '', $optionKey );
+		$networkKey      = str_replace( 'holvek_', '', $optionKey );
 
 		return $networkSettings[ $networkKey ] ?? $value;
 	}

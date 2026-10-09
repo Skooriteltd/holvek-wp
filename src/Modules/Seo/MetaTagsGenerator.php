@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Seo;
+namespace Holvek\WordPress\Modules\Seo;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -13,7 +13,7 @@ class MetaTagsGenerator {
 			return;
 		}
 
-		echo "\n<!-- AmEveryWhere SEO Meta Tags -->\n";
+		echo "\n<!-- Holvek SEO Meta Tags -->\n";
 
 		$description = $this->getDescription();
 		if ( $description ) {
@@ -31,34 +31,34 @@ class MetaTagsGenerator {
 		}
 
 		// Webmaster Tools Verification Meta Tags
-		$googleVerify = get_option( 'ameverywhere_google_verify', '' );
+		$googleVerify = get_option( 'holvek_google_verify', '' );
 		if ( ! empty( $googleVerify ) ) {
 			printf( '<meta name="google-site-verification" content="%s" />' . "\n", esc_attr( $googleVerify ) );
 		}
 
-		$bingVerify = get_option( 'ameverywhere_bing_verify', '' );
+		$bingVerify = get_option( 'holvek_bing_verify', '' );
 		if ( ! empty( $bingVerify ) ) {
 			printf( '<meta name="msvalidate.01" content="%s" />' . "\n", esc_attr( $bingVerify ) );
 		}
 
-		$yandexVerify = get_option( 'ameverywhere_yandex_verify', '' );
+		$yandexVerify = get_option( 'holvek_yandex_verify', '' );
 		if ( ! empty( $yandexVerify ) ) {
 			printf( '<meta name="yandex-verification" content="%s" />' . "\n", esc_attr( $yandexVerify ) );
 		}
 
-		$pinterestVerify = get_option( 'ameverywhere_pinterest_verify', '' );
+		$pinterestVerify = get_option( 'holvek_pinterest_verify', '' );
 		if ( ! empty( $pinterestVerify ) ) {
 			printf( '<meta name="pdomain" content="%s" />' . "\n", esc_attr( $pinterestVerify ) );
 		}
 
-		echo "<!-- /AmEveryWhere SEO Meta Tags -->\n\n";
+		echo "<!-- /Holvek SEO Meta Tags -->\n\n";
 	}
 
 	public function getDocumentTitle(): string {
 		// MVP: Returns a standard or custom title depending on the current post/page
 		// We can hook into get_post_meta here later for custom titles.
 		if ( is_singular() ) {
-			$customTitle = get_post_meta( get_the_ID(), '_ameverywhere_meta_title', true );
+			$customTitle = get_post_meta( get_the_ID(), '_holvek_meta_title', true );
 			if ( ! empty( $customTitle ) ) {
 				return $customTitle;
 			}
@@ -70,7 +70,7 @@ class MetaTagsGenerator {
 
 	private function getDescription(): string {
 		if ( is_singular() ) {
-			$customDesc = get_post_meta( get_the_ID(), '_ameverywhere_meta_description', true );
+			$customDesc = get_post_meta( get_the_ID(), '_holvek_meta_description', true );
 			if ( ! empty( $customDesc ) ) {
 				return $customDesc;
 			}
@@ -90,14 +90,15 @@ class MetaTagsGenerator {
 		if ( is_category() || is_tag() || is_tax() ) {
 			$term = get_queried_object();
 			if ( $term instanceof \WP_Term ) {
-				$termDesc = term_description( $term->term_id, $term->taxonomy );
+				$termDesc = term_description( $term );
 				$termDesc = wp_strip_all_tags( $termDesc );
 				if ( ! empty( $termDesc ) ) {
 					return wp_trim_words( $termDesc, 25 );
 				}
 				// Fallback: generate from term name
 				return sprintf(
-					'Browse all posts in the "%s" %s on %s.',
+					/* translators: 1: Term name, 2: Taxonomy name, 3: Site name */
+					__( 'Browse all posts in the "%1$s" %2$s on %3$s.', 'holvek' ),
 					$term->name,
 					$term->taxonomy,
 					get_bloginfo( 'name' )
@@ -114,7 +115,8 @@ class MetaTagsGenerator {
 					return wp_trim_words( $bio, 25 );
 				}
 				return sprintf(
-					'Posts by %s on %s.',
+					/* translators: 1: Author name, 2: Site name */
+					__( 'Posts by %1$s on %2$s.', 'holvek' ),
 					$author->display_name,
 					get_bloginfo( 'name' )
 				);
@@ -129,7 +131,8 @@ class MetaTagsGenerator {
 					return wp_trim_words( $postType->description, 25 );
 				}
 				return sprintf(
-					'Browse all %s on %s.',
+					/* translators: 1: Post type plural name, 2: Site name */
+					__( 'Browse all %1$s on %2$s.', 'holvek' ),
 					strtolower( $postType->labels->name ?? $postType->name ),
 					get_bloginfo( 'name' )
 				);
@@ -141,7 +144,8 @@ class MetaTagsGenerator {
 			$query = get_search_query();
 			if ( ! empty( $query ) ) {
 				return sprintf(
-					'Search results for "%s" on %s.',
+					/* translators: 1: Search query, 2: Site name */
+					__( 'Search results for "%1$s" on %2$s.', 'holvek' ),
 					esc_html( $query ),
 					get_bloginfo( 'name' )
 				);
@@ -158,7 +162,8 @@ class MetaTagsGenerator {
 				$label = get_the_date( 'Y' );
 			}
 			return sprintf(
-				'Archive for %s on %s.',
+				/* translators: 1: Date label, 2: Site name */
+				__( 'Archive for %1$s on %2$s.', 'holvek' ),
 				$label,
 				get_bloginfo( 'name' )
 			);
@@ -171,10 +176,10 @@ class MetaTagsGenerator {
 		// ── Singular: honour per-post override, then use the clean permalink ──
 		if ( is_singular() ) {
 			// Suppress canonical on noindexed posts — contradictory signals confuse crawlers
-			if ( get_post_meta( get_the_ID(), '_ameverywhere_noindex', true ) === 'yes' ) {
+			if ( get_post_meta( get_the_ID(), '_holvek_noindex', true ) === 'yes' ) {
 				return '';
 			}
-			$customCanonical = get_post_meta( get_the_ID(), '_ameverywhere_canonical_url', true );
+			$customCanonical = get_post_meta( get_the_ID(), '_holvek_canonical_url', true );
 			if ( ! empty( $customCanonical ) ) {
 				return $customCanonical;
 			}
@@ -229,8 +234,8 @@ class MetaTagsGenerator {
 	private function getRobotsMeta(): string {
 		// ── Singular posts/pages: respect per-post noindex/nofollow flags ──
 		if ( is_singular() ) {
-			$noindex  = get_post_meta( get_the_ID(), '_ameverywhere_noindex', true );
-			$nofollow = get_post_meta( get_the_ID(), '_ameverywhere_nofollow', true );
+			$noindex  = get_post_meta( get_the_ID(), '_holvek_noindex', true );
+			$nofollow = get_post_meta( get_the_ID(), '_holvek_nofollow', true );
 
 			$index  = ( $noindex === 'yes' ) ? 'noindex' : 'index';
 			$follow = ( $nofollow === 'yes' ) ? 'nofollow' : 'follow';

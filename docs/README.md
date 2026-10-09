@@ -1,8 +1,8 @@
-# AmEverywhere Developer Documentation
+# Holvek Developer Documentation
 
-Welcome to the official developer documentation for **AmEverywhere**, engineered by **Skoorite Limited**.
+Welcome to the official developer documentation for **Holvek**, engineered by **Skoorite Limited**.
 
-AmEverywhere is a next-generation, headless-ready WordPress SEO and AEO (Artificial Intelligence Engine Optimization) architecture. Unlike traditional SEO plugins that inject heavy PHP processing on every page load, AmEverywhere operates via a highly optimized React interface and communicates exclusively through secure REST endpoints.
+Holvek is a next-generation, headless-ready WordPress SEO and AEO (Artificial Intelligence Engine Optimization) architecture. Unlike traditional SEO plugins that inject heavy PHP processing on every page load, Holvek operates via a highly optimized React interface and communicates exclusively through secure REST endpoints.
 
 ## Who is this for?
 This documentation portal is designed for:

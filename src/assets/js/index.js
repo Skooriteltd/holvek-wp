@@ -3,7 +3,7 @@ import App from './App';
 import '../css/admin.css';
 
 document.addEventListener('DOMContentLoaded', () => {
-    const rootElement = document.getElementById('ameverywhere-admin-app');
+    const rootElement = document.getElementById('holvek-admin-app');
     if (rootElement) {
         if (createRoot) {
             createRoot(rootElement).render(<App />);

@@ -1,10 +1,12 @@
 <?php
 
-namespace AmEveryWhere\Modules\ImageSeo;
+namespace Holvek\WordPress\Modules\ImageSeo;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+
+use Holvek\WordPress\Modules\Schema\JsonLd;
 
 /**
  * ImageObjectSchema
@@ -17,8 +19,8 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class ImageObjectSchema {
 
-	private const ENABLED_OPTION = 'ameverywhere_image_schema_enabled';
-	private const LICENSE_OPTION = 'ameverywhere_image_license_url';
+	private const ENABLED_OPTION = 'holvek_image_schema_enabled';
+	private const LICENSE_OPTION = 'holvek_image_license_url';
 
 	public function register(): void {
 		add_action( 'wp_footer', array( $this, 'outputImageSchema' ), 15 );
@@ -83,9 +85,7 @@ class ImageObjectSchema {
 			unset( $item );
 		}
 
-		echo '<script type="application/ld+json">'
-			. wp_json_encode( $schema, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT )
-			. '</script>' . "\n";
+		JsonLd::printScript( $schema );
 	}
 
 	// ── Image collection ──────────────────────────────────────────────────────
@@ -160,7 +160,7 @@ class ImageObjectSchema {
 			$seen[ $url ] = true;
 
 			// Try to extract alt from the same <img> tag
-			preg_match( '/alt=["\']([^"\']*)["\']/', $srcMatches[0][ array_search( $rawSrc, $srcMatches[1] ) ], $altMatch );
+			preg_match( '/alt=["\']([^"\']*)["\']/', $srcMatches[0][ array_search( $rawSrc, $srcMatches[1], true ) ], $altMatch );
 
 			$images[] = array(
 				'url'     => $url,
@@ -178,7 +178,7 @@ class ImageObjectSchema {
 
 	public function registerRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/settings/image-schema',
 			array(
 				array(

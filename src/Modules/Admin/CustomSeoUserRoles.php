@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\Admin;
+namespace Holvek\WordPress\Modules\Admin;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -10,7 +10,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * CustomSeoUserRoles
  *
  * BL-034: Registers granular SEO capabilities and assigns them to user roles.
- * - manage_seo         → full access to all AmEveryWhere settings
+ * - manage_seo         → full access to all Holvek settings
  * - view_seo_reports   → read-only access to analytics/audit reports
  * - manage_redirects   → create/edit/delete redirect rules
  * - edit_seo_meta      → edit SEO meta fields per-post
@@ -70,15 +70,21 @@ class CustomSeoUserRoles {
 
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'registerRoutes' ) );
-		// Re-apply capabilities on every request in case they were reset
-		add_action( 'init', array( static::class, 'addCapabilities' ) );
+
+		// One-time recovery: re-apply capabilities only when the plugin version changes.
+		// This avoids the previous pattern of writing to wp_options on every request.
+		$applied = get_option( 'holvek_caps_version', '' );
+		if ( $applied !== HOLVEK_VERSION ) {
+			self::addCapabilities();
+			update_option( 'holvek_caps_version', HOLVEK_VERSION, true );
+		}
 	}
 
 	public function registerRoutes(): void {
 		$adminCap = fn() => current_user_can( 'manage_seo' ) || current_user_can( 'manage_options' );
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/roles/capabilities',
 			array(
 				array(
@@ -117,7 +123,6 @@ class CustomSeoUserRoles {
 	public function saveCapabilities( \WP_REST_Request $request ): \WP_REST_Response {
 		$params = $request->get_json_params();
 
-		// Params: { role_slug: { cap: true|false, ... }, ... }
 		foreach ( $params as $roleSlug => $caps ) {
 			$roleSlug = sanitize_key( $roleSlug );
 			if ( $roleSlug === 'administrator' ) {

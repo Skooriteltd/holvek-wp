@@ -1,10 +1,13 @@
 <?php
 
-namespace AmEveryWhere\Modules\Analytics;
+namespace Holvek\WordPress\Modules\Analytics;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+
+use Holvek\WordPress\Core\Api\BackendApiClient;
+use Holvek\WordPress\Core\Queue\QueueManager;
 
 /**
  * KeywordRankTracker
@@ -14,17 +17,26 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class KeywordRankTracker {
 
-	private const KEYWORDS_OPTION = 'ameverywhere_tracked_keywords';
-	private const HISTORY_TABLE   = 'ameverywhere_rank_history';
-	private const CRON_HOOK       = 'ameverywhere_rank_check';
+	public const KEYWORD_BATCH = 5;
+
+	private const KEYWORDS_OPTION = 'holvek_tracked_keywords';
+	private const HISTORY_TABLE   = 'holvek_rank_history';
+	private const CRON_HOOK       = 'holvek_rank_check';
 
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'registerRoutes' ) );
 		add_action( self::CRON_HOOK, array( $this, 'checkAllKeywords' ) );
-		// Schedule if not already
-		if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
-			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::CRON_HOOK );
+	}
+
+	/**
+	 * Schedule the daily check. Activation calls this. The worker calls it again when the event is missing.
+	 */
+	public static function schedule(): void {
+		if ( wp_next_scheduled( self::CRON_HOOK ) ) {
+			return;
 		}
+
+		wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::CRON_HOOK );
 	}
 
 	public static function createTable(): void {
@@ -51,7 +63,7 @@ class KeywordRankTracker {
 		$adminCap  = fn() => current_user_can( 'manage_seo' ) || current_user_can( 'manage_options' );
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/rank-tracker/keywords',
 			array(
 				array(
@@ -68,7 +80,7 @@ class KeywordRankTracker {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/rank-tracker/history',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -85,7 +97,7 @@ class KeywordRankTracker {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/rank-tracker/check-now',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -119,19 +131,28 @@ class KeywordRankTracker {
 
 	public function getHistory( \WP_REST_Request $request ): \WP_REST_Response {
 		global $wpdb;
-		$table   = $wpdb->prefix . self::HISTORY_TABLE;
 		$keyword = $request->get_param( 'keyword' );
 		$days    = min( 180, max( 1, (int) $request->get_param( 'days' ) ) );
+		$since   = gmdate( 'Y-m-d', strtotime( "-{$days} days" ) );
 
-		$where = $wpdb->prepare( 'WHERE checked_at >= %s', date( 'Y-m-d', strtotime( "-{$days} days" ) ) );
 		if ( $keyword ) {
-			$where .= $wpdb->prepare( ' AND keyword = %s', $keyword );
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT keyword, position, url, checked_at FROM {$wpdb->prefix}holvek_rank_history WHERE checked_at >= %s AND keyword = %s ORDER BY keyword, checked_at DESC",
+					$since,
+					$keyword
+				),
+				ARRAY_A
+			);
+		} else {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT keyword, position, url, checked_at FROM {$wpdb->prefix}holvek_rank_history WHERE checked_at >= %s ORDER BY keyword, checked_at DESC",
+					$since
+				),
+				ARRAY_A
+			);
 		}
-
-		$rows = $wpdb->get_results(
-			"SELECT keyword, position, url, checked_at FROM {$table} {$where} ORDER BY keyword, checked_at DESC",
-			ARRAY_A
-		);
 
 		// Group by keyword
 		$grouped = array();
@@ -151,43 +172,105 @@ class KeywordRankTracker {
 		);
 	}
 
-	public function checkNow( \WP_REST_Request $request ): \WP_REST_Response {
-		$params  = $request->get_json_params();
-		$keyword = sanitize_text_field( $params['keyword'] ?? '' );
-
-		$keywords = $keyword ? array( $keyword ) : get_option( self::KEYWORDS_OPTION, array() );
-
-		if ( empty( $keywords ) ) {
-			return new \WP_Error( 'no_keywords', 'No keywords to check.', array( 'status' => 400 ) );
+	public function checkNow( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$params = $request->get_json_params();
+		if ( ! is_array( $params ) ) {
+			$params = array();
 		}
 
-		$results = $this->checkKeywords( array_slice( $keywords, 0, 5 ) );
-		return rest_ensure_response( array( 'results' => $results ) );
+		$rawKeyword = $params['keyword'] ?? '';
+		$keyword    = is_string( $rawKeyword ) ? sanitize_text_field( $rawKeyword ) : '';
+		$stored     = get_option( self::KEYWORDS_OPTION, array() );
+		$keywords   = '' !== $keyword ? array( $keyword ) : ( is_array( $stored ) ? $stored : array() );
+
+		if ( array() === $keywords ) {
+			return new \WP_Error( 'no_keywords', __( 'No keywords to check.', 'holvek' ), array( 'status' => 400 ) );
+		}
+
+		if ( (string) get_option( 'holvek_serpapi_key', '' ) === '' ) {
+			return ( new BackendApiClient() )->trackRanks( $keywords );
+		}
+
+		$this->queueRankCheck( 0, $keyword, 0 );
+
+		return rest_ensure_response(
+			array(
+				'success' => true,
+				'queued'  => true,
+				'message' => __( 'Rank check queued. Results appear in history after the background check finishes.', 'holvek' ),
+			)
+		);
 	}
 
+	/**
+	 * Daily cron only enqueues the first slice.
+	 */
 	public function checkAllKeywords(): void {
-		$keywords = get_option( self::KEYWORDS_OPTION, array() );
-		$this->checkKeywords( $keywords );
+		self::schedule();
+		$this->queueRankCheck( 0, '', 0 );
+	}
+
+	/**
+	 * Check one slice of keywords and queue the next slice when any remain.
+	 *
+	 * @param array<string, mixed> $data
+	 */
+	public function processQueuedCheck( array $data ): void {
+		$keyword = isset( $data['keyword'] ) && is_string( $data['keyword'] ) ? sanitize_text_field( $data['keyword'] ) : '';
+		$stored  = get_option( self::KEYWORDS_OPTION, array() );
+		if ( ! is_array( $stored ) ) {
+			$stored = array();
+		}
+
+		$keywords = '' !== $keyword ? array( $keyword ) : array_values( array_filter( $stored, 'is_string' ) );
+		$offset   = max( 0, (int) ( $data['offset'] ?? 0 ) );
+		$slice    = array_slice( $keywords, $offset, self::KEYWORD_BATCH );
+		if ( array() === $slice ) {
+			return;
+		}
+
+		$this->checkKeywords( $slice );
+
+		$next = $offset + count( $slice );
+		if ( $next < count( $keywords ) ) {
+			$this->queueRankCheck( $next, $keyword, 15 );
+		}
+	}
+
+	private function queueRankCheck( int $offset, string $keyword, int $delay ): void {
+		( new QueueManager() )->push(
+			RankCheckJob::class,
+			array(
+				'offset'  => max( 0, $offset ),
+				'keyword' => $keyword,
+			),
+			max( 0, $delay )
+		);
 	}
 
 	private function checkKeywords( array $keywords ): array {
-		$apiKey  = (string) get_option( 'ameverywhere_serpapi_key', '' );
+		$apiKey  = (string) get_option( 'holvek_serpapi_key', '' );
 		$results = array();
 
-		foreach ( $keywords as $keyword ) {
-			if ( empty( $apiKey ) ) {
-				$results[ $keyword ] = array( 'error' => 'SerpApi key not configured. Set ameverywhere_serpapi_key option.' );
-				continue;
+		if ( $apiKey === '' ) {
+			$cloud   = ( new BackendApiClient() )->trackRanks( $keywords );
+			$message = $cloud->get_error_message();
+			foreach ( $keywords as $keyword ) {
+				$results[ $keyword ] = array( 'error' => $message );
 			}
+			return $results;
+		}
+
+		foreach ( $keywords as $keyword ) {
 
 			$response = wp_safe_remote_get(
 				add_query_arg(
 					array(
 						'api_key' => $apiKey,
 						'engine'  => 'google',
-						'q'       => urlencode( $keyword ),
-						'gl'      => get_option( 'ameverywhere_rank_country', 'us' ),
-						'hl'      => get_option( 'ameverywhere_rank_language', 'en' ),
+						'q'       => rawurlencode( $keyword ),
+						'gl'      => get_option( 'holvek_rank_country', 'us' ),
+						'hl'      => get_option( 'holvek_rank_language', 'en' ),
 						'num'     => 100,
 					),
 					'https://serpapi.com/search.json'
@@ -202,12 +285,12 @@ class KeywordRankTracker {
 
 			$data     = json_decode( wp_remote_retrieve_body( $response ), true );
 			$organic  = $data['organic_results'] ?? array();
-			$siteHost = parse_url( home_url(), PHP_URL_HOST );
+			$siteHost = wp_parse_url( home_url(), PHP_URL_HOST );
 			$position = null;
 			$matchUrl = null;
 
 			foreach ( $organic as $i => $result ) {
-				$resultHost = parse_url( $result['link'] ?? '', PHP_URL_HOST );
+				$resultHost = wp_parse_url( $result['link'] ?? '', PHP_URL_HOST );
 				if ( $resultHost && str_contains( $resultHost, str_replace( 'www.', '', $siteHost ) ) ) {
 					$position = $i + 1;
 					$matchUrl = $result['link'];

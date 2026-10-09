@@ -1,0 +1,5 @@
+{
+  "core": "WordPress/WordPress#latest",
+  "plugins": [".."],
+  "testsEnvironment": false
+}

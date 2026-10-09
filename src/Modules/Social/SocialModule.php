@@ -1,14 +1,14 @@
 <?php
 
-namespace AmEveryWhere\Modules\Social;
+namespace Holvek\WordPress\Modules\Social;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use AmEveryWhere\Core\Event\EventManager;
-use AmEveryWhere\Core\Queue\QueueManager;
-use AmEveryWhere\Core\Security\KeyVault;
+use Holvek\WordPress\Core\Event\EventManager;
+use Holvek\WordPress\Core\Queue\QueueManager;
+use Holvek\WordPress\Core\Security\KeyVault;
 
 class SocialModule {
 
@@ -28,7 +28,7 @@ class SocialModule {
 		if ( $newStatus === 'publish' && $oldStatus !== 'publish' ) {
 
 			// Check global auto-share toggle setting
-			$globalAutoShare = get_option( 'ameverywhere_global_auto_share', 'yes' );
+			$globalAutoShare = get_option( 'holvek_global_auto_share', 'yes' );
 			if ( $globalAutoShare !== 'yes' ) {
 				return;
 			}
@@ -48,7 +48,7 @@ class SocialModule {
 
 	public function registerRestRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/social/accounts',
 			array(
 				array(
@@ -65,7 +65,7 @@ class SocialModule {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/social/accounts/(?P<id>[\w-]+)',
 			array(
 				array(
@@ -82,7 +82,7 @@ class SocialModule {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/social/share',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -93,7 +93,7 @@ class SocialModule {
 
 		// Mock OAuth callback endpoints for testing UI
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/social/oauth-init',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -103,7 +103,7 @@ class SocialModule {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/social/oauth-callback',
 			array(
 				'methods'             => \WP_REST_Server::READABLE,
@@ -113,7 +113,7 @@ class SocialModule {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/social/settings',
 			array(
 				array(
@@ -130,21 +130,61 @@ class SocialModule {
 		);
 	}
 
+	/**
+	 * Social tokens and OAuth app secrets are site credentials.
+	 * manage_seo is granted to administrators only, not to authors or editors.
+	 */
 	public function checkPermission(): bool {
-		return current_user_can( 'manage_options' ) || current_user_can( 'edit_posts' );
+		return current_user_can( 'manage_options' ) || current_user_can( 'manage_seo' );
 	}
 
-	public function getAccounts( \WP_REST_Request $request ): \WP_REST_Response {
-		$manager  = new SocialAccountManager();
-		$accounts = $manager->getAccounts();
+	/**
+	 * @return \WP_Error|null
+	 */
+	private function permissionError(): ?\WP_Error {
+		if ( $this->checkPermission() ) {
+			return null;
+		}
 
-		// Mask access tokens
-		foreach ( $accounts as &$acc ) {
-			if ( isset( $acc['access_token'] ) ) {
-				$acc['access_token'] = '********';
+		return new \WP_Error(
+			'forbidden',
+			__( 'You do not have permission to manage social accounts.', 'holvek' ),
+			array( 'status' => 403 )
+		);
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $accounts
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function maskAccounts( array $accounts ): array {
+		foreach ( $accounts as &$account ) {
+			if ( ! is_array( $account ) ) {
+				continue;
+			}
+			foreach ( $account as $key => $value ) {
+				if ( ! is_string( $key ) || ! is_string( $value ) || $value === '' ) {
+					continue;
+				}
+				$normalized = strtolower( $key );
+				if ( str_contains( $normalized, 'token' ) || str_contains( $normalized, 'secret' ) ) {
+					$account[ $key ] = '********';
+				}
 			}
 		}
-		unset( $acc );
+		unset( $account );
+
+		return $accounts;
+	}
+
+	public function getAccounts( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$denied = $this->permissionError();
+		if ( $denied ) {
+			return $denied;
+		}
+
+		$manager  = new SocialAccountManager();
+		$accounts = $this->maskAccounts( $manager->getAccounts() );
 
 		$cats       = get_categories( array( 'hide_empty' => false ) );
 		$categories = array_map(
@@ -160,26 +200,31 @@ class SocialModule {
 		return rest_ensure_response(
 			array(
 				'accounts'          => $accounts,
-				'global_auto_share' => get_option( 'ameverywhere_global_auto_share', 'yes' ) === 'yes',
+				'global_auto_share' => get_option( 'holvek_global_auto_share', 'yes' ) === 'yes',
 				'categories'        => $categories,
 			)
 		);
 	}
 
-	public function saveAccount( \WP_REST_Request $request ): \WP_REST_Response {
+	public function saveAccount( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$denied = $this->permissionError();
+		if ( $denied ) {
+			return $denied;
+		}
+
 		$params = $request->get_json_params();
 
 		if ( isset( $params['global_auto_share'] ) ) {
-			update_option( 'ameverywhere_global_auto_share', $params['global_auto_share'] ? 'yes' : 'no' );
+			update_option( 'holvek_global_auto_share', $params['global_auto_share'] ? 'yes' : 'no' );
 			return rest_ensure_response( array( 'success' => true ) );
 		}
 
 		if ( empty( $params['network'] ) || empty( $params['access_token'] ) ) {
-			return new \WP_Error( 'missing_params', 'Network and Access Token are required.', array( 'status' => 400 ) );
+			return new \WP_Error( 'missing_params', __( 'Network and Access Token are required.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
 		$manager = new SocialAccountManager();
-		$manager->saveAccount(
+		$saved   = $manager->saveAccount(
 			array(
 				'network'      => sanitize_text_field( $params['network'] ),
 				'access_token' => sanitize_text_field( $params['access_token'] ),
@@ -188,117 +233,138 @@ class SocialModule {
 				'created_at'   => time(),
 			)
 		);
+		if ( is_wp_error( $saved ) ) {
+			return $saved;
+		}
 
 		return rest_ensure_response(
 			array(
 				'success'  => true,
-				'accounts' => $manager->getAccounts(),
+				'accounts' => $this->maskAccounts( $manager->getAccounts() ),
 			)
 		);
 	}
 
-	public function deleteAccount( \WP_REST_Request $request ): \WP_REST_Response {
-		$id      = $request->get_param( 'id' );
+	public function deleteAccount( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$denied = $this->permissionError();
+		if ( $denied ) {
+			return $denied;
+		}
+
+		$id      = sanitize_text_field( (string) $request->get_param( 'id' ) );
 		$manager = new SocialAccountManager();
 
 		if ( $manager->deleteAccount( $id ) ) {
 			return rest_ensure_response(
 				array(
 					'success'  => true,
-					'accounts' => $manager->getAccounts(),
+					'accounts' => $this->maskAccounts( $manager->getAccounts() ),
 				)
 			);
 		}
 
-		return new \WP_Error( 'not_found', 'Account not found.', array( 'status' => 404 ) );
+		return new \WP_Error( 'not_found', __( 'Account not found.', 'holvek' ), array( 'status' => 404 ) );
 	}
 
-	public function updateAccount( \WP_REST_Request $request ): \WP_REST_Response {
-		$id     = $request->get_param( 'id' );
+	public function updateAccount( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$denied = $this->permissionError();
+		if ( $denied ) {
+			return $denied;
+		}
+
+		$id     = sanitize_text_field( (string) $request->get_param( 'id' ) );
 		$params = $request->get_json_params();
+		if ( ! is_array( $params ) ) {
+			$params = array();
+		}
 
 		$manager = new SocialAccountManager();
 		if ( $manager->updateAccount( $id, $params ) ) {
 			return rest_ensure_response(
 				array(
 					'success'  => true,
-					'accounts' => $manager->getAccounts(),
+					'accounts' => $this->maskAccounts( $manager->getAccounts() ),
 				)
 			);
 		}
 
-		return new \WP_Error( 'not_found', 'Account not found.', array( 'status' => 404 ) );
+		return new \WP_Error( 'not_found', __( 'Account not found.', 'holvek' ), array( 'status' => 404 ) );
 	}
 
-	public function manualShare( \WP_REST_Request $request ): \WP_REST_Response {
-		$postId = $request->get_param( 'post_id' );
-		if ( ! $postId ) {
-			return new \WP_Error( 'missing_param', 'Post ID is required.', array( 'status' => 400 ) );
+	public function manualShare( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$denied = $this->permissionError();
+		if ( $denied ) {
+			return $denied;
 		}
 
-		// We dispatch immediately via job queue (but we could also run it synchronously for immediate UI feedback,
-		// since the user expects a quick 'success'. However, queue is safer. Let's just run it inline for manual trigger UI responsiveness).
+		$postId = $request->get_param( 'post_id' );
+		if ( ! $postId ) {
+			return new \WP_Error( 'missing_param', __( 'Post ID is required.', 'holvek' ), array( 'status' => 400 ) );
+		}
 
-		$job = new AutoShareJob(
+		$queueManager = new QueueManager();
+		$queueManager->push(
+			AutoShareJob::class,
 			array(
 				'post_id' => $postId,
 				'retries' => 0,
 				'manual'  => true,
 			)
 		);
-		$job->handle();
 
 		return rest_ensure_response(
 			array(
 				'success' => true,
-				'message' => 'Share dispatched successfully.',
+				'queued'  => true,
+				'message' => __( 'Share queued. Holvek will send it in the background.', 'holvek' ),
 			)
 		);
 	}
 
-	public function initOAuth( \WP_REST_Request $request ): \WP_REST_Response {
+	public function initOAuth( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$denied = $this->permissionError();
+		if ( $denied ) {
+			return $denied;
+		}
+
 		$params  = $request->get_json_params();
 		$network = sanitize_text_field( $params['network'] ?? '' );
 
 		if ( empty( $network ) ) {
-			return new \WP_Error( 'missing_network', 'Network parameter is required.', array( 'status' => 400 ) );
+			return new \WP_Error( 'missing_network', __( 'Network parameter is required.', 'holvek' ), array( 'status' => 400 ) );
 		}
 
-		$apps = get_option( 'ameverywhere_social_apps', array() );
+		$apps = get_option( 'holvek_social_apps', array() );
 		if ( empty( $apps[ $network ]['app_id'] ) || empty( $apps[ $network ]['app_secret'] ) ) {
 			return new \WP_Error(
 				'not_configured',
-				sprintf( 'Please configure your %s App ID and Secret in the Platform API Settings first.', ucfirst( $network ) ),
+				sprintf(
+					/* translators: %s: social network name. */
+					__( 'Please configure your %s App ID and Secret in the Platform API Settings first.', 'holvek' ),
+					ucfirst( $network )
+				),
 				array( 'status' => 400 )
 			);
 		}
 
-		$clientId = $apps[ $network ]['app_id'];
-		$state    = function_exists( 'wp_generate_password' ) ? wp_generate_password( 32, false ) : bin2hex( random_bytes( 16 ) );
+		$clientId     = $apps[ $network ]['app_id'];
+		$state        = function_exists( 'wp_generate_password' ) ? wp_generate_password( 32, false ) : bin2hex( random_bytes( 16 ) );
+		$codeVerifier = $this->generateCodeVerifier();
 
-		// Store transient for 10 minutes tied to admin session
+		// Store transient for 10 minutes tied to the initiating administrator.
+		// The verifier stays server-side and is never returned to the browser.
 		set_transient(
-			'ameverywhere_oauth_state_' . $state,
+			'holvek_oauth_state_' . $state,
 			array(
-				'user_id' => get_current_user_id(),
-				'network' => $network,
+				'user_id'       => get_current_user_id(),
+				'network'       => $network,
+				'code_verifier' => $codeVerifier,
 			),
 			10 * MINUTE_IN_SECONDS
 		);
 
-		$callbackUri     = rest_url( "ameverywhere/v1/social/oauth-callback?network={$network}" );
-		$encodedCallback = urlencode( $callbackUri );
-
-		$authUrl = '';
-		if ( $network === 'facebook' ) {
-			$authUrl = "https://www.facebook.com/v19.0/dialog/oauth?client_id={$clientId}&redirect_uri={$encodedCallback}&state={$state}&scope=pages_manage_posts,pages_read_engagement";
-		} elseif ( $network === 'twitter' ) {
-			$authUrl = "https://twitter.com/i/oauth2/authorize?response_type=code&client_id={$clientId}&redirect_uri={$encodedCallback}&state={$state}&scope=tweet.read%20tweet.write%20users.read%20offline.access&code_challenge=challenge&code_challenge_method=plain";
-		} elseif ( $network === 'linkedin' ) {
-			$authUrl = "https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id={$clientId}&redirect_uri={$encodedCallback}&state={$state}&scope=w_member_social";
-		} elseif ( $network === 'pinterest' ) {
-			$authUrl = "https://www.pinterest.com/oauth/?client_id={$clientId}&redirect_uri={$encodedCallback}&response_type=code&state={$state}&scope=boards:read,pins:read,pins:write";
-		}
+		$callbackUri = $this->oauthCallbackUrl( $network );
+		$authUrl     = $this->buildAuthorizeUrl( $network, (string) $clientId, $callbackUri, $state, $codeVerifier );
 
 		return rest_ensure_response(
 			array(
@@ -315,21 +381,22 @@ class SocialModule {
 		$error   = $request->get_param( 'error' );
 		$state   = sanitize_text_field( $request->get_param( 'state' ) ?? '' );
 
-		$redirectUrl = admin_url( 'admin.php?page=ameverywhere#/social' );
+		$redirectUrl = admin_url( 'admin.php?page=holvek#/social' );
 
 		if ( $error || ! $code || empty( $state ) ) {
-			$errParam = $error ? urlencode( $error ) : 'missing_code_or_state';
-			wp_redirect( add_query_arg( 'oauth_error', $errParam, $redirectUrl ) );
-			exit;
+			$errParam = $error ? sanitize_key( (string) $error ) : 'missing_code_or_state';
+			if ( $errParam === '' ) {
+				$errParam = 'oauth_error';
+			}
+			$this->redirectTo( add_query_arg( 'oauth_error', $errParam, $redirectUrl ) );
 		}
 
 		// Verify state against transient
-		$transientKey = 'ameverywhere_oauth_state_' . $state;
+		$transientKey = 'holvek_oauth_state_' . $state;
 		$stateData    = get_transient( $transientKey );
 
 		if ( empty( $stateData ) || ! is_array( $stateData ) ) {
-			wp_redirect( add_query_arg( 'oauth_error', 'invalid_or_expired_state', $redirectUrl ) );
-			exit;
+			$this->redirectTo( add_query_arg( 'oauth_error', 'invalid_or_expired_state', $redirectUrl ) );
 		}
 
 		// Delete transient immediately to prevent replay
@@ -337,40 +404,55 @@ class SocialModule {
 
 		// Verify network matches initiation
 		if ( ( $stateData['network'] ?? '' ) !== $network ) {
-			wp_redirect( add_query_arg( 'oauth_error', 'network_mismatch', $redirectUrl ) );
-			exit;
+			$this->redirectTo( add_query_arg( 'oauth_error', 'network_mismatch', $redirectUrl ) );
 		}
 
-		// Verify initiating user has manage_options capability
+		// The person who started the flow must still be allowed to hold site credentials.
 		$userId = (int) ( $stateData['user_id'] ?? 0 );
 		$user   = $userId > 0 ? get_userdata( $userId ) : false;
 		if ( ! $user || ! ( user_can( $user, 'manage_seo' ) || user_can( $user, 'manage_options' ) ) ) {
-			wp_redirect( add_query_arg( 'oauth_error', 'unauthorized', $redirectUrl ) );
-			exit;
+			$this->redirectTo( add_query_arg( 'oauth_error', 'unauthorized', $redirectUrl ) );
 		}
 
-		$apps = get_option( 'ameverywhere_social_apps', array() );
+		$apps = get_option( 'holvek_social_apps', array() );
 		if ( empty( $apps[ $network ]['app_id'] ) || empty( $apps[ $network ]['app_secret'] ) ) {
-			wp_redirect( add_query_arg( 'oauth_error', 'not_configured', $redirectUrl ) );
-			exit;
+			$this->redirectTo( add_query_arg( 'oauth_error', 'not_configured', $redirectUrl ) );
 		}
 
 		$appId       = $apps[ $network ]['app_id'];
 		$appSecret   = KeyVault::decrypt( $apps[ $network ]['app_secret'] );
-		$callbackUri = rest_url( "ameverywhere/v1/social/oauth-callback?network={$network}" );
+		$callbackUri = $this->oauthCallbackUrl( $network );
 
 		$accessToken = '';
 		$profileName = ucfirst( $network ) . ' Profile';
 
 		if ( $network === 'facebook' ) {
-			$url      = "https://graph.facebook.com/v19.0/oauth/access_token?client_id={$appId}&redirect_uri=" . urlencode( $callbackUri ) . "&client_secret={$appSecret}&code={$code}";
-			$response = wp_safe_remote_get( $url );
+			$response = wp_safe_remote_post(
+				'https://graph.facebook.com/v19.0/oauth/access_token',
+				array(
+					'timeout' => 15,
+					'body'    => array(
+						'client_id'     => $appId,
+						'redirect_uri'  => $callbackUri,
+						'client_secret' => $appSecret,
+						'code'          => $code,
+					),
+				)
+			);
 			if ( ! is_wp_error( $response ) ) {
 				$body        = json_decode( wp_remote_retrieve_body( $response ), true );
 				$accessToken = $body['access_token'] ?? '';
 
 				if ( $accessToken ) {
-					$pagesRes = wp_safe_remote_get( "https://graph.facebook.com/v19.0/me/accounts?access_token={$accessToken}" );
+					$pagesRes = wp_safe_remote_get(
+						'https://graph.facebook.com/v19.0/me/accounts',
+						array(
+							'timeout' => 15,
+							'headers' => array(
+								'Authorization' => 'Bearer ' . $accessToken,
+							),
+						)
+					);
 					if ( ! is_wp_error( $pagesRes ) ) {
 						$pagesBody = json_decode( wp_remote_retrieve_body( $pagesRes ), true );
 						if ( ! empty( $pagesBody['data'][0] ) ) {
@@ -400,7 +482,11 @@ class SocialModule {
 				);
 
 				if ( $network === 'twitter' ) {
-					$args['headers'] = array( 'Authorization' => 'Basic ' . base64_encode( "$appId:$appSecret" ) );
+					$args['body']['code_verifier'] = (string) ( $stateData['code_verifier'] ?? '' );
+					$args['headers']               = array(
+						// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- OAuth 2 client authentication requires standard Base64.
+						'Authorization' => 'Basic ' . base64_encode( $appId . ':' . $appSecret ),
+					);
 				}
 
 				$response = wp_safe_remote_post( $tokenEndpoints[ $network ], $args );
@@ -413,7 +499,7 @@ class SocialModule {
 
 		if ( $accessToken ) {
 			$manager = new SocialAccountManager();
-			$manager->saveAccount(
+			$saved   = $manager->saveAccount(
 				array(
 					'network'      => sanitize_text_field( $network ),
 					'access_token' => $accessToken,
@@ -422,14 +508,102 @@ class SocialModule {
 					'created_at'   => time(),
 				)
 			);
+			if ( is_wp_error( $saved ) ) {
+				$this->redirectTo( add_query_arg( 'oauth_error', 'encryption_unavailable', $redirectUrl ) );
+			}
 		}
 
-		wp_redirect( $redirectUrl );
+		$this->redirectTo( $redirectUrl );
+	}
+
+	/**
+	 * Authorize and token exchange must send this exact redirect URI, including the network.
+	 */
+	private function oauthCallbackUrl( string $network ): string {
+		return add_query_arg(
+			'network',
+			$network,
+			rest_url( 'holvek/v1/social/oauth-callback' )
+		);
+	}
+
+	/**
+	 * @return string Authorization URL, or an empty string for an unknown network.
+	 */
+	private function buildAuthorizeUrl( string $network, string $clientId, string $callbackUri, string $state, string $codeVerifier ): string {
+		if ( $network === 'facebook' ) {
+			$base  = 'https://www.facebook.com/v19.0/dialog/oauth';
+			$query = array(
+				'client_id'     => $clientId,
+				'redirect_uri'  => $callbackUri,
+				'state'         => $state,
+				'scope'         => 'pages_manage_posts,pages_read_engagement',
+				'response_type' => 'code',
+			);
+		} elseif ( $network === 'twitter' ) {
+			$base  = 'https://twitter.com/i/oauth2/authorize';
+			$query = array(
+				'response_type'         => 'code',
+				'client_id'             => $clientId,
+				'redirect_uri'          => $callbackUri,
+				'state'                 => $state,
+				'scope'                 => 'tweet.read tweet.write users.read offline.access',
+				'code_challenge'        => $this->codeChallenge( $codeVerifier ),
+				'code_challenge_method' => 'S256',
+			);
+		} elseif ( $network === 'linkedin' ) {
+			$base  = 'https://www.linkedin.com/oauth/v2/authorization';
+			$query = array(
+				'response_type' => 'code',
+				'client_id'     => $clientId,
+				'redirect_uri'  => $callbackUri,
+				'state'         => $state,
+				'scope'         => 'w_member_social',
+			);
+		} elseif ( $network === 'pinterest' ) {
+			$base  = 'https://www.pinterest.com/oauth/';
+			$query = array(
+				'client_id'     => $clientId,
+				'redirect_uri'  => $callbackUri,
+				'response_type' => 'code',
+				'state'         => $state,
+				'scope'         => 'boards:read,pins:read,pins:write',
+			);
+		} else {
+			return '';
+		}
+
+		return $base . '?' . http_build_query( $query, '', '&', PHP_QUERY_RFC3986 );
+	}
+
+	private function generateCodeVerifier(): string {
+		return $this->base64Url( random_bytes( 32 ) );
+	}
+
+	private function codeChallenge( string $verifier ): string {
+		return $this->base64Url( hash( 'sha256', $verifier, true ) );
+	}
+
+	private function base64Url( string $bytes ): string {
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- PKCE S256 uses RFC 4648 base64url, not obfuscation.
+		return rtrim( strtr( base64_encode( $bytes ), '+/', '-_' ), '=' );
+	}
+
+	/**
+	 * Redirect and stop. wp_safe_redirect refuses off-site targets.
+	 */
+	private function redirectTo( string $url ): void {
+		wp_safe_redirect( $url );
 		exit;
 	}
 
-	public function getSocialSettings( \WP_REST_Request $request ): \WP_REST_Response {
-		$apps = get_option( 'ameverywhere_social_apps', array() );
+	public function getSocialSettings( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$denied = $this->permissionError();
+		if ( $denied ) {
+			return $denied;
+		}
+
+		$apps = get_option( 'holvek_social_apps', array() );
 
 		// Mask secrets before sending to frontend
 		foreach ( $apps as $network => $creds ) {
@@ -445,9 +619,14 @@ class SocialModule {
 		);
 	}
 
-	public function saveSocialSettings( \WP_REST_Request $request ): \WP_REST_Response {
+	public function saveSocialSettings( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
+		$denied = $this->permissionError();
+		if ( $denied ) {
+			return $denied;
+		}
+
 		$params = $request->get_json_params();
-		$apps   = get_option( 'ameverywhere_social_apps', array() );
+		$apps   = get_option( 'holvek_social_apps', array() );
 
 		$networks = array( 'facebook', 'twitter', 'linkedin', 'pinterest' );
 
@@ -461,7 +640,18 @@ class SocialModule {
 				if ( $app_secret === '********' ) {
 					$app_secret = $apps[ $net ]['app_secret'] ?? '';
 				} elseif ( ! empty( $app_secret ) ) {
-					$app_secret = KeyVault::encrypt( $app_secret );
+					$encrypted = KeyVault::encrypt( $app_secret );
+					if ( is_wp_error( $encrypted ) || ! is_string( $encrypted ) || ! KeyVault::isCiphertext( $encrypted ) ) {
+						if ( is_wp_error( $encrypted ) ) {
+							return $encrypted;
+						}
+						return new \WP_Error(
+							'holvek_encryption_failed',
+							__( 'Holvek could not encrypt this secret. The value was not saved.', 'holvek' ),
+							array( 'status' => 500 )
+						);
+					}
+					$app_secret = $encrypted;
 				}
 
 				$apps[ $net ] = array(
@@ -471,7 +661,7 @@ class SocialModule {
 			}
 		}
 
-		update_option( 'ameverywhere_social_apps', $apps );
+		update_option( 'holvek_social_apps', $apps, false );
 
 		// Mask before returning
 		foreach ( $apps as $network => $creds ) {

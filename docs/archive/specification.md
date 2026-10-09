@@ -1,7 +1,7 @@
-# AmEveryWhere - SEO/AEO Tool Requirements Specification
+# Holvek - SEO/AEO Tool Requirements Specification
 
 > **Document Version:** 2.1  
-> **Tool Name:** AmEveryWhere  
+> **Tool Name:** Holvek  
 > **Purpose:** Comprehensive SEO & Answer Engine Optimization platform for WordPress, headless CMS, and Laravel environments  
 > **Last Updated:** May 2026  
 > **Sources:** AIOSEO, RankMath, SurferSEO, Yoast SEO  
@@ -23,7 +23,7 @@ SEO/AEO Tool Requirement organized by implementation phase to enable progressive
 | **Flexible AI Model Support** | Abstracted model layer supporting popular providers + Ollama; BYO model access tiered by subscription |
 | **US-First Compliance** | CCPA, state-level AI laws (CA, TX, NY), and FTC guidelines baked into data handling and AI features |
 
-### 🎯 Key Differentiators for AmEveryWhere
+### 🎯 Key Differentiators for Holvek
 
 - 🤖 **AI Crawler Control Suite**: Block AI bots, manage training data opt-outs, and control citation behavior
 - 🗂️ **Schema Aggregation (`schemamap`)**: Machine-readable structured data endpoint optimized for AI system consumption
@@ -247,7 +247,7 @@ SEO/AEO Tool Requirement organized by implementation phase to enable progressive
 | IN-002 | REST API Support | Full CRUD API for headless WordPress SEO management and external tool integration | P2 |
 | IN-003 | WordPress Multisite Support | Centralized or per-site SEO configuration for multisite networks | P1 |
 | IN-004 | Third-Party Importers | One-click migration from Yoast SEO, AIOSEO, and other plugins with settings mapping | P0 |
-| IN-005 | Zapier/Make Integration | Webhook support for connecting AmEveryWhere events to external automation platforms | P3 |
+| IN-005 | Zapier/Make Integration | Webhook support for connecting Holvek events to external automation platforms | P3 |
 | IN-006 | Google Analytics 4 Integration | Display GA4 traffic and behavior metrics alongside SEO data in unified dashboard | P2 |
 | **IN-007** | **Google Docs SEO Add-on** | **Browser extension to run SEO/readability analysis directly in Google Docs with sync to WordPress** | **P3** |
 | IN-008 | Laravel Package Foundation | Core SEO logic extracted for future Laravel package with service providers and config publishing | P3 |
@@ -257,7 +257,7 @@ SEO/AEO Tool Requirement organized by implementation phase to enable progressive
 | ID | Requirement | Description | Priority |
 |----|-------------|-------------|----------|
 | PM-001 | Lightweight Architecture | Modular code loading; disable unused features to minimize frontend impact | P0 |
-| PM-002 | Import/Export Settings | Backup and migrate all AmEveryWhere settings via JSON with encryption option | P1 |
+| PM-002 | Import/Export Settings | Backup and migrate all Holvek settings via JSON with encryption option | P1 |
 | PM-003 | Version Control & Rollback | Safely test beta versions or revert to previous plugin versions from dashboard | P2 |
 | PM-004 | Compatibility Checker | Pre-installation scan for theme/plugin conflicts and server requirement validation | P0 |
 | PM-005 | Bulk SEO Editor | Mass-edit titles, descriptions, robots tags, and schema across hundreds of posts | P1 |
@@ -372,7 +372,7 @@ SEO/AEO Tool Requirement organized by implementation phase to enable progressive
 
 ```mermaid
 graph LR
-    A[Content Created] --> B[AmEveryWhere Analysis]
+    A[Content Created] --> B[Holvek Analysis]
     B --> C{Optimization Layer}
     C --> D[Traditional SEO Output]
     C --> E[AEO Enhancement Layer]
@@ -406,7 +406,7 @@ graph LR
 2. **Schema-First Design**: All structured data generated with both Google Rich Results AND LLM consumption in mind
 3. **Crawler Intelligence**: User-agent detection to serve optimized content variants for AI bots vs. traditional crawlers
 4. **Attribution Tracking**: Embed lightweight, privacy-safe markers to help trace AI citations back to source content
-5. **User-Key Security**: API keys encrypted at rest, never transmitted to AmEveryWhere servers, with local validation where possible
+5. **User-Key Security**: API keys encrypted at rest, never transmitted to Holvek servers, with local validation where possible
 6. **Model Abstraction**: Unified prompt/response interface allowing seamless switching between providers without code changes
 
 ---
@@ -415,7 +415,7 @@ graph LR
 
 | # | Question | Decision | Implementation Notes |
 |---|----------|----------|---------------------|
-| 1 | **AI API Strategy**: User-provided vs. AmEveryWhere-managed keys? | ✅ **User-Managed Keys** | - Secure vault UI with encryption at rest<br>- Local validation for Ollama/self-hosted<br>- Usage tracking to prevent cost surprises<br>- Clear documentation for key setup per provider |
+| 1 | **AI API Strategy**: User-provided vs. Holvek-managed keys? | ✅ **User-Managed Keys** | - Secure vault UI with encryption at rest<br>- Local validation for Ollama/self-hosted<br>- Usage tracking to prevent cost surprises<br>- Clear documentation for key setup per provider |
 | 2 | **Pricing Model**: How to structure free pilot → paid transition? | ✅ **Free Pilot + Feature Flags** | - Core SEO features free forever<br>- AEO/advanced features behind feature flags<br>- Tier schema (free/pro/enterprise) in DB from Day 1<br>- Upgrade prompts contextual to feature access |
 | 3 | **Platform Roadmap**: WordPress first, then what? | ✅ **WordPress → Headless → Laravel** | - Phase 1: WordPress plugin only<br>- Phase 2: REST API for headless CMS<br>- Phase 3: Laravel package with service providers<br>- Shared core library (PM-007) enables code reuse |
 | 4 | **AI Model Support**: Which providers? BYO option? | ✅ **Popular Providers + Ollama + Tiered BYO** | - Support OpenAI, Anthropic, Google, Ollama at launch<br>- Abstracted provider layer for easy additions<br>- BYO model endpoint gated to Enterprise tier (AI-010)<br>- Clear documentation for self-hosted Ollama setup |
@@ -426,7 +426,7 @@ graph LR
 ## 📋 Appendix: Feature Flag Configuration Example
 
 ```yaml
-# config/ameverywhere-features.yaml
+# config/holvek-features.yaml
 # Used by BILL-001: Feature Flag Architecture
 
 core_seo:

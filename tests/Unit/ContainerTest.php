@@ -1,10 +1,10 @@
 <?php
 
-namespace AmEveryWhere\Tests\Unit;
+namespace Holvek\WordPress\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use AmEveryWhere\Core\Container\Container;
-use AmEveryWhere\Core\Container\ContainerException;
+use Holvek\WordPress\Core\Container\Container;
+use Holvek\WordPress\Core\Container\ContainerException;
 
 class ContainerTest extends TestCase
 {

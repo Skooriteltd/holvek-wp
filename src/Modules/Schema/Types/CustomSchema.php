@@ -1,10 +1,12 @@
 <?php
 
-namespace AmEveryWhere\Modules\Schema\Types;
+namespace Holvek\WordPress\Modules\Schema\Types;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+
+use Holvek\WordPress\Modules\Schema\JsonLd;
 
 /**
  * Generates custom point-and-click schemas (Product, FAQ, HowTo, LocalBusiness, Recipe, Event)
@@ -21,7 +23,7 @@ class CustomSchema {
 			return false;
 		}
 
-		$schemaType = \AmEveryWhere\Modules\Schema\SchemaGenerator::getEffectivePrimarySchema( $id );
+		$schemaType = \Holvek\WordPress\Modules\Schema\SchemaGenerator::getEffectivePrimarySchema( $id );
 		return ! empty( $schemaType ) && $schemaType !== 'none';
 	}
 
@@ -34,7 +36,7 @@ class CustomSchema {
 			return array();
 		}
 
-		$schemaType = \AmEveryWhere\Modules\Schema\SchemaGenerator::getEffectivePrimarySchema( $id );
+		$schemaType = \Holvek\WordPress\Modules\Schema\SchemaGenerator::getEffectivePrimarySchema( $id );
 		$schema     = array();
 
 		switch ( $schemaType ) {
@@ -57,8 +59,12 @@ class CustomSchema {
 				$schema = $this->generateEventSchema( $id );
 				break;
 			case 'custom':
+				$parsed = $this->parsedCustomJson( $id );
+				if ( is_array( $parsed ) && 'nodes' === ( $parsed['kind'] ?? '' ) ) {
+					return $parsed['nodes'];
+				}
 				$schema = array(
-					'@type' => get_post_meta( $id, '_ameverywhere_schema_custom_type', true ) ?: 'Thing',
+					'@type' => $this->customType( $id ),
 					'@id'   => get_permalink( $id ) . '#custom',
 				);
 				break;
@@ -78,39 +84,47 @@ class CustomSchema {
 	 * Product Schema.
 	 */
 	private function generateProductSchema( int $postId ): array {
-		$name         = get_post_meta( $postId, '_ameverywhere_schema_product_name', true ) ?: get_the_title( $postId );
-		$desc         = get_post_meta( $postId, '_ameverywhere_schema_product_description', true ) ?: wp_strip_all_tags( get_the_excerpt( $postId ) );
-		$price        = get_post_meta( $postId, '_ameverywhere_schema_product_price', true );
-		$currency     = get_post_meta( $postId, '_ameverywhere_schema_product_currency', true ) ?: 'USD';
-		$rating       = get_post_meta( $postId, '_ameverywhere_schema_product_rating', true );
-		$availability = get_post_meta( $postId, '_ameverywhere_schema_product_availability', true ) ?: 'InStock';
-
-		$schema = array(
-			'@type'       => 'Product',
-			'@id'         => get_permalink( $postId ) . '#product',
-			'name'        => $name,
-			'description' => $desc,
-			'url'         => get_permalink( $postId ),
-		);
-
-		if ( has_post_thumbnail( $postId ) ) {
-			$schema['image'] = get_the_post_thumbnail_url( $postId, 'full' );
+		if ( $this->wooCommerceOwnsProduct( $postId ) ) {
+			return array();
 		}
 
-		if ( ! empty( $price ) ) {
+		$name     = $this->textValue( get_post_meta( $postId, '_holvek_schema_product_name', true ), get_the_title( $postId ) );
+		$desc     = $this->textValue( get_post_meta( $postId, '_holvek_schema_product_description', true ), wp_strip_all_tags( get_the_excerpt( $postId ) ) );
+		$price    = $this->textValue( get_post_meta( $postId, '_holvek_schema_product_price', true ) );
+		$currency = $this->textValue( get_post_meta( $postId, '_holvek_schema_product_currency', true ), 'USD' );
+		$rating   = $this->textValue( get_post_meta( $postId, '_holvek_schema_product_rating', true ) );
+		$stock    = $this->textValue( get_post_meta( $postId, '_holvek_schema_product_availability', true ), 'InStock' );
+
+		if ( $name === '' || ( $price === '' && $rating === '' ) ) {
+			return array();
+		}
+
+		$schema = array(
+			'@type' => 'Product',
+			'@id'   => get_permalink( $postId ) . '#product',
+			'name'  => $name,
+			'url'   => get_permalink( $postId ),
+		);
+		$schema = $this->putText( $schema, 'description', $desc );
+		$image  = $this->thumbnailUrl( $postId );
+		if ( $image !== '' ) {
+			$schema['image'] = $image;
+		}
+
+		if ( $price !== '' && $currency !== '' ) {
 			$schema['offers'] = array(
 				'@type'         => 'Offer',
-				'price'         => floatval( $price ),
+				'price'         => $price,
 				'priceCurrency' => $currency,
-				'availability'  => 'https://schema.org/' . $availability,
+				'availability'  => 'https://schema.org/' . $stock,
 				'url'           => get_permalink( $postId ),
 			);
 		}
 
-		if ( ! empty( $rating ) ) {
+		if ( $rating !== '' ) {
 			$schema['aggregateRating'] = array(
 				'@type'       => 'AggregateRating',
-				'ratingValue' => floatval( $rating ),
+				'ratingValue' => $rating,
 				'bestRating'  => 5,
 				'ratingCount' => 1,
 			);
@@ -120,10 +134,23 @@ class CustomSchema {
 	}
 
 	/**
+	 * WooCommerce prints its own Product node on a product URL. A second Product node is not added.
+	 */
+	private function wooCommerceOwnsProduct( int $postId ): bool {
+		$post = get_post( $postId );
+		if ( ! $post || ( $post->post_type ?? '' ) !== 'product' ) {
+			return false;
+		}
+
+		$active = class_exists( '\WC_Product' ) || function_exists( 'wc_get_product' );
+		return (bool) apply_filters( 'holvek_woocommerce_owns_product_schema', $active, $postId );
+	}
+
+	/**
 	 * FAQ Schema.
 	 */
 	private function generateFaqSchema( int $postId ): array {
-		$faqsJson = get_post_meta( $postId, '_ameverywhere_schema_faq_questions', true );
+		$faqsJson = get_post_meta( $postId, '_holvek_schema_faq_questions', true );
 		$faqs     = ! empty( $faqsJson ) ? json_decode( $faqsJson, true ) : array();
 
 		if ( empty( $faqs ) || ! is_array( $faqs ) ) {
@@ -160,21 +187,24 @@ class CustomSchema {
 	 * HowTo Schema.
 	 */
 	private function generateHowToSchema( int $postId ): array {
-		$name = get_post_meta( $postId, '_ameverywhere_schema_howto_name', true ) ?: get_the_title( $postId );
-		$desc = get_post_meta( $postId, '_ameverywhere_schema_howto_description', true ) ?: wp_strip_all_tags( get_the_excerpt( $postId ) );
+		$name = $this->textValue( get_post_meta( $postId, '_holvek_schema_howto_name', true ), get_the_title( $postId ) );
+		$desc = $this->textValue( get_post_meta( $postId, '_holvek_schema_howto_description', true ), wp_strip_all_tags( get_the_excerpt( $postId ) ) );
+		if ( $name === '' ) {
+			return array();
+		}
 
-		$stepsJson = get_post_meta( $postId, '_ameverywhere_schema_howto_steps', true );
+		$stepsJson = get_post_meta( $postId, '_holvek_schema_howto_steps', true );
 		$steps     = ! empty( $stepsJson ) ? json_decode( $stepsJson, true ) : array();
 
-		$suppliesText = get_post_meta( $postId, '_ameverywhere_schema_howto_supplies', true );
-		$toolsText    = get_post_meta( $postId, '_ameverywhere_schema_howto_tools', true );
+		$suppliesText = get_post_meta( $postId, '_holvek_schema_howto_supplies', true );
+		$toolsText    = get_post_meta( $postId, '_holvek_schema_howto_tools', true );
 
 		$schema = array(
-			'@type'       => 'HowTo',
-			'@id'         => get_permalink( $postId ) . '#howto',
-			'name'        => $name,
-			'description' => $desc,
+			'@type' => 'HowTo',
+			'@id'   => get_permalink( $postId ) . '#howto',
+			'name'  => $name,
 		);
+		$schema = $this->putText( $schema, 'description', $desc );
 
 		if ( ! empty( $steps ) && is_array( $steps ) ) {
 			$stepElements = array();
@@ -194,28 +224,17 @@ class CustomSchema {
 			}
 		}
 
-		if ( ! empty( $suppliesText ) ) {
-			$suppliesList   = array_map( 'trim', explode( ',', $suppliesText ) );
-			$supplyElements = array();
-			foreach ( $suppliesList as $supply ) {
-				$supplyElements[] = array(
-					'@type' => 'HowToSupply',
-					'name'  => $supply,
-				);
-			}
-			$schema['supply'] = $supplyElements;
+		if ( empty( $schema['step'] ) ) {
+			return array();
 		}
 
-		if ( ! empty( $toolsText ) ) {
-			$toolsList    = array_map( 'trim', explode( ',', $toolsText ) );
-			$toolElements = array();
-			foreach ( $toolsList as $tool ) {
-				$toolElements[] = array(
-					'@type' => 'HowToTool',
-					'name'  => $tool,
-				);
-			}
-			$schema['tool'] = $toolElements;
+		$supplies = $this->namedThings( (string) $suppliesText, 'HowToSupply' );
+		if ( array() !== $supplies ) {
+			$schema['supply'] = $supplies;
+		}
+		$tools = $this->namedThings( (string) $toolsText, 'HowToTool' );
+		if ( array() !== $tools ) {
+			$schema['tool'] = $tools;
 		}
 
 		return $schema;
@@ -225,34 +244,35 @@ class CustomSchema {
 	 * LocalBusiness Schema.
 	 */
 	private function generateLocalBusinessSchema( int $postId ): array {
-		$name      = get_post_meta( $postId, '_ameverywhere_schema_localbusiness_name', true ) ?: get_bloginfo( 'name' );
-		$telephone = get_post_meta( $postId, '_ameverywhere_schema_localbusiness_telephone', true );
-		$street    = get_post_meta( $postId, '_ameverywhere_schema_localbusiness_street', true );
-		$city      = get_post_meta( $postId, '_ameverywhere_schema_localbusiness_city', true );
-		$postal    = get_post_meta( $postId, '_ameverywhere_schema_localbusiness_postal', true );
-		$country   = get_post_meta( $postId, '_ameverywhere_schema_localbusiness_country', true ) ?: 'US';
+		$name      = $this->textValue( get_post_meta( $postId, '_holvek_schema_localbusiness_name', true ), get_bloginfo( 'name' ) );
+		$telephone = $this->textValue( get_post_meta( $postId, '_holvek_schema_localbusiness_telephone', true ) );
+		$street    = $this->textValue( get_post_meta( $postId, '_holvek_schema_localbusiness_street', true ) );
+		$city      = $this->textValue( get_post_meta( $postId, '_holvek_schema_localbusiness_city', true ) );
+		$postal    = $this->textValue( get_post_meta( $postId, '_holvek_schema_localbusiness_postal', true ) );
+		$country   = $this->textValue( get_post_meta( $postId, '_holvek_schema_localbusiness_country', true ) );
+
+		if ( $name === '' || ( $street === '' && $city === '' ) ) {
+			return array();
+		}
 
 		$schema = array(
-			'@type'     => 'LocalBusiness',
-			'@id'       => get_permalink( $postId ) . '#localbusiness',
-			'name'      => $name,
-			'url'       => get_permalink( $postId ),
-			'telephone' => $telephone,
+			'@type' => 'LocalBusiness',
+			'@id'   => get_permalink( $postId ) . '#localbusiness',
+			'name'  => $name,
+			'url'   => get_permalink( $postId ),
 		);
-
-		if ( has_post_thumbnail( $postId ) ) {
-			$schema['image'] = get_the_post_thumbnail_url( $postId, 'full' );
+		$schema = $this->putText( $schema, 'telephone', $telephone );
+		$image  = $this->thumbnailUrl( $postId );
+		if ( $image !== '' ) {
+			$schema['image'] = $image;
 		}
 
-		if ( ! empty( $street ) || ! empty( $city ) ) {
-			$schema['address'] = array(
-				'@type'           => 'PostalAddress',
-				'streetAddress'   => $street,
-				'addressLocality' => $city,
-				'postalCode'      => $postal,
-				'addressCountry'  => $country,
-			);
-		}
+		$address           = array( '@type' => 'PostalAddress' );
+		$address           = $this->putText( $address, 'streetAddress', $street );
+		$address           = $this->putText( $address, 'addressLocality', $city );
+		$address           = $this->putText( $address, 'postalCode', $postal );
+		$address           = $this->putText( $address, 'addressCountry', $country );
+		$schema['address'] = $address;
 
 		return $schema;
 	}
@@ -261,10 +281,14 @@ class CustomSchema {
 	 * Recipe Schema.
 	 */
 	private function generateRecipeSchema( int $postId ): array {
-		$name = get_post_meta( $postId, '_ameverywhere_schema_recipe_name', true ) ?: get_the_title( $postId );
-		$desc = get_post_meta( $postId, '_ameverywhere_schema_recipe_description', true ) ?: wp_strip_all_tags( get_the_excerpt( $postId ) );
+		$name  = $this->textValue( get_post_meta( $postId, '_holvek_schema_recipe_name', true ), get_the_title( $postId ) );
+		$desc  = $this->textValue( get_post_meta( $postId, '_holvek_schema_recipe_description', true ), wp_strip_all_tags( get_the_excerpt( $postId ) ) );
+		$image = $this->thumbnailUrl( $postId );
+		if ( $name === '' || $image === '' ) {
+			return array();
+		}
 
-		$ingredientsText = get_post_meta( $postId, '_ameverywhere_schema_recipe_ingredients', true );
+		$ingredientsText = get_post_meta( $postId, '_holvek_schema_recipe_ingredients', true );
 		$ingredients     = array();
 		if ( ! empty( $ingredientsText ) ) {
 			// Can be JSON or comma-separated
@@ -275,25 +299,30 @@ class CustomSchema {
 				$ingredients = array_map( 'trim', explode( ',', $ingredientsText ) );
 			}
 		}
-
-		$instructionsJson = get_post_meta( $postId, '_ameverywhere_schema_recipe_instructions', true );
-		$instructions     = ! empty( $instructionsJson ) ? json_decode( $instructionsJson, true ) : array();
-
-		$prepTimeRaw = get_post_meta( $postId, '_ameverywhere_schema_recipe_prep_time', true );
-		$cookTimeRaw = get_post_meta( $postId, '_ameverywhere_schema_recipe_cook_time', true );
-		$calories    = get_post_meta( $postId, '_ameverywhere_schema_recipe_calories', true );
-
-		$schema = array(
-			'@type'       => 'Recipe',
-			'@id'         => get_permalink( $postId ) . '#recipe',
-			'name'        => $name,
-			'description' => $desc,
-			'url'         => get_permalink( $postId ),
+		$ingredients = array_values(
+			array_filter(
+				$ingredients,
+				static function ( $item ): bool {
+					return is_string( $item ) && trim( $item ) !== '';
+				}
+			)
 		);
 
-		if ( has_post_thumbnail( $postId ) ) {
-			$schema['image'] = get_the_post_thumbnail_url( $postId, 'full' );
-		}
+		$instructionsJson = get_post_meta( $postId, '_holvek_schema_recipe_instructions', true );
+		$instructions     = ! empty( $instructionsJson ) ? json_decode( $instructionsJson, true ) : array();
+
+		$prepTimeRaw = get_post_meta( $postId, '_holvek_schema_recipe_prep_time', true );
+		$cookTimeRaw = get_post_meta( $postId, '_holvek_schema_recipe_cook_time', true );
+		$calories    = get_post_meta( $postId, '_holvek_schema_recipe_calories', true );
+
+		$schema = array(
+			'@type' => 'Recipe',
+			'@id'   => get_permalink( $postId ) . '#recipe',
+			'name'  => $name,
+			'image' => $image,
+			'url'   => get_permalink( $postId ),
+		);
+		$schema = $this->putText( $schema, 'description', $desc );
 
 		if ( ! empty( $ingredients ) ) {
 			$schema['recipeIngredient'] = $ingredients;
@@ -340,14 +369,18 @@ class CustomSchema {
 	 * Event Schema.
 	 */
 	private function generateEventSchema( int $postId ): array {
-		$name          = get_post_meta( $postId, '_ameverywhere_schema_event_name', true ) ?: get_the_title( $postId );
-		$startDate     = get_post_meta( $postId, '_ameverywhere_schema_event_start_date', true );
-		$endDate       = get_post_meta( $postId, '_ameverywhere_schema_event_end_date', true );
-		$venue         = get_post_meta( $postId, '_ameverywhere_schema_event_venue', true ) ?: 'Online';
-		$address       = get_post_meta( $postId, '_ameverywhere_schema_event_address', true );
-		$performerName = get_post_meta( $postId, '_ameverywhere_schema_event_performer', true );
-		$price         = get_post_meta( $postId, '_ameverywhere_schema_event_price', true );
-		$currency      = get_post_meta( $postId, '_ameverywhere_schema_event_currency', true ) ?: 'USD';
+		$name          = $this->textValue( get_post_meta( $postId, '_holvek_schema_event_name', true ), get_the_title( $postId ) );
+		$startDate     = $this->textValue( get_post_meta( $postId, '_holvek_schema_event_start_date', true ) );
+		$endDate       = $this->textValue( get_post_meta( $postId, '_holvek_schema_event_end_date', true ) );
+		$venue         = $this->textValue( get_post_meta( $postId, '_holvek_schema_event_venue', true ), 'Online' );
+		$address       = $this->textValue( get_post_meta( $postId, '_holvek_schema_event_address', true ) );
+		$performerName = $this->textValue( get_post_meta( $postId, '_holvek_schema_event_performer', true ) );
+		$price         = $this->textValue( get_post_meta( $postId, '_holvek_schema_event_price', true ) );
+		$currency      = $this->textValue( get_post_meta( $postId, '_holvek_schema_event_currency', true ), 'USD' );
+
+		if ( $name === '' || $startDate === '' ) {
+			return array();
+		}
 
 		$schema = array(
 			'@type'               => 'Event',
@@ -355,20 +388,21 @@ class CustomSchema {
 			'name'                => $name,
 			'url'                 => get_permalink( $postId ),
 			'eventStatus'         => 'https://schema.org/EventScheduled',
-			'eventAttendanceMode' => empty( $address ) ? 'https://schema.org/OnlineEventAttendanceMode' : 'https://schema.org/OfflineEventAttendanceMode',
+			'eventAttendanceMode' => $address === '' ? 'https://schema.org/OnlineEventAttendanceMode' : 'https://schema.org/OfflineEventAttendanceMode',
 		);
 
-		if ( has_post_thumbnail( $postId ) ) {
-			$schema['image'] = get_the_post_thumbnail_url( $postId, 'full' );
+		$image = $this->thumbnailUrl( $postId );
+		if ( $image !== '' ) {
+			$schema['image'] = $image;
 		}
 
 		if ( ! empty( $startDate ) ) {
 			// Convert to ISO 8601
-			$schema['startDate'] = date( 'c', strtotime( $startDate ) );
+			$schema['startDate'] = gmdate( 'c', strtotime( $startDate ) );
 		}
 
 		if ( ! empty( $endDate ) ) {
-			$schema['endDate'] = date( 'c', strtotime( $endDate ) );
+			$schema['endDate'] = gmdate( 'c', strtotime( $endDate ) );
 		}
 
 		if ( ! empty( $address ) ) {
@@ -405,6 +439,57 @@ class CustomSchema {
 		}
 
 		return $schema;
+	}
+
+	/**
+	 * First non-empty trimmed string.
+	 */
+	private function textValue( $primary, string $fallback = '' ): string {
+		foreach ( array( $primary, $fallback ) as $value ) {
+			if ( is_string( $value ) || is_numeric( $value ) ) {
+				$text = trim( (string) $value );
+				if ( $text !== '' ) {
+					return $text;
+				}
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * @param array<string, mixed> $schema
+	 * @return array<string, mixed>
+	 */
+	private function putText( array $schema, string $key, string $value ): array {
+		if ( $value !== '' ) {
+			$schema[ $key ] = $value;
+		}
+		return $schema;
+	}
+
+	private function thumbnailUrl( int $postId ): string {
+		if ( ! has_post_thumbnail( $postId ) ) {
+			return '';
+		}
+		$url = get_the_post_thumbnail_url( $postId, 'full' );
+		return is_string( $url ) ? trim( $url ) : '';
+	}
+
+	/**
+	 * @return array<int, array<string, string>>
+	 */
+	private function namedThings( string $csv, string $type ): array {
+		$items = array();
+		foreach ( array_map( 'trim', explode( ',', $csv ) ) as $name ) {
+			if ( $name === '' ) {
+				continue;
+			}
+			$items[] = array(
+				'@type' => $type,
+				'name'  => $name,
+			);
+		}
+		return $items;
 	}
 
 	/**
@@ -447,17 +532,41 @@ class CustomSchema {
 	 * Merge user-defined visual tree properties dynamically.
 	 */
 	private function mergeCustomProperties( int $postId, array $schema ): array {
-		$customPropsJson = get_post_meta( $postId, '_ameverywhere_custom_schema_properties', true );
-		if ( ! empty( $customPropsJson ) ) {
-			$customProps = json_decode( $customPropsJson, true );
-			if ( is_array( $customProps ) ) {
-				foreach ( $customProps as $prop ) {
-					if ( isset( $prop['key'] ) && isset( $prop['value'] ) && $prop['key'] !== '' ) {
-						$schema[ $prop['key'] ] = $prop['value'];
-					}
-				}
-			}
+		$parsed = $this->parsedCustomJson( $postId );
+		if ( ! is_array( $parsed ) || 'properties' !== ( $parsed['kind'] ?? '' ) ) {
+			return $schema;
 		}
+
+		foreach ( $parsed['properties'] as $key => $value ) {
+			$schema[ $key ] = $value;
+		}
+
 		return $schema;
+	}
+
+	/**
+	 * @return array<string, mixed>|null
+	 */
+	private function parsedCustomJson( int $postId ): ?array {
+		$raw = get_post_meta( $postId, '_holvek_custom_schema_properties', true );
+		if ( ! is_string( $raw ) || '' === trim( $raw ) ) {
+			return null;
+		}
+
+		$parsed = JsonLd::parseCustomJson( $raw );
+		if ( is_wp_error( $parsed ) || 'empty' === ( $parsed['kind'] ?? '' ) ) {
+			return null;
+		}
+
+		return $parsed;
+	}
+
+	private function customType( int $postId ): string {
+		$type = get_post_meta( $postId, '_holvek_schema_custom_type', true );
+		if ( ! JsonLd::isSchemaType( $type ) ) {
+			return 'Thing';
+		}
+
+		return $type;
 	}
 }

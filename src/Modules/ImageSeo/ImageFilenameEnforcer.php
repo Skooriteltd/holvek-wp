@@ -1,6 +1,6 @@
 <?php
 
-namespace AmEveryWhere\Modules\ImageSeo;
+namespace Holvek\WordPress\Modules\ImageSeo;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -10,16 +10,15 @@ if ( ! defined( 'ABSPATH' ) ) {
  * ImageFilenameEnforcer
  *
  * Intercepts image uploads and rewrites the filename to an SEO-friendly
- * slug (lowercase, hyphens, no generic prefixes). Also provides a bulk
- * retroactive rename endpoint for the existing media library.
+ * slug (lowercase, hyphens, no generic prefixes). Existing attachment
+ * files are not renamed, including during an upgrade.
  *
  * BL-004
  */
 class ImageFilenameEnforcer {
 
-	private const ENFORCE_OPTION = 'ameverywhere_filename_enforce';
-	private const PREFIX_OPTION  = 'ameverywhere_filename_prefix';
-	private const RENAMED_META   = '_ameverywhere_renamed';
+	private const ENFORCE_OPTION = 'holvek_filename_enforce';
+	private const PREFIX_OPTION  = 'holvek_filename_prefix';
 
 	/** Generic prefixes that carry no SEO value */
 	private const GENERIC_PREFIX_PATTERN = '/^(img|dsc|photo|pic|image|screenshot|capture|file|scan)([-_]?\d*)?[-_]?/i';
@@ -65,6 +64,7 @@ class ImageFilenameEnforcer {
 		if ( function_exists( 'remove_accents' ) ) {
 			$name = remove_accents( $name );
 		} elseif ( function_exists( 'iconv' ) ) {
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- iconv warns on invalid UTF-8. The false return is checked.
 			$converted = @iconv( 'UTF-8', 'ASCII//TRANSLIT//IGNORE', $name );
 			if ( $converted !== false ) {
 				$name = $converted;
@@ -95,7 +95,7 @@ class ImageFilenameEnforcer {
 
 	public function registerRoutes(): void {
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/settings/filename-enforce',
 			array(
 				array(
@@ -112,7 +112,7 @@ class ImageFilenameEnforcer {
 		);
 
 		register_rest_route(
-			'ameverywhere/v1',
+			'holvek/v1',
 			'/images/bulk-rename',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -135,7 +135,7 @@ class ImageFilenameEnforcer {
 		$params = $request->get_json_params();
 
 		if ( isset( $params['enforce'] ) ) {
-			update_option( self::ENFORCE_OPTION, $params['enforce'] ? 'yes' : 'no' );
+			update_option( self::ENFORCE_OPTION, $params['enforce'] ? 'yes' : 'no', true );
 		}
 
 		if ( isset( $params['prefix'] ) ) {
@@ -147,119 +147,19 @@ class ImageFilenameEnforcer {
 		return rest_ensure_response( array( 'success' => true ) );
 	}
 
-	public function bulkRename( \WP_REST_Request $request ): \WP_REST_Response {
-		global $wpdb;
+	/**
+	 * Existing media files stay as they are.
+	 *
+	 * Upload filtering is the only rename. An upgrade, or this endpoint,
+	 * must not move files that are already in the library.
+	 */
+	public function bulkRename( \WP_REST_Request $request ): \WP_Error {
+		unset( $request );
 
-		$params    = $request->get_json_params();
-		$ids       = array_map( 'absint', $params['ids'] ?? array() );
-		$batchSize = min( 20, max( 1, (int) ( $params['batch_size'] ?? 10 ) ) );
-
-		// If no IDs provided, fetch unprocessed images
-		if ( empty( $ids ) ) {
-			$query = new \WP_Query(
-				array(
-					'post_type'      => 'attachment',
-					'post_status'    => 'inherit',
-					'post_mime_type' => array( 'image/jpeg', 'image/png', 'image/gif', 'image/webp' ),
-					'posts_per_page' => $batchSize,
-					'meta_query'     => array(
-						array(
-							'key'     => self::RENAMED_META,
-							'compare' => 'NOT EXISTS',
-						),
-					),
-				)
-			);
-			$ids   = wp_list_pluck( $query->posts, 'ID' );
-		}
-
-		$renamed = 0;
-		$skipped = 0;
-		$failed  = 0;
-
-		foreach ( $ids as $id ) {
-			$filePath = get_attached_file( $id );
-			if ( ! $filePath || ! file_exists( $filePath ) ) {
-				++$failed;
-				continue;
-			}
-
-			$info    = pathinfo( $filePath );
-			$newBase = $this->cleanFilename( $info['filename'] );
-
-			if ( empty( $newBase ) ) {
-				++$skipped;
-				continue;
-			}
-
-			$ext     = strtolower( $info['extension'] ?? '' );
-			$newName = $newBase . '.' . $ext;
-			$newPath = $info['dirname'] . '/' . $newName;
-
-			if ( $newPath === $filePath ) {
-				update_post_meta( $id, self::RENAMED_META, 'yes' );
-				++$skipped;
-				continue;
-			}
-
-			// Ensure unique target filename
-			$counter  = 2;
-			$testPath = $newPath;
-			while ( file_exists( $testPath ) ) {
-				$testPath = $info['dirname'] . '/' . $newBase . '-' . $counter . '.' . $ext;
-				$testName = $newBase . '-' . $counter . '.' . $ext;
-				++$counter;
-			}
-			$newPath = $testPath;
-			$newName = basename( $newPath );
-
-			if ( ! @rename( $filePath, $newPath ) ) {
-				++$failed;
-				continue;
-			}
-
-			// Update WordPress records
-			update_attached_file( $id, $newPath );
-
-			$meta = wp_get_attachment_metadata( $id );
-			if ( is_array( $meta ) ) {
-				$meta['file'] = _wp_relative_upload_path( $newPath );
-				wp_update_attachment_metadata( $id, $meta );
-			}
-
-			// Update post guid
-			$oldGuid = get_the_guid( $id );
-			$newGuid = str_replace( basename( $filePath ), $newName, $oldGuid );
-			$wpdb->update( $wpdb->posts, array( 'guid' => $newGuid ), array( 'ID' => $id ) );
-
-			update_post_meta( $id, self::RENAMED_META, 'yes' );
-			++$renamed;
-		}
-
-		// Count remaining unprocessed
-		$remaining = ( new \WP_Query(
-			array(
-				'post_type'      => 'attachment',
-				'post_status'    => 'inherit',
-				'post_mime_type' => array( 'image/jpeg', 'image/png', 'image/gif', 'image/webp' ),
-				'posts_per_page' => 1,
-				'meta_query'     => array(
-					array(
-						'key'     => self::RENAMED_META,
-						'compare' => 'NOT EXISTS',
-					),
-				),
-			)
-		) )->found_posts;
-
-		return rest_ensure_response(
-			array(
-				'success'   => true,
-				'renamed'   => $renamed,
-				'skipped'   => $skipped,
-				'failed'    => $failed,
-				'remaining' => $remaining,
-			)
+		return new \WP_Error(
+			'existing_files_not_renamed',
+			__( 'Filename enforcement renames new uploads only. Existing media files are left unchanged.', 'holvek' ),
+			array( 'status' => 400 )
 		);
 	}
 }
