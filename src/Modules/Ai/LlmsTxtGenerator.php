@@ -168,7 +168,7 @@ class LlmsTxtGenerator {
 			array(
 				'post_type'      => get_post_types( array( 'public' => true ) ),
 				'post_status'    => 'publish',
-				'posts_per_page' => -1,
+				'posts_per_page' => 200,
 				'meta_query'     => array(
 					array(
 						'key'   => '_holvek_ai_training_allow',
@@ -192,7 +192,7 @@ class LlmsTxtGenerator {
 			array(
 				'post_type'      => get_post_types( array( 'public' => true ) ),
 				'post_status'    => 'publish',
-				'posts_per_page' => -1,
+				'posts_per_page' => 200,
 				'meta_query'     => array(
 					array(
 						'key'   => '_holvek_ai_training_allow',

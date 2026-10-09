@@ -20,7 +20,7 @@ jobs:
       - name: Install dependencies
         run: composer install --prefer-dist --no-progress
       - name: Run PHPCS
-        run: vendor/bin/phpcs --report=checkstyle | cs2pr
+        run: vendor/bin/phpcs -q --report=checkstyle | cs2pr
 
   plugin-check:
     name: WordPress Plugin Check (PCP)
@@ -31,4 +31,8 @@ jobs:
         uses: wordpress/plugin-check-action@v1
         with:
           build-dir: '.'
-          exclude-directories: 'vendor,node_modules,tests,.github,dist'
+          # The repository directory is holvek-wp. The distributed slug and text domain are holvek.
+          # These paths are development files. package-zip.sh already omits them from the release zip.
+          slug: holvek
+          exclude-directories: 'vendor,node_modules,tests,.github,dist,scripts'
+          exclude-files: '.svnignore,.gitignore,phpcs.xml.dist,phpunit.xml.dist,package-zip.sh,deploy-to-wporg.sh'

@@ -4,7 +4,7 @@ Tags: seo, schema, sitemap, indexing, search console
 Requires at least: 6.0
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -197,6 +197,17 @@ On upgrade, Holvek renames the previous tables, options, and meta to the `holvek
 
 Yes. Holvek is designed to work alongside existing WordPress themes, editors, and page-building tools without requiring a specific frontend.
 
+== Screenshots ==
+
+1. The Holvek dashboard on a site with no Holvek account. It shows indexability, the sitemap address, missing titles, missing alt text, redirects, and not-found requests.
+2. The Holvek panel in the block editor. It shows the on-page checks for the current post.
+3. Redirects Manager. An administrator adds a 301 or 302 rule and sees the saved rules.
+4. The technical SEO audit before a scan. It runs on this site and does not score AI mentions, Google presence, or competitors.
+5. Image SEO. Reversible compression stays off until an administrator turns it on, and the alt-text audit lists images that have no alternative text.
+6. Schema markup templates. No global display rule is saved on this site.
+7. The keyword rank tracker. Cloud rank checks stay off until the site is connected and a SerpApi key is saved.
+8. XML sitemap settings. Holvek's sitemap stays off until an administrator turns it on.
+
 == Support ==
 
 For documentation and technical guidance, see the plugin documentation included with Holvek.
@@ -208,6 +219,15 @@ https://wordpress.org/support/plugin/holvek/
 When reporting a problem, include your WordPress version, PHP version, Holvek version, and the steps required to reproduce the issue.
 
 == Changelog ==
+
+= 1.0.1 =
+
+* Maintenance release for the fixes found after 1.0.0. Requires PHP 8.2. Tested up to WordPress 7.1.
+* The package no longer contains development files, shell scripts, or hidden files.
+* The request address, the 404 referrer, the browser name, and the Global Privacy Control header are sanitized before they are stored or compared.
+* Post, image, redirect, and audit lists stay within a fixed maximum size.
+* The on-page inspector is printed with the WordPress inline script tag.
+* Reads of Holvek's own tables name the columns they use.
 
 = 1.0.0 =
 

@@ -7,6 +7,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 use Holvek\WordPress\Core\Security\KeyVault;
+use Holvek\WordPress\Core\Support\ValueList;
 
 class GoogleIndexingApi {
 
@@ -111,7 +112,7 @@ class GoogleIndexingApi {
 
 		foreach ( $schema as $value ) {
 			if ( is_array( $value ) ) {
-				if ( array_is_list( $value ) ) {
+				if ( ValueList::isList( $value ) ) {
 					foreach ( $value as $item ) {
 						if ( is_array( $item ) && self::containsJobPosting( $item ) ) {
 							return true;
@@ -144,7 +145,7 @@ class GoogleIndexingApi {
 
 		foreach ( $schema as $value ) {
 			if ( is_array( $value ) ) {
-				if ( array_is_list( $value ) ) {
+				if ( ValueList::isList( $value ) ) {
 					foreach ( $value as $item ) {
 						if ( is_array( $item ) && self::containsVideoBroadcastEvent( $item ) ) {
 							return true;

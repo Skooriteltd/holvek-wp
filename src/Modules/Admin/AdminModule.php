@@ -1706,7 +1706,11 @@ class AdminModule {
 	 */
 	public function previewHtmlSitemap( \WP_REST_Request $request ): \WP_REST_Response {
 		$postTypesRaw = get_option( 'holvek_html_sitemap_post_types', 'post,page' );
-		$excludeIds   = array_filter( array_map( 'absint', explode( ',', get_option( 'holvek_html_sitemap_exclude_ids', '' ) ) ) );
+		$excludeIds   = array_slice(
+			array_values( array_filter( array_map( 'absint', explode( ',', (string) get_option( 'holvek_html_sitemap_exclude_ids', '' ) ) ) ) ),
+			0,
+			500
+		);
 		$order        = get_option( 'holvek_html_sitemap_order', 'menu_order' );
 		$showCount    = get_option( 'holvek_html_sitemap_show_count', 'no' ) === 'yes';
 

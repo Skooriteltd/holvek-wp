@@ -173,7 +173,7 @@ class SitemapGenerator {
 		}
 
 		$args       = $postTypes;
-		$excludeSql = $this->excludeIdSql( $args );
+		$excludeSql = esc_sql( $this->excludedIdFragment( $args ) );
 		$inList     = implode( ',', array_fill( 0, count( $postTypes ), '%s' ) );
 
 		// The IN list and the optional ID exclusion are placeholder strings. Values go through prepare().
@@ -210,7 +210,7 @@ class SitemapGenerator {
 
 		$yearMonth  = $period . '-01';
 		$args       = array_merge( $postTypes, array( $yearMonth, $yearMonth ) );
-		$excludeSql = $this->excludeIdSql( $args );
+		$excludeSql = esc_sql( $this->excludedIdFragment( $args ) );
 		$args[]     = self::urlLimit();
 		$args[]     = ( $page - 1 ) * self::urlLimit();
 		$inList     = implode( ',', array_fill( 0, count( $postTypes ), '%s' ) );
@@ -305,18 +305,21 @@ class SitemapGenerator {
 	}
 
 	/**
-	 * Append a NOT IN clause for manually excluded post IDs.
+	 * Placeholder fragment for manually excluded post IDs.
+	 *
+	 * The text contains only %d placeholders. The ID values are appended to $args.
+	 * esc_sql() does not change this fragment.
 	 *
 	 * @param array<int, mixed> $args Prepared values, updated in place.
 	 */
-	private function excludeIdSql( array &$args ): string {
+	private function excludedIdFragment( array &$args ): string {
 		$ids = $this->getExcludedPostIds();
 		if ( $ids === array() ) {
 			return '';
 		}
 
 		foreach ( $ids as $id ) {
-			$args[] = $id;
+			$args[] = (int) $id;
 		}
 
 		return 'AND p.ID NOT IN (' . implode( ',', array_fill( 0, count( $ids ), '%d' ) ) . ')';
@@ -340,7 +343,7 @@ class SitemapGenerator {
 				$ids[] = $id;
 			}
 		}
-		return $ids;
+		return array_slice( $ids, 0, 500 );
 	}
 
 	/**

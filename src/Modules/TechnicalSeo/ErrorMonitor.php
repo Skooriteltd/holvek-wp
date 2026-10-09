@@ -92,8 +92,16 @@ class ErrorMonitor {
 			return;
 		}
 
-		$referer   = $this->storedReferrer( isset( $_SERVER['HTTP_REFERER'] ) ? (string) wp_unslash( $_SERVER['HTTP_REFERER'] ) : '' );
-		$userAgent = $this->storedUserAgent( isset( $_SERVER['HTTP_USER_AGENT'] ) ? (string) wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) : '' );
+		$referer   = $this->storedReferrer(
+			isset( $_SERVER['HTTP_REFERER'] )
+				? esc_url_raw( wp_unslash( (string) $_SERVER['HTTP_REFERER'] ) )
+				: ''
+		);
+		$userAgent = $this->storedUserAgent(
+			isset( $_SERVER['HTTP_USER_AGENT'] )
+				? sanitize_text_field( wp_unslash( (string) $_SERVER['HTTP_USER_AGENT'] ) )
+				: ''
+		);
 
 		// Push into the in-memory transient buffer (no DB write during HTTP request)
 		$buffer = get_transient( self::BUFFER_TRANSIENT );
@@ -164,7 +172,7 @@ class ErrorMonitor {
 			if ( $entry['uri'] === '' ) {
 				continue;
 			}
-			$existing = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}holvek_404_logs WHERE uri = %s", $entry['uri'] ) );
+			$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, hits, referer, user_agent, last_hit FROM {$wpdb->prefix}holvek_404_logs WHERE uri = %s", $entry['uri'] ) );
 
 			if ( $existing ) {
 				$wpdb->update(
@@ -390,7 +398,7 @@ class ErrorMonitor {
 
 		// Fetch the log entry to get the source URI
 		$entry = $wpdb->get_row(
-			$wpdb->prepare( "SELECT * FROM {$wpdb->prefix}holvek_404_logs WHERE id = %s", $id ),
+			$wpdb->prepare( "SELECT uri FROM {$wpdb->prefix}holvek_404_logs WHERE id = %s", $id ),
 			ARRAY_A
 		);
 

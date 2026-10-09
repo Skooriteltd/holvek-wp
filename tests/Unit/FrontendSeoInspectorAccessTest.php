@@ -99,6 +99,25 @@ class FrontendSeoInspectorAccessTest extends TestCase {
 		$this->assertSame( 'secret keyword', $data['checks']['focus_keyword']['value'] );
 	}
 
+	public function testLoggedInEditorReceivesTheInspectorHost(): void {
+		global $mock_user_caps, $mock_is_singular, $mock_current_post_id;
+		$mock_user_caps['edit_post'] = array( 15 );
+		$mock_is_singular            = true;
+		$mock_current_post_id        = 15;
+
+		ob_start();
+		( new FrontendSeoInspector() )->injectOverlay();
+		$html = ob_get_clean();
+
+		$this->assertStringContainsString( 'id="holvek-inspector-host"', $html );
+		$this->assertStringContainsString( '<script>', $html );
+		$this->assertStringContainsString( 'holvek-inspector-host', $html );
+		$this->assertStringContainsString( '"postId":15', $html );
+		$this->assertStringContainsString( 'Holvek Inspector', $html );
+		$this->assertStringContainsString( 'SEO Inspector', $html );
+		$this->assertStringNotContainsString( '__HOLVEK_INSPECTOR_CONFIG__', $html );
+	}
+
 	private function seedPost( int $postId, string $status ): void {
 		global $mock_posts, $mock_post_meta;
 

@@ -119,7 +119,7 @@ class CloudCredentialTest extends TestCase {
 		$this->assertSame( 'POST', $post['method'] );
 		$this->assertSame( 'https://api.holvek.com/v1/auth/site-token', $post['url'] );
 		$this->assertSame( 10, $post['args']['timeout'] );
-		$this->assertSame( 'Holvek-WP/1.0.0', $post['args']['headers']['User-Agent'] );
+		$this->assertSame( 'Holvek-WP/' . HOLVEK_VERSION, $post['args']['headers']['User-Agent'] );
 		$this->assertSame( 'application/json', $post['args']['headers']['Accept'] );
 		$this->assertSame( 'application/json', $post['args']['headers']['Content-Type'] );
 		$this->assertArrayNotHasKey( 'Authorization', $post['args']['headers'] );

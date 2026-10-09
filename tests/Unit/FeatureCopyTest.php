@@ -77,7 +77,15 @@ class FeatureCopyTest extends TestCase {
 		$this->assertStringContainsString( 'https://api.holvek.com', $readme );
 		$this->assertStringNotContainsString( 'guaranteed indexing', $readme );
 		$this->assertStringNotContainsString( 'ranking improvement', $readme );
-		$this->assertStringNotContainsString( '== Screenshots ==', $readme );
+		$this->assertStringContainsString( '== Screenshots ==', $readme );
+		$this->assertStringContainsString( '1. The Holvek dashboard', $readme );
+		$this->assertStringContainsString( '2. The Holvek panel in the block editor', $readme );
+		$this->assertStringContainsString( '3. Redirects Manager.', $readme );
+		$this->assertStringContainsString( '4. The technical SEO audit', $readme );
+		$this->assertStringContainsString( '5. Image SEO.', $readme );
+		$this->assertStringContainsString( '6. Schema markup templates.', $readme );
+		$this->assertStringContainsString( '7. The keyword rank tracker.', $readme );
+		$this->assertStringContainsString( "8. XML sitemap settings. Holvek's sitemap stays off", $readme );
 	}
 
 	public function testUserFacingCopyDoesNotClaimADiscoveryProduct(): void {

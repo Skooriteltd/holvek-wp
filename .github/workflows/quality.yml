@@ -40,14 +40,14 @@ jobs:
       - name: Lint PHP
         run: find src tests -type f -name '*.php' -print0 | xargs -0 -n1 php -l
 
+      - name: Build production assets
+        run: npm run build
+
       - name: Run unit tests
         run: ./vendor/bin/phpunit --testdox
 
       - name: Enforce WordPress coding standards
         run: ./vendor/bin/phpcs
-
-      - name: Build production assets
-        run: npm run build
 
       - name: Validate release script
         run: bash -n package-zip.sh

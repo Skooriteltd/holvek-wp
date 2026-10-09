@@ -17,10 +17,36 @@ class EventManager {
 	}
 
 	public function doAction( string $hook, ...$args ): void {
-		do_action( $hook, ...$args );
+		$suffix = $this->hookSuffix( $hook );
+		if ( '' === $suffix ) {
+			return;
+		}
+
+		do_action( 'holvek_' . $suffix, ...$args );
 	}
 
 	public function applyFilters( string $hook, $value, ...$args ) {
-		return apply_filters( $hook, $value, ...$args );
+		$suffix = $this->hookSuffix( $hook );
+		if ( '' === $suffix ) {
+			return $value;
+		}
+
+		return apply_filters( 'holvek_' . $suffix, $value, ...$args );
+	}
+
+	/**
+	 * Suffix for a Holvek hook. A leading holvek_ is removed once so the name is not doubled.
+	 */
+	private function hookSuffix( string $hook ): string {
+		$hook = strtolower( $hook );
+		if ( str_starts_with( $hook, 'holvek_' ) ) {
+			$hook = substr( $hook, strlen( 'holvek_' ) );
+		}
+
+		if ( '' === $hook || 1 !== preg_match( '/^[a-z0-9_]+$/', $hook ) ) {
+			return '';
+		}
+
+		return $hook;
 	}
 }

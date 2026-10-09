@@ -99,7 +99,7 @@ class RenameAuditTest extends TestCase {
 
 	public function testPotUsesTheHolvekDomain(): void {
 		$pot = file_get_contents( $this->root . '/languages/holvek.pot' );
-		$this->assertStringContainsString( 'Project-Id-Version: Holvek 1.0.0', $pot );
+		$this->assertStringContainsString( 'Project-Id-Version: Holvek 1.0.1', $pot );
 		$this->assertStringContainsString( 'X-Domain: holvek', $pot );
 		$this->assertStringContainsString( 'https://wordpress.org/support/plugin/holvek', $pot );
 		$this->assertStringNotContainsString( 'ameverywhere', strtolower( $pot ) );

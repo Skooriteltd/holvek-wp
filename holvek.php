@@ -3,7 +3,7 @@
  * Plugin Name: Holvek
  * Plugin URI: https://holvek.com
  * Description: Technical SEO, structured data, sitemaps, redirects, and indexing tools for WordPress.
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: Skoorite Limited
  * Author URI: https://holvek.com
  * License: GPLv2 or later
@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 // Define plugin constants.
 if ( ! defined( 'HOLVEK_VERSION' ) ) {
-	define( 'HOLVEK_VERSION', '1.0.0' );
+	define( 'HOLVEK_VERSION', '1.0.1' );
 }
 if ( ! defined( 'HOLVEK_PLUGIN_FILE' ) ) {
 	define( 'HOLVEK_PLUGIN_FILE', __FILE__ );

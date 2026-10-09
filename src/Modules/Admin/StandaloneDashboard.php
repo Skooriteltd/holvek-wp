@@ -182,10 +182,8 @@ class StandaloneDashboard {
 
 		global $wpdb;
 
-		$table = str_replace( '`', '``', $wpdb->prefix . 'holvek_404_logs' );
-
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is the site prefix plus a fixed suffix, with backticks doubled.
-		$count = $wpdb->get_var( "SELECT COUNT(*) FROM `{$table}`" );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Table name is the site prefix plus the literal holvek_404_logs suffix.
+		$count = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}holvek_404_logs" );
 
 		return max( 0, (int) $count );
 	}

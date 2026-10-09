@@ -71,6 +71,7 @@ git archive --format=tar "${RELEASE_TAG}" | tar -x -C "${SOURCE_DIR}"
 rsync -a --delete \
     --exclude='.git' \
     --exclude='.github' \
+    --exclude='.*' \
     --exclude='node_modules' \
     --exclude='tests' \
     --exclude='dist' \
@@ -78,18 +79,29 @@ rsync -a --delete \
     --exclude='assets/wporg' \
     --exclude='assets/raw-design-sources' \
     --exclude='docs' \
+    --exclude='scripts' \
+    --exclude='*.sh' \
     --exclude='*.md' \
     --exclude='composer.lock' \
     --exclude='package-lock.json' \
     --exclude='package.json' \
     --exclude='phpunit.xml*' \
     --exclude='phpcs.xml*' \
+    --exclude='tailwind.config.js' \
+    --exclude='postcss.config.js' \
     --exclude='deploy-to-wporg.sh' \
     --exclude='package-zip.sh' \
     "${SOURCE_DIR}/" "${STAGE_DIR}/"
 
 if [[ ! -f "${STAGE_DIR}/holvek.php" || ! -f "${STAGE_DIR}/vendor/autoload.php" || ! -f "${STAGE_DIR}/build/index.js" ]]; then
     echo 'ERROR: The staged plugin is missing a required runtime file.' >&2
+    exit 1
+fi
+
+# Plugin Check rejects dotfiles, shell scripts, and development scripts.
+if find "${STAGE_DIR}" \( -name '.*' -o -name '*.sh' -o -path "${STAGE_DIR}/scripts" -o -path "${STAGE_DIR}/scripts/*" \) -print -quit | grep -q .; then
+    echo 'ERROR: The staged plugin still contains a dotfile, shell script, or scripts directory.' >&2
+    find "${STAGE_DIR}" \( -name '.*' -o -name '*.sh' -o -path "${STAGE_DIR}/scripts" -o -path "${STAGE_DIR}/scripts/*" \) -print >&2
     exit 1
 fi
 

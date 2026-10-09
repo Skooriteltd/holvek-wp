@@ -81,4 +81,31 @@ class PrivacyRecordsTest extends TestCase {
 		$this->assertStringNotContainsString( 'CCPA compliant', $source );
 		$this->assertStringNotContainsString( 'GDPR compliant', $source );
 	}
+
+	public function testGpcSignalAcceptsOnlyTheTokenOne(): void {
+		$tools   = new CcpaPrivacyTools();
+		$GLOBALS['mock_did_actions'] = array();
+		unset( $_SERVER['HTTP_SEC_GPC'] );
+
+		$tools->handleGpcSignal();
+		$this->assertSame( array(), $GLOBALS['mock_did_actions'] );
+
+		$_SERVER['HTTP_SEC_GPC'] = 'true';
+		$tools->handleGpcSignal();
+		$_SERVER['HTTP_SEC_GPC'] = '0';
+		$tools->handleGpcSignal();
+		$this->assertSame( array(), $GLOBALS['mock_did_actions'] );
+
+		update_option( 'holvek_honour_gpc', 'no' );
+		$_SERVER['HTTP_SEC_GPC'] = '1';
+		$tools->handleGpcSignal();
+		$this->assertSame( array(), $GLOBALS['mock_did_actions'] );
+
+		update_option( 'holvek_honour_gpc', 'yes' );
+		$_SERVER['HTTP_SEC_GPC'] = ' 1 ';
+		$tools->handleGpcSignal();
+		$this->assertSame( array( 'holvek_gpc_opt_out' ), $GLOBALS['mock_did_actions'] );
+
+		unset( $_SERVER['HTTP_SEC_GPC'] );
+	}
 }

@@ -15,8 +15,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class KeywordCannibalizationDetector {
 
-	private const CACHE_KEY = 'holvek_cannibalization_report';
-	private const CACHE_TTL = 6 * HOUR_IN_SECONDS;
+	private const CACHE_KEY   = 'holvek_cannibalization_report';
+	private const CACHE_TTL   = 6 * HOUR_IN_SECONDS;
+	private const REPORT_ROWS = 500;
 
 	public function register(): void {
 		add_action( 'rest_api_init', array( $this, 'registerRoutes' ) );
@@ -84,15 +85,20 @@ class KeywordCannibalizationDetector {
 	public function buildReport(): array {
 		global $wpdb;
 
-		// Fetch all published posts with a focus keyword
+		// The report compares keywords, so the read is capped. A site with more
+		// focus keywords than this limit is reported from the first rows only.
 		$rows = $wpdb->get_results(
-			"SELECT p.ID, p.post_title, p.post_type, p.post_modified, pm.meta_value AS keyword
+			$wpdb->prepare(
+				"SELECT p.ID, p.post_title, p.post_type, p.post_modified, pm.meta_value AS keyword
              FROM {$wpdb->posts} p
              INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_holvek_focus_keyword'
              WHERE p.post_status = 'publish'
                AND p.post_type NOT IN ('attachment', 'revision', 'nav_menu_item')
                AND pm.meta_value != ''
-             ORDER BY pm.meta_value, p.ID",
+             ORDER BY pm.meta_value, p.ID
+             LIMIT %d",
+				self::REPORT_ROWS
+			),
 			ARRAY_A
 		);
 

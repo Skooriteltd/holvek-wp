@@ -19,18 +19,19 @@ descriptions in the `== Screenshots ==` section of readme.txt.
 
 | File | Contents |
 |---|---|
-| `screenshot-1.png` | Dashboard overview with SEO health score |
-| `screenshot-2.png` | Meta tags editor in Gutenberg sidebar |
-| `screenshot-3.png` | Redirect manager with loop detection |
-| `screenshot-4.png` | Technical SEO audit results |
-| `screenshot-5.png` | Image SEO dashboard |
-| `screenshot-6.png` | Schema output with live validation |
-| `screenshot-7.png` | Keyword rank tracker chart |
-| `screenshot-8.png` | Content gap analysis |
+| `screenshot-1.png` | Holvek dashboard with local counts |
+| `screenshot-2.png` | Holvek panel in the block editor |
+| `screenshot-3.png` | Redirects Manager |
+| `screenshot-4.png` | Technical SEO audit before a scan |
+| `screenshot-5.png` | Image SEO |
+| `screenshot-6.png` | Schema markup templates |
+| `screenshot-7.png` | Keyword rank tracker |
+| `screenshot-8.png` | XML sitemap settings |
 
 ## Notes
 - PNG or JPG accepted; PNG preferred for icons, JPG for banners
 - Do NOT commit screenshots to trunk — only to /assets/
 - Max file size: 1 MB per asset
-- The icon and banner files in this directory are the correct directory pixel sizes.
-- screenshot-1.png through screenshot-8.png, here and in assets/screenshots/, are the same design mockups. They show the previous name, AmEveryWhere, and a health-score dashboard this plugin does not ship. Do not upload them. readme.txt does not list screenshots until a logged-in Holvek admin is captured.
+- The icon files are 128 and 256 pixels. They do not contain a product name and were left unchanged.
+- The banner files are 772 by 250 and 1544 by 500. They use the same mark and map, with the word Holvek.
+- screenshot-1.png through screenshot-8.png, here and in assets/screenshots/, are captures from the Holvek admin on the local UAT site. readme.txt names those files.

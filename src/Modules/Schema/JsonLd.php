@@ -6,6 +6,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+use Holvek\WordPress\Core\Support\ValueList;
+
 /**
  * Encodes JSON-LD for a script tag.
  *
@@ -142,7 +144,7 @@ class JsonLd {
 	 * @param mixed $value Value returned by a schema generator.
 	 */
 	public static function isListOfNodes( $value ): bool {
-		if ( ! is_array( $value ) || array() === $value || ! array_is_list( $value ) || count( $value ) > self::MAX_NODES ) {
+		if ( ! is_array( $value ) || array() === $value || ! ValueList::isList( $value ) || count( $value ) > self::MAX_NODES ) {
 			return false;
 		}
 
@@ -159,7 +161,7 @@ class JsonLd {
 	 * @param mixed $value Candidate node.
 	 */
 	public static function isNode( $value ): bool {
-		if ( ! is_array( $value ) || array_is_list( $value ) ) {
+		if ( ! is_array( $value ) || ValueList::isList( $value ) ) {
 			return false;
 		}
 
@@ -197,7 +199,7 @@ class JsonLd {
 	 * @return array<int, array<string, mixed>>|null
 	 */
 	private static function nodesFromGraph( array $decoded ): ?array {
-		if ( array_is_list( $decoded ) || ! isset( $decoded['@graph'] ) || ! is_array( $decoded['@graph'] ) ) {
+		if ( ValueList::isList( $decoded ) || ! isset( $decoded['@graph'] ) || ! is_array( $decoded['@graph'] ) ) {
 			return null;
 		}
 
@@ -221,7 +223,7 @@ class JsonLd {
 	 * @return array<string, bool|float|int|string>|null
 	 */
 	private static function propertyMap( array $decoded ): ?array {
-		if ( ! array_is_list( $decoded ) || array() === $decoded || count( $decoded ) > self::MAX_PROPERTIES ) {
+		if ( ! ValueList::isList( $decoded ) || array() === $decoded || count( $decoded ) > self::MAX_PROPERTIES ) {
 			return null;
 		}
 
@@ -264,7 +266,7 @@ class JsonLd {
 			return true;
 		}
 
-		if ( ! is_array( $type ) || ! array_is_list( $type ) || array() === $type || count( $type ) > 4 ) {
+		if ( ! is_array( $type ) || ! ValueList::isList( $type ) || array() === $type || count( $type ) > 4 ) {
 			return false;
 		}
 

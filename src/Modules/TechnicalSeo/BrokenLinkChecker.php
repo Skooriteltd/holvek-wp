@@ -319,7 +319,7 @@ class BrokenLinkChecker {
 
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT b.*, p.post_title
+				"SELECT b.id, b.post_id, b.url, b.http_code, b.anchor_text, b.last_checked, b.resolved, p.post_title
              FROM {$wpdb->prefix}holvek_broken_links b
              LEFT JOIN {$wpdb->posts} p ON p.ID = b.post_id
              WHERE b.resolved = %d

@@ -173,7 +173,7 @@ class HeadlessSeoEndpoints {
 					'logo'         => get_site_icon_url(),
 					'type_default' => get_option( 'holvek_default_schema_type', 'Article' ),
 				),
-				'version'          => HOLVEK_VERSION ?? '1.0.0',
+				'version'          => HOLVEK_VERSION ?? '1.0.1',
 			)
 		);
 	}

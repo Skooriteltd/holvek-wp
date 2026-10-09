@@ -49,7 +49,11 @@ class VideoSitemapGenerator {
 
 		$excludePostIds = array();
 		if ( is_string( $excludePostsString ) && $excludePostsString !== '' ) {
-			$excludePostIds = array_map( 'intval', array_filter( array_map( 'trim', explode( ',', $excludePostsString ) ) ) );
+			$excludePostIds = array_slice(
+				array_values( array_filter( array_map( 'intval', array_map( 'trim', explode( ',', $excludePostsString ) ) ) ) ),
+				0,
+				500
+			);
 		}
 
 		$postTypes = get_post_types( array( 'public' => true ) );

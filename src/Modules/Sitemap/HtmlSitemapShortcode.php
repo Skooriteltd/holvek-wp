@@ -35,7 +35,11 @@ class HtmlSitemapShortcode {
 		);
 
 		$postTypes  = array_filter( array_map( 'trim', explode( ',', $atts['post_types'] ) ) );
-		$excludeIds = array_filter( array_map( 'absint', explode( ',', $atts['exclude_ids'] ) ) );
+		$excludeIds = array_slice(
+			array_values( array_filter( array_map( 'absint', explode( ',', (string) $atts['exclude_ids'] ) ) ) ),
+			0,
+			500
+		);
 		$showCount  = $atts['show_count'] === 'yes';
 
 		$orderby = match ( $atts['order'] ) {

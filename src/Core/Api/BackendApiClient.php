@@ -118,7 +118,7 @@ class BackendApiClient {
 		$headers = array(
 			'Content-Type'  => 'application/json',
 			'Accept'        => 'application/json',
-			'User-Agent'    => 'Holvek-WP/' . ( defined( 'HOLVEK_VERSION' ) ? HOLVEK_VERSION : '1.0.0' ),
+			'User-Agent'    => 'Holvek-WP/' . ( defined( 'HOLVEK_VERSION' ) ? HOLVEK_VERSION : '1.0.1' ),
 			'Authorization' => 'Bearer ' . OperatingMode::credential(),
 		);
 
@@ -153,7 +153,7 @@ class BackendApiClient {
 
 		$headers = array(
 			'Accept'        => 'application/json',
-			'User-Agent'    => 'Holvek-WP/' . ( defined( 'HOLVEK_VERSION' ) ? HOLVEK_VERSION : '1.0.0' ),
+			'User-Agent'    => 'Holvek-WP/' . ( defined( 'HOLVEK_VERSION' ) ? HOLVEK_VERSION : '1.0.1' ),
 			'Authorization' => 'Bearer ' . OperatingMode::credential(),
 		);
 

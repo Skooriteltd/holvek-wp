@@ -12,7 +12,7 @@ jobs:
     strategy:
       matrix:
         php-version: ['8.2', '8.3']
-        wp-version: ['latest']
+        wp-version: ['master']
         multisite: [false, true]
 
     steps:

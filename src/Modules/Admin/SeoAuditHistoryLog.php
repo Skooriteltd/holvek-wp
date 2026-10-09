@@ -192,7 +192,7 @@ class SeoAuditHistoryLog {
 			);
 			$rows  = $wpdb->get_results(
 				$wpdb->prepare(
-					"SELECT * FROM {$wpdb->prefix}holvek_audit_log WHERE post_id = %d ORDER BY created_at DESC LIMIT %d OFFSET %d",
+					"SELECT id, user_id, post_id, action, field, old_value, new_value, context, created_at FROM {$wpdb->prefix}holvek_audit_log WHERE post_id = %d ORDER BY created_at DESC LIMIT %d OFFSET %d",
 					$postId,
 					$perPage,
 					$offset
@@ -203,7 +203,7 @@ class SeoAuditHistoryLog {
 			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}holvek_audit_log" );
 			$rows  = $wpdb->get_results(
 				$wpdb->prepare(
-					"SELECT * FROM {$wpdb->prefix}holvek_audit_log ORDER BY created_at DESC LIMIT %d OFFSET %d",
+					"SELECT id, user_id, post_id, action, field, old_value, new_value, context, created_at FROM {$wpdb->prefix}holvek_audit_log ORDER BY created_at DESC LIMIT %d OFFSET %d",
 					$perPage,
 					$offset
 				),

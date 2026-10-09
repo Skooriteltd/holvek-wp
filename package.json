@@ -1,6 +1,6 @@
 {
   "name": "holvek-frontend",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Frontend assets for Holvek plugin",
   "scripts": {
     "build": "wp-scripts build src/assets/js/index.js src/assets/js/editor.js src/assets/js/cookie-banner.js",

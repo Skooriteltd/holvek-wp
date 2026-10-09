@@ -415,12 +415,7 @@ class BingIndexNowApi {
 			return '';
 		}
 
-		$uri = wp_unslash( $_SERVER['REQUEST_URI'] );
-		if ( ! is_string( $uri ) ) {
-			return '';
-		}
-
-		return sanitize_text_field( $uri );
+		return sanitize_text_field( wp_unslash( (string) $_SERVER['REQUEST_URI'] ) );
 	}
 
 	private function isSameSiteHttpUrl( string $url ): bool {

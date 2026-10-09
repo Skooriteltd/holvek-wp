@@ -228,85 +228,88 @@ class FrontendSeoInspector {
 			)
 		);
 
-		$js = <<<JS
-(function(){
-	'use strict';
-	var cfg = {$inspector_data};
-	var host = document.getElementById('holvek-inspector-host');
+		$js = str_replace(
+			'__HOLVEK_INSPECTOR_CONFIG__',
+			$inspector_data,
+			'(function(){
+	\'use strict\';
+	var cfg = __HOLVEK_INSPECTOR_CONFIG__;
+	var host = document.getElementById(\'holvek-inspector-host\');
 	if (!host || !host.attachShadow) return;
-	var shadow = host.attachShadow({mode:'open'});
+	var shadow = host.attachShadow({mode:\'open\'});
 
-	var style = ':host { all: initial; }' +
-		'#toggle { width:48px;height:48px;border-radius:50%;background:#2563eb;color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.25); }' +
-		'#toggle:focus-visible { outline:2px solid #1e293b; outline-offset:2px; }' +
-		'#panel { display:none;position:absolute;bottom:58px;right:0;width:340px;max-height:70vh;overflow-y:auto;background:#fff;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.18);padding:16px; }' +
-		'#panel.open { display:block; }' +
-		'h3 { margin:0 0 12px;font-size:14px;font-weight:700;color:#1e293b; }' +
-		'.row { display:flex;justify-content:space-between;align-items:flex-start;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:12px; }' +
-		'.label { color:#64748b;flex:1; }' +
-		'.badge { padding:2px 8px;border-radius:99px;font-weight:600;font-size:11px; }' +
-		'.pass { background:#dcfce7;color:#15803d; }' +
-		'.warn { background:#fef9c3;color:#854d0e; }' +
-		'.fail { background:#fee2e2;color:#b91c1c; }' +
-		'.score { font-size:28px;font-weight:800;margin:0 0 12px;color:#2563eb; }';
+	var style = \':host { all: initial; }\' +
+		\'#toggle { width:48px;height:48px;border-radius:50%;background:#2563eb;color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.25); }\' +
+		\'#toggle:focus-visible { outline:2px solid #1e293b; outline-offset:2px; }\' +
+		\'#panel { display:none;position:absolute;bottom:58px;right:0;width:340px;max-height:70vh;overflow-y:auto;background:#fff;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.18);padding:16px; }\' +
+		\'#panel.open { display:block; }\' +
+		\'h3 { margin:0 0 12px;font-size:14px;font-weight:700;color:#1e293b; }\' +
+		\'.row { display:flex;justify-content:space-between;align-items:flex-start;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:12px; }\' +
+		\'.label { color:#64748b;flex:1; }\' +
+		\'.badge { padding:2px 8px;border-radius:99px;font-weight:600;font-size:11px; }\' +
+		\'.pass { background:#dcfce7;color:#15803d; }\' +
+		\'.warn { background:#fef9c3;color:#854d0e; }\' +
+		\'.fail { background:#fee2e2;color:#b91c1c; }\' +
+		\'.score { font-size:28px;font-weight:800;margin:0 0 12px;color:#2563eb; }\';
 
-	shadow.innerHTML = '<style>' + style + '</style>' +
-		'<div id="panel" role="dialog" aria-label="' + escapeAttr(cfg.title) + '">' +
-		'<h3>' + escapeAttr(cfg.title) + '</h3>' +
-		'<div class="score" id="score">–</div>' +
-		'<div id="checks"></div>' +
-		'</div>' +
-		'<button id="toggle" type="button" aria-expanded="false" aria-label="' + escapeAttr(cfg.label) + '">' + escapeAttr(cfg.toggle) + '</button>';
+	shadow.innerHTML = \'<style>\' + style + \'</style>\' +
+		\'<div id="panel" role="dialog" aria-label="\' + escapeAttr(cfg.title) + \'">\' +
+		\'<h3>\' + escapeAttr(cfg.title) + \'</h3>\' +
+		\'<div class="score" id="score">–</div>\' +
+		\'<div id="checks"></div>\' +
+		\'</div>\' +
+		\'<button id="toggle" type="button" aria-expanded="false" aria-label="\' + escapeAttr(cfg.label) + \'">\' + escapeAttr(cfg.toggle) + \'</button>\';
 
-	var toggle = shadow.getElementById('toggle');
-	var panel  = shadow.getElementById('panel');
-	var checks = shadow.getElementById('checks');
-	var score  = shadow.getElementById('score');
+	var toggle = shadow.getElementById(\'toggle\');
+	var panel  = shadow.getElementById(\'panel\');
+	var checks = shadow.getElementById(\'checks\');
+	var score  = shadow.getElementById(\'score\');
 	var loaded = false;
 
 	function escapeAttr(s) {
-		var d = document.createElement('div');
+		var d = document.createElement(\'div\');
 		d.textContent = s;
 		return d.innerHTML;
 	}
 
-	toggle.addEventListener('click', function() {
-		var isOpen = panel.classList.toggle('open');
-		toggle.setAttribute('aria-expanded', String(isOpen));
+	toggle.addEventListener(\'click\', function() {
+		var isOpen = panel.classList.toggle(\'open\');
+		toggle.setAttribute(\'aria-expanded\', String(isOpen));
 		if (!loaded) {
 			loaded = true;
-			fetch(cfg.apiBase + '/inspector/audit', {
-				method:'POST',
-				headers:{'Content-Type':'application/json','X-WP-Nonce': cfg.nonce},
+			fetch(cfg.apiBase + \'/inspector/audit\', {
+				method:\'POST\',
+				headers:{\'Content-Type\':\'application/json\',\'X-WP-Nonce\': cfg.nonce},
 				body: JSON.stringify({post_id: cfg.postId})
 			})
 			.then(function(r){ return r.json(); })
 			.then(function(data){
-				score.textContent = data.summary.score + '%';
+				score.textContent = data.summary.score + \'%\';
 				checks.innerHTML = Object.entries(data.checks).map(function(entry){
 					var k = entry[0], v = entry[1];
-					return '<div class="row">' +
-						'<span class="label">' + escapeAttr(k.replace(/_/g,' ')) + '</span>' +
-						'<span class="badge ' + escapeAttr(v.status) + '" title="' + escapeAttr(v.message) + '">' + escapeAttr(v.status.toUpperCase()) + '</span>' +
-						'</div>';
-				}).join('');
+					return \'<div class="row">\' +
+						\'<span class="label">\' + escapeAttr(k.replace(/_/g,\' \')) + \'</span>\' +
+						\'<span class="badge \' + escapeAttr(v.status) + \'" title="\' + escapeAttr(v.message) + \'">\' + escapeAttr(v.status.toUpperCase()) + \'</span>\' +
+						\'</div>\';
+				}).join(\'\');
 			})
-			.catch(function(){ checks.innerHTML='<p role="alert">' + escapeAttr(cfg.error) + '</p>'; });
+			.catch(function(){ checks.innerHTML=\'<p role="alert">\' + escapeAttr(cfg.error) + \'</p>\'; });
 		}
 	});
 
-	document.addEventListener('keydown', function(e) {
-		if (e.key === 'Escape' && panel.classList.contains('open')) {
-			panel.classList.remove('open');
-			toggle.setAttribute('aria-expanded', 'false');
+	document.addEventListener(\'keydown\', function(e) {
+		if (e.key === \'Escape\' && panel.classList.contains(\'open\')) {
+			panel.classList.remove(\'open\');
+			toggle.setAttribute(\'aria-expanded\', \'false\');
 			toggle.focus();
 		}
 	});
 })();
-JS;
+'
+		);
 
-		wp_register_script( 'holvek-inspector', false, array(), HOLVEK_VERSION, true );
-		wp_enqueue_script( 'holvek-inspector' );
-		wp_add_inline_script( 'holvek-inspector', $js );
+		// wp_footer priority 99 runs after footer scripts are printed, so the
+		// queue would drop this script. Print it beside the host it looks up.
+		echo wp_get_inline_script_tag( $js ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- wp_get_inline_script_tag() builds the escaped tag.
 	}
 }

@@ -59,8 +59,8 @@ class RedirectManager {
 		}
 
 		foreach ( $this->getRegexRules() as $rule ) {
-			$pattern = $this->compiledPattern( (string) $rule->source );
-			if ( $pattern === null ) {
+			$pattern = $this->storedPattern( (string) $rule->source );
+			if ( null === $pattern || false === $this->safePregMatch( $pattern, '' ) ) {
 				continue;
 			}
 
@@ -231,11 +231,9 @@ class RedirectManager {
 	}
 
 	/**
-	 * A pattern that does not compile, is longer than the cap, or overruns a
-	 * capped preg_match is rejected at save time. An older stored pattern that
-	 * does not compile is skipped. The front-end match does not change PCRE limits.
+	 * Assemble a stored pattern. This does not run PCRE and does not change runtime limits.
 	 */
-	private function compiledPattern( string $source ): ?string {
+	private function storedPattern( string $source ): ?string {
 		if ( $source === '' || strlen( $source ) > self::MAX_PATTERN_LENGTH || str_contains( $source, "\0" ) ) {
 			return null;
 		}
@@ -245,7 +243,20 @@ class RedirectManager {
 			return null;
 		}
 
-		$pattern  = '/' . $body . '/i';
+		return '/' . $body . '/i';
+	}
+
+	/**
+	 * Save-time check. A pattern that does not compile, is longer than the cap,
+	 * or overruns the capped preg_match is rejected. The limits are restored
+	 * before this returns. The front-end match does not call this method.
+	 */
+	private function compiledPattern( string $source ): ?string {
+		$pattern = $this->storedPattern( $source );
+		if ( null === $pattern ) {
+			return null;
+		}
+
 		$sample   = str_repeat( 'a', 24 );
 		$limits   = array(
 			'pcre.backtrack_limit' => (string) self::PREG_MATCH_CAP,
@@ -254,8 +265,8 @@ class RedirectManager {
 		$previous = array();
 		foreach ( $limits as $name => $value ) {
 			$previous[ $name ] = ini_get( $name );
-			// The lowered limit is the validation. A pattern that overruns it is rejected.
-			// phpcs:ignore WordPress.PHP.IniSet.Risky
+			// Save-time bound only. The finally block restores the previous value.
+			// phpcs:ignore WordPress.PHP.IniSet.Risky, Squiz.PHP.DiscouragedFunctions.Discouraged
 			ini_set( $name, $value );
 		}
 
@@ -265,7 +276,7 @@ class RedirectManager {
 		} finally {
 			foreach ( $previous as $name => $value ) {
 				if ( false !== $value ) {
-					// phpcs:ignore WordPress.PHP.IniSet.Risky
+					// phpcs:ignore WordPress.PHP.IniSet.Risky, Squiz.PHP.DiscouragedFunctions.Discouraged
 					ini_set( $name, (string) $value );
 				}
 			}

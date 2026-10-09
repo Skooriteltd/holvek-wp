@@ -33,7 +33,7 @@ jobs:
       - name: Test ZIP installation in temporary WordPress
         run: |
           npm -g install @wordpress/env
-          ZIP_FILE=$(ls dist/holvek-*.zip | head -n 1)
+          ZIP_FILE="$(pwd)/$(ls dist/holvek-*.zip | head -n 1)"
           # wp-env supports installing from a local ZIP file
           echo "{\"core\": \"WordPress/WordPress#master\", \"plugins\": [\"${ZIP_FILE}\"]}" > .wp-env.json
           wp-env start

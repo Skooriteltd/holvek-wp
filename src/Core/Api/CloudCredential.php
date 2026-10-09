@@ -437,7 +437,7 @@ class CloudCredential {
 		$url     = ( new BackendApiClient() )->getApiUrl() . $path;
 		$headers = array(
 			'Accept'     => 'application/json',
-			'User-Agent' => 'Holvek-WP/' . ( defined( 'HOLVEK_VERSION' ) ? HOLVEK_VERSION : '1.0.0' ),
+			'User-Agent' => 'Holvek-WP/' . ( defined( 'HOLVEK_VERSION' ) ? HOLVEK_VERSION : '1.0.1' ),
 		);
 		if ( $bearer !== '' ) {
 			$headers['Authorization'] = 'Bearer ' . $bearer;

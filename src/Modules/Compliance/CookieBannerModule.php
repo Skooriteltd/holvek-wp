@@ -38,14 +38,14 @@ class CookieBannerModule {
 			'holvek-cookie-banner',
 			$pluginUrl . 'build/cookie-banner.css',
 			array(),
-			HOLVEK_VERSION ?? '1.0.0'
+			HOLVEK_VERSION ?? '1.0.1'
 		);
 
 		wp_enqueue_script(
 			'holvek-cookie-banner',
 			$pluginUrl . 'build/cookie-banner.js',
 			array(),
-			HOLVEK_VERSION ?? '1.0.0',
+			HOLVEK_VERSION ?? '1.0.1',
 			true
 		);
 

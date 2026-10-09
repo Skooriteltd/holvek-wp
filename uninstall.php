@@ -149,28 +149,28 @@ $holvekUninstallSite = static function ( bool $deleteData ) use ( $holvekRemoveB
 	$holvekRemoveBackupDirectory();
 };
 
-$deleteData = get_option( 'holvek_delete_data_on_uninstall', 'no' ) === 'yes';
-$holvekUninstallSite( $deleteData );
+$holvek_delete_data = get_option( 'holvek_delete_data_on_uninstall', 'no' ) === 'yes';
+$holvekUninstallSite( $holvek_delete_data );
 
 if ( is_multisite() ) {
-	$siteIds       = get_sites(
+	$holvek_site_ids        = get_sites(
 		array(
 			'fields' => 'ids',
 			'number' => 0,
 		)
 	);
-	$currentBlogId = function_exists( 'get_current_blog_id' ) ? get_current_blog_id() : 1;
-	foreach ( $siteIds as $siteId ) {
-		if ( (int) $siteId === (int) $currentBlogId ) {
+	$holvek_current_blog_id = function_exists( 'get_current_blog_id' ) ? get_current_blog_id() : 1;
+	foreach ( $holvek_site_ids as $holvek_site_id ) {
+		if ( (int) $holvek_site_id === (int) $holvek_current_blog_id ) {
 			continue;
 		}
-		switch_to_blog( (int) $siteId );
-		$holvekUninstallSite( $deleteData );
+		switch_to_blog( (int) $holvek_site_id );
+		$holvekUninstallSite( $holvek_delete_data );
 		restore_current_blog();
 	}
 
-	if ( $deleteData ) {
-		$likeNetworkOptions = $wpdb->esc_like( 'holvek_' ) . '%';
-		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->sitemeta} WHERE meta_key LIKE %s", $likeNetworkOptions ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	if ( $holvek_delete_data ) {
+		$holvek_like_network_options = $wpdb->esc_like( 'holvek_' ) . '%';
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->sitemeta} WHERE meta_key LIKE %s", $holvek_like_network_options ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 }

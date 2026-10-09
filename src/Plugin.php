@@ -61,17 +61,9 @@ class Plugin {
 		}
 		$this->booted = true;
 
-		// Load translation textdomain
-		add_action(
-			'init',
-			function () {
-				load_plugin_textdomain(
-					'holvek',
-					false,
-					dirname( plugin_basename( HOLVEK_PLUGIN_FILE ) ) . '/languages'
-				);
-			}
-		);
+		// WordPress loads holvek from wp-content/languages/plugins. The plugin
+		// header already sets the text domain and Domain Path, and languages/
+		// ships holvek.pot only.
 
 		$dbVersion = get_option( 'holvek_db_version', '0' );
 		if ( version_compare( $dbVersion, HOLVEK_VERSION, '<' ) ) {
@@ -581,12 +573,10 @@ class Plugin {
 	}
 
 	private function requestPath(): string {
-		if ( ! isset( $_SERVER['REQUEST_URI'] ) ) {
-			return '/';
-		}
-
-		$uri = wp_unslash( $_SERVER['REQUEST_URI'] );
-		if ( ! is_string( $uri ) || '' === $uri ) {
+		$uri = isset( $_SERVER['REQUEST_URI'] )
+			? sanitize_text_field( wp_unslash( (string) $_SERVER['REQUEST_URI'] ) )
+			: '';
+		if ( '' === $uri ) {
 			return '/';
 		}
 

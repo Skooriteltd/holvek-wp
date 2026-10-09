@@ -51,8 +51,10 @@ class CcpaPrivacyTools {
 			return;
 		}
 
-		$gpc = $_SERVER['HTTP_SEC_GPC'] ?? '';
-		if ( $gpc === '1' ) {
+		$gpc = isset( $_SERVER['HTTP_SEC_GPC'] )
+			? sanitize_text_field( wp_unslash( (string) $_SERVER['HTTP_SEC_GPC'] ) )
+			: '';
+		if ( '1' === $gpc ) {
 			// Signal to other modules that AI/tracking features should be suppressed
 			do_action( 'holvek_gpc_opt_out' );
 			setcookie(
@@ -489,7 +491,7 @@ class CcpaPrivacyTools {
 
 		if ( $tableExists ) {
 			$rows                        = $wpdb->get_results(
-				$wpdb->prepare( "SELECT * FROM {$wpdb->prefix}holvek_ai_usage WHERE user_id = %d ORDER BY created_at DESC LIMIT %d OFFSET %d", $user->ID, $limit + 1, $offset )
+				$wpdb->prepare( "SELECT id, user_id, provider, feature, tokens_used, created_at FROM {$wpdb->prefix}holvek_ai_usage WHERE user_id = %d ORDER BY created_at DESC LIMIT %d OFFSET %d", $user->ID, $limit + 1, $offset )
 			);
 			$data['has_more']            = count( $rows ) > $limit;
 			$data['records']['ai_usage'] = array_slice( $rows, 0, $limit );

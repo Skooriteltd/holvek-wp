@@ -19,7 +19,7 @@ if (!defined('WP_CONTENT_DIR')) {
     define('WP_CONTENT_DIR', dirname(__DIR__) . '/wp-content');
 }
 if (!defined('HOLVEK_VERSION')) {
-    define('HOLVEK_VERSION', '1.0.0');
+    define('HOLVEK_VERSION', '1.0.1');
 }
 if (!defined('SECURE_AUTH_KEY')) {
     define('SECURE_AUTH_KEY', 'test_secure_auth_key_1234567890abcdef');
@@ -97,6 +97,15 @@ if (!function_exists('sanitize_text_field')) {
 if (!function_exists('esc_url_raw')) {
     function esc_url_raw(string $url): string {
         return filter_var($url, FILTER_SANITIZE_URL) ?: '';
+    }
+}
+
+if (!function_exists('esc_sql')) {
+    function esc_sql(string|array $data): string|array {
+        if (is_array($data)) {
+            return array_map('esc_sql', $data);
+        }
+        return addslashes($data);
     }
 }
 
@@ -678,6 +687,24 @@ if (!function_exists('get_the_ID')) {
     }
 }
 
+if (!function_exists('wp_register_script')) {
+    function wp_register_script(string $handle, $src, $deps = array(), $ver = false, bool $in_footer = false): bool {
+        return true;
+    }
+}
+
+if (!function_exists('wp_enqueue_script')) {
+    function wp_enqueue_script(string $handle, string $src = '', array $deps = array(), $ver = false, bool $in_footer = false): void {
+    }
+}
+
+if (!function_exists('wp_add_inline_script')) {
+    function wp_add_inline_script(string $handle, string $data, string $position = 'after'): bool {
+        $GLOBALS['mock_inline_scripts'][$handle] = $data;
+        return true;
+    }
+}
+
 if (!class_exists('WP_Query')) {
     class WP_Query {
         public array $posts = [];
@@ -1107,6 +1134,22 @@ if (!function_exists('add_action')) {
     function add_action(string $hook_name, callable $callback, int $priority = 10, int $accepted_args = 1): true {
         $GLOBALS['mock_hooks'][] = array( 'action', $hook_name );
         return true;
+    }
+}
+
+if (!function_exists('do_action')) {
+    function do_action(string $hook_name, mixed ...$args): void {
+        unset($args);
+        if (!isset($GLOBALS['mock_did_actions']) || !is_array($GLOBALS['mock_did_actions'])) {
+            $GLOBALS['mock_did_actions'] = array();
+        }
+        $GLOBALS['mock_did_actions'][] = $hook_name;
+    }
+}
+
+if (!function_exists('is_ssl')) {
+    function is_ssl(): bool {
+        return false;
     }
 }
 

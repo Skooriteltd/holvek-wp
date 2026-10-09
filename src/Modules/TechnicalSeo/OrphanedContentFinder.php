@@ -174,7 +174,6 @@ class OrphanedContentFinder {
 				'fields'              => 'ids',
 				'no_found_rows'       => true,
 				'ignore_sticky_posts' => true,
-				'suppress_filters'    => true,
 			)
 		);
 

@@ -244,6 +244,11 @@ class BackgroundWorkTest extends TestCase {
 		$this->assertSame( 1, $this->drainJobs() );
 		$this->assertSame( 20, $seen[0]['posts_per_page'] );
 		$this->assertSame( 0, $seen[0]['offset'] );
+		$this->assertArrayNotHasKey( 'suppress_filters', $seen[0] );
+		$this->assertTrue( $seen[0]['no_found_rows'] );
+		$this->assertTrue( $seen[0]['ignore_sticky_posts'] );
+		$this->assertSame( 'ID', $seen[0]['orderby'] );
+		$this->assertSame( 'ASC', $seen[0]['order'] );
 		$this->assertSame( 3, (int) get_post_meta( 1, '_holvek_inbound_links', true ) );
 		$this->assertSame( '', (string) get_post_meta( 21, '_holvek_inbound_links', true ) );
 		$this->assertFalse( get_option( 'holvek_orphan_scan_last_run', false ) );

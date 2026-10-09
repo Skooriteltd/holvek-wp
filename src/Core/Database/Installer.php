@@ -201,8 +201,9 @@ class Installer {
 			}
 
 			$renameSql = 'RENAME TABLE ' . $this->quotedIdentifier( $oldTable ) . ' TO ' . $this->quotedIdentifier( $newTable );
-			// Identifiers are backtick-escaped. A %s placeholder would quote them.
-			$renamed = $wpdb->query( $renameSql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			// The suffix list is fixed and the names are backtick-quoted. A %s placeholder would quote the identifier.
+			// esc_sql() does not change backticks, so the statement text stays the quoted rename.
+			$renamed = $wpdb->query( esc_sql( $renameSql ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 			if ( false === $renamed ) {
 				$ok = false;
 			}

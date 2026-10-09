@@ -144,7 +144,7 @@ class CompetitorScraper {
 	}
 
 	private function userAgent(): string {
-		$version = defined( 'HOLVEK_VERSION' ) ? HOLVEK_VERSION : '1.0.0';
+		$version = defined( 'HOLVEK_VERSION' ) ? HOLVEK_VERSION : '1.0.1';
 		return 'Holvek-WP/' . $version . ' (' . home_url( '/' ) . ')';
 	}
 

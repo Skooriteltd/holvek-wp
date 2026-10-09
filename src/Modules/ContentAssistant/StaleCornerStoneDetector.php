@@ -53,7 +53,7 @@ class StaleCornerStoneDetector {
 			array(
 				'post_type'      => get_post_types( array( 'public' => true ) ),
 				'post_status'    => 'publish',
-				'posts_per_page' => -1,
+				'posts_per_page' => 200,
 				'meta_query'     => array(
 					array(
 						'key'   => self::CORNERSTONE_META_KEY,
