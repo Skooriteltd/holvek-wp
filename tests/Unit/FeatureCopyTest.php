@@ -72,7 +72,7 @@ class FeatureCopyTest extends TestCase {
 		$this->assertStringContainsString( 'Requires PHP: 8.2', $readme );
 		$this->assertStringContainsString( 'Requires PHP: 8.2', $this->read( 'holvek.php' ) );
 		$this->assertStringContainsString( '"php": ">=8.2"', $this->read( 'composer.json' ) );
-		$this->assertStringContainsString( 'Tested up to: 6.5', $readme );
+		$this->assertStringContainsString( 'Tested up to: 7.1', $readme );
 		$this->assertStringContainsString( 'nothing is sent until an administrator turns the feature on', $readme );
 		$this->assertStringContainsString( 'https://api.holvek.com', $readme );
 		$this->assertStringNotContainsString( 'guaranteed indexing', $readme );

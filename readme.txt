@@ -2,7 +2,7 @@
 Contributors: skoorite
 Tags: seo, schema, sitemap, indexing, search console
 Requires at least: 6.0
-Tested up to: 6.5
+Tested up to: 7.1
 Requires PHP: 8.2
 Stable tag: 1.0.0
 License: GPLv2 or later
@@ -211,7 +211,7 @@ When reporting a problem, include your WordPress version, PHP version, Holvek ve
 
 = 1.0.0 =
 
-* Initial release. Requires PHP 8.2.
+* Initial release. Requires PHP 8.2. Tested on WordPress 7.1.3.
 * Upgrade renames tables, options, and meta saved under the previous plugin name. The public constants, functions, sitemap shortcode, and opt-out action from that name are not included. Secrets saved with the previous ciphertext prefix can still be read. New secrets are saved as `holvek_enc::`.
 * Technical SEO controls and metadata management.
 * XML, News, and Video sitemap support.
